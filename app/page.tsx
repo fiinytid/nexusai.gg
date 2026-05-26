@@ -390,7 +390,7 @@ export default function HomePage() {
         <span className="nav-status">Live</span>
         <div className="nav-r">
           <a href="https://discord.gg/FzAF48mvK5" target="_blank" rel="noopener" className="nav-discord">
-            <img src="/icon/discord.png" alt="Discord" onError={(e) => { (e.target as HTMLImageElement).style.display = 'none'; }} />
+            <img src="/public/discord.png" alt="Discord" onError={(e) => { (e.target as HTMLImageElement).style.display = 'none'; }} />
             Discord
           </a>
           <a href="/login" className="nav-login">
@@ -425,7 +425,7 @@ export default function HomePage() {
             Start Building Free
           </a>
           <a href="https://discord.gg/FzAF48mvK5" target="_blank" rel="noopener" className="btn-secondary">
-            <img src="/icon/discord.png" alt="Discord" onError={(e) => { (e.target as HTMLImageElement).style.display = 'none'; }} />
+            <img src="/public/discord.png" alt="Discord" onError={(e) => { (e.target as HTMLImageElement).style.display = 'none'; }} />
             Join Discord
           </a>
         </div>
@@ -499,9 +499,9 @@ export default function HomePage() {
         </div>
         <div className="screen-grid">
           {[
-            { badge: 'Web', img: 'screenshots/screen1.png', alt: 'Chat Interface', icon: <path d="M21 15a2 2 0 01-2 2H7l-4 4V5a2 2 0 012-2h14a2 2 0 012 2z" />, iconColor: 'var(--cyan)', title: 'Chat Interface', desc: 'Type your request in plain English. NEXUS AI breaks it down into precise actions and executes them immediately.', delay: 'd1' },
-            { badge: 'Plugin', img: 'screenshots/screen2.png', alt: 'Studio Plugin', icon: <><path d="M20.24 12.24a6 6 0 0 0-8.49-8.49L5 10.5V19h8.5z" /><line x1="16" y1="8" x2="2" y2="22" /></>, iconColor: 'var(--green)', title: 'Studio Plugin', desc: 'The companion plugin in Roblox Studio — connected, listening, injecting in real-time with zero lag.', delay: 'd2' },
-            { badge: 'Connected', img: 'screenshots/screen3.png', alt: 'Connected State', icon: <polyline points="20 6 9 17 4 12" />, iconColor: 'var(--yellow)', title: 'Live & Injecting', desc: 'When connected, every AI command materializes in your place — parts, scripts, GUIs, systems — all live.', delay: 'd3' },
+            { badge: 'Web', img: 'public/screen/screen1.png', alt: 'Chat Interface', icon: <path d="M21 15a2 2 0 01-2 2H7l-4 4V5a2 2 0 012-2h14a2 2 0 012 2z" />, iconColor: 'var(--cyan)', title: 'Chat Interface', desc: 'Type your request in plain English. NEXUS AI breaks it down into precise actions and executes them immediately.', delay: 'd1' },
+            { badge: 'Plugin', img: 'public/screen/screen2.png', alt: 'Studio Plugin', icon: <><path d="M20.24 12.24a6 6 0 0 0-8.49-8.49L5 10.5V19h8.5z" /><line x1="16" y1="8" x2="2" y2="22" /></>, iconColor: 'var(--green)', title: 'Studio Plugin', desc: 'The companion plugin in Roblox Studio — connected, listening, injecting in real-time with zero lag.', delay: 'd2' },
+            { badge: 'Connected', img: 'public/screen/screen3.png', alt: 'Connected State', icon: <polyline points="20 6 9 17 4 12" />, iconColor: 'var(--yellow)', title: 'Live & Injecting', desc: 'When connected, every AI command materializes in your place — parts, scripts, GUIs, systems — all live.', delay: 'd3' },
           ].map((s, i) => (
             <div key={i} className={`screen-card reveal ${s.delay}`}>
               <span className="screen-badge">{s.badge}</span>
@@ -595,7 +595,7 @@ export default function HomePage() {
             { label: 'Google Gemini', models: [{ name: 'Gemini 3.5 Flash', badge: 'new', cls: 'is-new', icon: 'gemini.png' }, { name: 'Gemini 3.1 Pro', badge: 'cr', badgeTxt: '2 CR', icon: 'gemini.png' }, { name: 'Gemini 2.5 Flash', badge: 'cr', badgeTxt: '1 CR', icon: 'gemini.png' }, { name: 'Gemini 2.5 Flash Lite', badge: 'free', icon: 'gemini.png' }, { name: 'Gemini 3 Flash', badge: 'free', icon: 'gemini.png' }] },
             { label: 'DeepSeek', models: [{ name: 'DeepSeek V4 Pro', badge: 'new', cls: 'is-new', icon: 'deepseek.svg' }, { name: 'DeepSeek V3', badge: 'cr', badgeTxt: '1 CR', icon: 'deepseek.svg' }] },
             { label: 'Step Fun', models: [{ name: 'Step 3.5 Flash', badge: 'new', cls: 'is-new', icon: 'stepfun.png' }] },
-            { label: 'Groq · Meta', models: [{ name: 'Llama 3.3 70B', badge: 'free', icon: 'groq.ico' }, { name: 'OpenAI OSS 120B', badge: 'free', icon: 'groq.ico' }] },
+            { label: 'Groq · Meta', models: [{ name: 'Llama 3.3 70B', badge: 'free', icon: 'groq.png' }, { name: 'OpenAI OSS 120B', badge: 'free', icon: 'groq.png' }] },
             { label: 'Mistral', models: [{ name: 'Mistral Small', badge: 'free', icon: 'mistral.png' }] },
             { label: 'Coming Soon', models: [{ name: 'Claude Sonnet', badge: 'soon', cls: 'is-soon', icon: 'claude.png' }, { name: 'GPT-4o', badge: 'soon', cls: 'is-soon', icon: 'chatgpt.png' }] },
           ].map((cat, i) => (
@@ -604,7 +604,7 @@ export default function HomePage() {
               <div className="models-grid">
                 {cat.models.map((m, j) => (
                   <div key={j} className={`model-chip ${m.cls || ''}`}>
-                    <img src={`/icon/${m.icon}`} alt={m.name} onError={(e) => { (e.target as HTMLImageElement).style.display = 'none'; }} />
+                    <img src={`/public/${m.icon}`} alt={m.name} onError={(e) => { (e.target as HTMLImageElement).style.display = 'none'; }} />
                     {m.name}
                     <span className={`mbadge ${m.badge}`}>{m.badgeTxt || m.badge.toUpperCase()}</span>
                   </div>
@@ -651,7 +651,7 @@ export default function HomePage() {
               Start Free Now
             </a>
             <a href="https://discord.gg/FzAF48mvK5" target="_blank" rel="noopener" className="cta-discord">
-              <img src="/icon/discord.png" alt="Discord" onError={(e) => { (e.target as HTMLImageElement).style.display = 'none'; }} />
+              <img src="/public/discord.png" alt="Discord" onError={(e) => { (e.target as HTMLImageElement).style.display = 'none'; }} />
               Join Discord for Plugin & Codes
             </a>
           </div>
