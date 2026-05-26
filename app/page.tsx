@@ -383,7 +383,7 @@ export default function HomePage() {
       {/* NAVBAR */}
       <nav className="nav" id="navbar">
         <a href="/" className="nav-logo-wrap">
-          <img src="nexusai.png" alt="NEXUS AI" className="nav-logo-img" onError={(e) => { (e.target as HTMLImageElement).style.display = 'none'; }} />
+          <img src="favicon.ico" alt="NEXUS AI" className="nav-logo-img" onError={(e) => { (e.target as HTMLImageElement).style.display = 'none'; }} />
           <span className="nav-logo">NEXUS AI</span>
         </a>
         <div className="nav-pulse" />
