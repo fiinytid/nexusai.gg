@@ -593,7 +593,7 @@ export default function LoginPage() {
               <div className="err" id="robloxErr" />
               <div className="ld" id="robloxLd"><div className="spin" /><span>Connecting to Roblox...</span></div>
               <button className="btn-roblox" id="robloxLoginBtn" onClick={startRobloxOAuth}>
-                <img src="icon/roblox.png" alt="" onError={(e) => { (e.target as HTMLImageElement).style.display = 'none'; }} />
+                <img src="/roblox.png" alt="" onError={(e) => { (e.target as HTMLImageElement).style.display = 'none'; }} />
                 Connect Roblox Account
               </button>
               <div style={{ fontSize: '9.5px', color: 'var(--dim)', textAlign: 'center', marginTop: '10px', lineHeight: 1.7 }}>
