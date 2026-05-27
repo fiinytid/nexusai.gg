@@ -1,12 +1,3 @@
-// api/redeem.js — NEXUS AI Redeem Code Manager (SECURE v3)
-// Security fixes:
-//   • REMOVED hardcoded ADMIN_TOKEN fallback 'nexusadmin2024'
-//   • Timing-safe token comparison
-//   • Rate limiting (prevent brute-force code guessing)
-//   • Input sanitization on all fields
-//   • Code format validation (prevents injection)
-//   • Credit amount bounds check
-
 import { kv } from "@vercel/kv";
 import crypto from 'crypto';
 

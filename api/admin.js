@@ -32,7 +32,6 @@ function getSBSync() {
       return null;
     }
     // @supabase/supabase-js: createClient adalah synchronous
-    const { createClient } = await import('@supabase/supabase-js');
     _sb = createClient(url, key, {
       auth: { persistSession: false, autoRefreshToken: false },
     });
