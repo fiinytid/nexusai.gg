@@ -1,171 +1,202 @@
-import type { Metadata } from 'next';
-import Link from 'next/link';
+const styles = `
+  @import url('https://fonts.googleapis.com/css2?family=Orbitron:wght@400;700;900&family=JetBrains+Mono:wght@300;400;500&display=swap');
 
-export const metadata: Metadata = {
-  title: 'Terms of Service — NEXUS AI',
-  description: 'NEXUS AI Terms of Service',
-};
+  :root{--bg:#030312;--bg2:#06071a;--cyan:#00e5ff;--purple:#8800ff;--text:#b8cfff;--dim:#3a4a7a;--b:rgba(0,229,255,.12);--r:8px;}
 
-export default function TermsPage() {
+  .tos-root {
+    min-height:100vh;background:var(--bg);color:var(--text);
+    font-family:'JetBrains Mono',monospace;font-size:13px;line-height:1.8;
+    position:relative;
+  }
+  .tos-root::before {
+    content:'';position:fixed;inset:0;
+    background:linear-gradient(rgba(0,229,255,.01)1px,transparent 1px),
+               linear-gradient(90deg,rgba(0,229,255,.01)1px,transparent 1px);
+    background-size:40px 40px;pointer-events:none;z-index:0;
+  }
+
+  .tos-container{max-width:820px;margin:0 auto;padding:40px 20px 60px;position:relative;z-index:1;}
+
+  .tos-logo{
+    font-family:'Orbitron',sans-serif;font-size:24px;font-weight:900;
+    background:linear-gradient(135deg,var(--cyan),var(--purple));
+    -webkit-background-clip:text;-webkit-text-fill-color:transparent;
+    background-clip:text;margin-bottom:4px;
+  }
+  .tos-logo-sub{font-size:10px;color:var(--dim);letter-spacing:3px;text-transform:uppercase;margin-bottom:32px;}
+
+  .tos-nav{display:flex;align-items:center;gap:16px;margin-bottom:40px;padding-bottom:16px;border-bottom:1px solid var(--b);}
+  .tos-nav a{color:var(--dim);font-size:11px;transition:.15s;text-decoration:none;}
+  .tos-nav a:hover{color:var(--cyan);}
+  .tos-back-btn{
+    display:inline-flex;align-items:center;gap:6px;padding:6px 14px;
+    background:rgba(0,229,255,.06);border:1px solid var(--b);border-radius:6px;
+    color:var(--cyan) !important;font-size:10px;font-family:'Orbitron',sans-serif;
+    letter-spacing:1px;cursor:pointer;text-decoration:none !important;
+    transition:background .15s;
+  }
+  .tos-back-btn:hover{background:rgba(0,229,255,.12) !important;}
+
+  .tos-h1{font-family:'Orbitron',sans-serif;font-size:20px;color:var(--cyan);margin-bottom:8px;}
+  .tos-updated{font-size:10px;color:var(--dim);margin-bottom:32px;padding-bottom:16px;border-bottom:1px solid var(--b);}
+  .tos-h2{font-family:'Orbitron',sans-serif;font-size:13px;color:var(--cyan);margin:28px 0 10px;letter-spacing:1px;}
+
+  .tos-root p{color:var(--text);margin-bottom:12px;}
+  .tos-root ul{padding-left:20px;margin-bottom:12px;}
+  .tos-root li{color:var(--text);margin-bottom:6px;}
+  .tos-root strong{color:#fff;}
+
+  .tos-card{background:var(--bg2);border:1px solid var(--b);border-radius:var(--r);padding:16px 20px;margin:16px 0;}
+  .tos-card p{margin-bottom:0 !important;}
+
+  .tos-root a{color:var(--cyan);text-decoration:none;}
+  .tos-root a:hover{text-decoration:underline;}
+
+  .tos-footer{margin-top:40px;padding-top:20px;border-top:1px solid var(--b);font-size:10px;color:var(--dim);text-align:center;}
+  .tos-footer a{color:var(--cyan);text-decoration:none;}
+  .tos-footer a:hover{text-decoration:underline;}
+`;
+
+export default function TermsOfService() {
   return (
     <>
-      <style>{`
-        @import url('https://fonts.googleapis.com/css2?family=Orbitron:wght@400;700;900&family=JetBrains+Mono:wght@300;400;500&display=swap');
-        :root{--bg:#030312;--bg2:#06071a;--cyan:#00e5ff;--purple:#8800ff;--text:#b8cfff;--dim:#3a4a7a;--b:rgba(0,229,255,.12);--r:8px;}
-        *, *::before, *::after { margin:0; padding:0; box-sizing:border-box; }
-        html, body { background:var(--bg); color:var(--text); font-family:'JetBrains Mono',monospace; font-size:13px; line-height:1.8; }
-        .tos-grid {
-          position:fixed; inset:0;
-          background:linear-gradient(rgba(0,229,255,.01) 1px,transparent 1px),linear-gradient(90deg,rgba(0,229,255,.01) 1px,transparent 1px);
-          background-size:40px 40px; pointer-events:none; z-index:0;
-        }
-        .container { max-width:820px; margin:0 auto; padding:40px 20px 60px; position:relative; z-index:1; }
-        .logo {
-          font-family:'Orbitron',sans-serif; font-size:24px; font-weight:900;
-          background:linear-gradient(135deg,var(--cyan),var(--purple));
-          -webkit-background-clip:text; -webkit-text-fill-color:transparent; background-clip:text;
-          margin-bottom:4px;
-        }
-        .logo-sub { font-size:10px; color:var(--dim); letter-spacing:3px; text-transform:uppercase; margin-bottom:32px; }
-        h1 { font-family:'Orbitron',sans-serif; font-size:20px; color:var(--cyan); margin-bottom:8px; }
-        .updated { font-size:10px; color:var(--dim); margin-bottom:32px; padding-bottom:16px; border-bottom:1px solid var(--b); }
-        h2 { font-family:'Orbitron',sans-serif; font-size:13px; color:var(--cyan); margin:28px 0 10px; letter-spacing:1px; }
-        p  { color:var(--text); margin-bottom:12px; }
-        ul { padding-left:20px; margin-bottom:12px; }
-        li { color:var(--text); margin-bottom:6px; }
-        li strong { color:#fff; }
-        .card { background:var(--bg2); border:1px solid var(--b); border-radius:var(--r); padding:16px 20px; margin:16px 0; }
-        .card p { margin-bottom:0; }
-        a { color:var(--cyan); text-decoration:none; }
-        a:hover { text-decoration:underline; }
-        .nav { display:flex; align-items:center; gap:16px; margin-bottom:40px; padding-bottom:16px; border-bottom:1px solid var(--b); flex-wrap:wrap; }
-        .nav a { color:var(--dim); font-size:11px; transition:.15s; }
-        .nav a:hover { color:var(--cyan); text-decoration:none; }
-        .back-btn {
-          display:inline-flex; align-items:center; gap:6px; padding:6px 14px;
-          background:rgba(0,229,255,.06); border:1px solid var(--b); border-radius:6px;
-          color:var(--cyan); font-size:10px; font-family:'Orbitron',sans-serif;
-          letter-spacing:1px; cursor:pointer; text-decoration:none;
-        }
-        .back-btn:hover { background:rgba(0,229,255,.12); text-decoration:none; }
-        footer { margin-top:40px; padding-top:20px; border-top:1px solid var(--b); font-size:10px; color:var(--dim); text-align:center; line-height:2; }
-        footer a { color:var(--dim); }
-        footer a:hover { color:var(--cyan); }
-      `}</style>
+      <style>{styles}</style>
+      <div className="tos-root">
+        <div className="tos-container">
+          <div className="tos-logo">NEXUS AI</div>
+          <div className="tos-logo-sub">Roblox Dev Intelligence</div>
 
-      <div className="tos-grid" aria-hidden />
+          <div className="tos-nav">
+            <a href="/chats" className="tos-back-btn">← Back to App</a>
+            <a href="/privacy">Privacy Policy</a>
+            <a href="/terms">Terms of Service</a>
+          </div>
 
-      <div className="container">
-        <div className="logo">NEXUS AI</div>
-        <div className="logo-sub">Roblox Dev Intelligence</div>
+          <h1 className="tos-h1">Terms of Service</h1>
+          <div className="tos-updated">Last updated: April 15, 2026 · Effective immediately</div>
 
-        <nav className="nav">
-          <Link href="/chats" className="back-btn">← Back to App</Link>
-          <Link href="/privacy">Privacy Policy</Link>
-          <Link href="/terms">Terms of Service</Link>
-        </nav>
+          <div className="tos-card">
+            <p>
+              By accessing or using NEXUS AI at nexusai-com.vercel.app, you agree to be bound by
+              these Terms of Service. Please read them carefully before using our service.
+            </p>
+          </div>
 
-        <h1>Terms of Service</h1>
-        <div className="updated">Last updated: April 15, 2026 · Effective immediately</div>
-
-        <div className="card">
-          <p>By accessing or using NEXUS AI at nexusai-com.vercel.app, you agree to be bound by these Terms of Service. Please read them carefully before using our service.</p>
-        </div>
-
-        <h2>1. ACCEPTANCE OF TERMS</h2>
-        <p>By using NEXUS AI, you confirm that you are at least 13 years of age, have the legal capacity to enter into these terms, and agree to comply with all applicable laws and regulations.</p>
-
-        <h2>2. DESCRIPTION OF SERVICE</h2>
-        <p>NEXUS AI is an AI-powered development assistant for Roblox game developers. The service provides:</p>
-        <ul>
-          <li>AI-generated Lua scripts and code assistance for Roblox Studio.</li>
-          <li>GUI builder tools for creating Roblox user interfaces.</li>
-          <li>Roblox Studio plugin integration for automated script injection.</li>
-          <li>Credit-based usage system for AI model access.</li>
-        </ul>
-
-        <h2>3. USER ACCOUNTS</h2>
-        <ul>
-          <li>You must authenticate with a valid Roblox account and Google account to use NEXUS AI.</li>
-          <li>You are responsible for maintaining the security of your account.</li>
-          <li>You must not share your account credentials with others.</li>
-          <li>One account per person. Creating multiple accounts to circumvent credit limits is prohibited.</li>
-        </ul>
-
-        <h2>4. CREDITS SYSTEM</h2>
-        <ul>
-          <li>NEXUS AI uses a credit (CR) system to manage AI usage.</li>
-          <li>New users receive 30 CR free upon registration.</li>
-          <li>Free users receive 2 CR daily; Pro users receive 25 CR daily.</li>
-          <li>Credits are non-transferable and have no cash value.</li>
-          <li>We reserve the right to modify credit costs and allocations at any time.</li>
-          <li>Purchased credits are non-refundable unless required by law.</li>
-        </ul>
-
-        <h2>5. ACCEPTABLE USE</h2>
-        <p>You agree NOT to use NEXUS AI to:</p>
-        <ul>
-          <li>Generate scripts designed to exploit, hack, or grief other players.</li>
-          <li>Create content that violates Roblox&apos;s Terms of Service or Community Standards.</li>
-          <li>Generate malicious code, malware, or harmful content.</li>
-          <li>Attempt to reverse engineer, copy, or redistribute NEXUS AI&apos;s systems.</li>
-          <li>Use automated bots or scripts to abuse the service.</li>
-          <li>Circumvent credit limits through technical means.</li>
-        </ul>
-
-        <h2>6. AI-GENERATED CONTENT</h2>
-        <ul>
-          <li>AI-generated code is provided &quot;as is&quot; and may contain errors.</li>
-          <li>You are solely responsible for testing and using any AI-generated scripts in your games.</li>
-          <li>NEXUS AI does not guarantee that generated code will be bug-free or suitable for your purpose.</li>
-          <li>You own the rights to code generated using NEXUS AI.</li>
-        </ul>
-
-        <h2>7. ROBLOX STUDIO PLUGIN</h2>
-        <ul>
-          <li>The NEXUS AI Studio plugin requires &quot;Allow HTTP Requests&quot; enabled in your Roblox Studio settings.</li>
-          <li>Commands are isolated per-user — only your commands execute in your place.</li>
-          <li>You are responsible for all changes made to your Roblox places through the plugin.</li>
-        </ul>
-
-        <h2>8. PAYMENTS</h2>
-        <ul>
-          <li>Credit pack purchases are processed manually via OVO or Dana.</li>
-          <li>Payment instructions will be provided after selecting a package.</li>
-          <li>Credits will be added within 24 hours of confirmed payment.</li>
-          <li>All prices are in Indonesian Rupiah (IDR) unless stated otherwise.</li>
-          <li>Contact support if payment was made but credits were not received within 24 hours.</li>
-        </ul>
-
-        <h2>9. LIMITATION OF LIABILITY</h2>
-        <p>NEXUS AI is provided &quot;as is&quot; without warranties of any kind. We are not liable for any damages resulting from use of the service, including but not limited to data loss, game damage, or missed opportunities. Our total liability shall not exceed the amount you paid for credits in the past 30 days.</p>
-
-        <h2>10. SERVICE MODIFICATIONS</h2>
-        <p>We reserve the right to modify, suspend, or discontinue any part of NEXUS AI at any time. We will provide reasonable notice of major changes where possible.</p>
-
-        <h2>11. TERMINATION</h2>
-        <p>We may terminate or suspend your account if you violate these Terms of Service. You may delete your account at any time by contacting support.</p>
-
-        <h2>12. GOVERNING LAW</h2>
-        <p>These Terms are governed by the laws of Indonesia. Any disputes shall be resolved through good-faith negotiation before pursuing formal legal remedies.</p>
-
-        <h2>13. CONTACT</h2>
-        <div className="card">
+          <h2 className="tos-h2">1. ACCEPTANCE OF TERMS</h2>
           <p>
-            📧 Email: <a href="mailto:arifiinytid@gmail.com">arifiinytid@gmail.com</a><br />
-            🌐 Website: <a href="https://nexusai-com.vercel.app" target="_blank" rel="noopener noreferrer">nexusai-com.vercel.app</a><br />
-            📺 YouTube: NEXUS STUDIO
+            By using NEXUS AI, you confirm that you are at least 13 years of age, have the legal
+            capacity to enter into these terms, and agree to comply with all applicable laws and
+            regulations.
           </p>
-        </div>
 
-        <footer>
-          © 2026 NEXUS AI · NEXUS STUDIO · Built by FIINYTID25<br />
-          <Link href="/privacy">Privacy Policy</Link>
-          {' · '}
-          <Link href="/terms">Terms of Service</Link>
-          {' · '}
-          <Link href="/">Back to App</Link>
-        </footer>
+          <h2 className="tos-h2">2. DESCRIPTION OF SERVICE</h2>
+          <p>NEXUS AI is an AI-powered development assistant for Roblox game developers. The service provides:</p>
+          <ul>
+            <li>AI-generated Lua scripts and code assistance for Roblox Studio.</li>
+            <li>GUI builder tools for creating Roblox user interfaces.</li>
+            <li>Roblox Studio plugin integration for automated script injection.</li>
+            <li>Credit-based usage system for AI model access.</li>
+          </ul>
+
+          <h2 className="tos-h2">3. USER ACCOUNTS</h2>
+          <ul>
+            <li>You must authenticate with a valid Roblox account and Google account to use NEXUS AI.</li>
+            <li>You are responsible for maintaining the security of your account.</li>
+            <li>You must not share your account credentials with others.</li>
+            <li>One account per person. Creating multiple accounts to circumvent credit limits is prohibited.</li>
+          </ul>
+
+          <h2 className="tos-h2">4. CREDITS SYSTEM</h2>
+          <ul>
+            <li>NEXUS AI uses a credit (CR) system to manage AI usage.</li>
+            <li>New users receive 30 CR free upon registration.</li>
+            <li>Free users receive 2 CR daily; Pro users receive 25 CR daily.</li>
+            <li>Credits are non-transferable and have no cash value.</li>
+            <li>We reserve the right to modify credit costs and allocations at any time.</li>
+            <li>Purchased credits are non-refundable unless required by law.</li>
+          </ul>
+
+          <h2 className="tos-h2">5. ACCEPTABLE USE</h2>
+          <p>You agree NOT to use NEXUS AI to:</p>
+          <ul>
+            <li>Generate scripts designed to exploit, hack, or grief other players.</li>
+            <li>Create content that violates Roblox's Terms of Service or Community Standards.</li>
+            <li>Generate malicious code, malware, or harmful content.</li>
+            <li>Attempt to reverse engineer, copy, or redistribute NEXUS AI's systems.</li>
+            <li>Use automated bots or scripts to abuse the service.</li>
+            <li>Circumvent credit limits through technical means.</li>
+          </ul>
+
+          <h2 className="tos-h2">6. AI-GENERATED CONTENT</h2>
+          <ul>
+            <li>AI-generated code is provided "as is" and may contain errors.</li>
+            <li>You are solely responsible for testing and using any AI-generated scripts in your games.</li>
+            <li>NEXUS AI does not guarantee that generated code will be bug-free or suitable for your purpose.</li>
+            <li>You own the rights to code generated using NEXUS AI.</li>
+          </ul>
+
+          <h2 className="tos-h2">7. ROBLOX STUDIO PLUGIN</h2>
+          <ul>
+            <li>The NEXUS AI Studio plugin requires "Allow HTTP Requests" enabled in your Roblox Studio settings.</li>
+            <li>Commands are isolated per-user — only your commands execute in your place.</li>
+            <li>You are responsible for all changes made to your Roblox places through the plugin.</li>
+          </ul>
+
+          <h2 className="tos-h2">8. PAYMENTS</h2>
+          <ul>
+            <li>Credit pack purchases are processed manually via OVO or Dana.</li>
+            <li>Payment instructions will be provided after selecting a package.</li>
+            <li>Credits will be added within 24 hours of confirmed payment.</li>
+            <li>All prices are in Indonesian Rupiah (IDR) unless stated otherwise.</li>
+            <li>Contact support if payment was made but credits were not received within 24 hours.</li>
+          </ul>
+
+          <h2 className="tos-h2">9. LIMITATION OF LIABILITY</h2>
+          <p>
+            NEXUS AI is provided "as is" without warranties of any kind. We are not liable for
+            any damages resulting from use of the service, including but not limited to data loss,
+            game damage, or missed opportunities. Our total liability shall not exceed the amount
+            you paid for credits in the past 30 days.
+          </p>
+
+          <h2 className="tos-h2">10. SERVICE MODIFICATIONS</h2>
+          <p>
+            We reserve the right to modify, suspend, or discontinue any part of NEXUS AI at any
+            time. We will provide reasonable notice of major changes where possible.
+          </p>
+
+          <h2 className="tos-h2">11. TERMINATION</h2>
+          <p>
+            We may terminate or suspend your account if you violate these Terms of Service. You
+            may delete your account at any time by contacting support.
+          </p>
+
+          <h2 className="tos-h2">12. GOVERNING LAW</h2>
+          <p>
+            These Terms are governed by the laws of Indonesia. Any disputes shall be resolved
+            through good-faith negotiation before pursuing formal legal remedies.
+          </p>
+
+          <h2 className="tos-h2">13. CONTACT</h2>
+          <div className="tos-card">
+            <p>
+              📧 Email:{" "}
+              <a href="mailto:arifiinytid@gmail.com">arifiinytid@gmail.com</a>
+              <br />
+              🌐 Website:{" "}
+              <a href="https://nexusai-com.vercel.app">nexusai-com.vercel.app</a>
+              <br />
+              📺 YouTube: NEXUS STUDIO
+            </p>
+          </div>
+
+          <div className="tos-footer">
+            © 2026 NEXUS AI · NEXUS STUDIO · Built by FIINYTID25
+            <br />
+            <a href="/privacy">Privacy Policy</a> · <a href="/terms">Terms of Service</a> ·{" "}
+            <a href="/">Back to App</a>
+          </div>
+        </div>
       </div>
     </>
   );

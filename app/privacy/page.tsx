@@ -1,162 +1,211 @@
-import type { Metadata } from 'next';
-import Link from 'next/link';
+const styles = `
+  @import url('https://fonts.googleapis.com/css2?family=Orbitron:wght@400;700;900&family=JetBrains+Mono:wght@300;400;500&display=swap');
 
-export const metadata: Metadata = {
-  title: 'Privacy Policy — NEXUS AI',
-  description: 'NEXUS AI Privacy Policy',
-};
+  :root{--bg:#030312;--bg2:#06071a;--cyan:#00e5ff;--purple:#8800ff;--text:#b8cfff;--dim:#3a4a7a;--b:rgba(0,229,255,.12);--r:8px;}
 
-export default function PrivacyPage() {
+  .pp-root {
+    min-height:100vh;background:var(--bg);color:var(--text);
+    font-family:'JetBrains Mono',monospace;font-size:13px;line-height:1.8;
+    position:relative;
+  }
+  .pp-root::before {
+    content:'';position:fixed;inset:0;
+    background:linear-gradient(rgba(0,229,255,.01)1px,transparent 1px),
+               linear-gradient(90deg,rgba(0,229,255,.01)1px,transparent 1px);
+    background-size:40px 40px;pointer-events:none;z-index:0;
+  }
+
+  .pp-container{max-width:820px;margin:0 auto;padding:40px 20px 60px;position:relative;z-index:1;}
+
+  .pp-logo{
+    font-family:'Orbitron',sans-serif;font-size:24px;font-weight:900;
+    background:linear-gradient(135deg,var(--cyan),var(--purple));
+    -webkit-background-clip:text;-webkit-text-fill-color:transparent;
+    background-clip:text;margin-bottom:4px;
+  }
+  .pp-logo-sub{font-size:10px;color:var(--dim);letter-spacing:3px;text-transform:uppercase;margin-bottom:32px;}
+
+  .pp-nav{display:flex;align-items:center;gap:16px;margin-bottom:40px;padding-bottom:16px;border-bottom:1px solid var(--b);}
+  .pp-nav a{color:var(--dim);font-size:11px;transition:.15s;text-decoration:none;}
+  .pp-nav a:hover{color:var(--cyan);}
+  .pp-back-btn{
+    display:inline-flex;align-items:center;gap:6px;padding:6px 14px;
+    background:rgba(0,229,255,.06);border:1px solid var(--b);border-radius:6px;
+    color:var(--cyan) !important;font-size:10px;font-family:'Orbitron',sans-serif;
+    letter-spacing:1px;cursor:pointer;text-decoration:none !important;
+    transition:background .15s;
+  }
+  .pp-back-btn:hover{background:rgba(0,229,255,.12) !important;}
+
+  .pp-h1{font-family:'Orbitron',sans-serif;font-size:20px;color:var(--cyan);margin-bottom:8px;}
+  .pp-updated{font-size:10px;color:var(--dim);margin-bottom:32px;padding-bottom:16px;border-bottom:1px solid var(--b);}
+
+  .pp-h2{font-family:'Orbitron',sans-serif;font-size:13px;color:var(--cyan);margin:28px 0 10px;letter-spacing:1px;}
+
+  .pp-root p{color:var(--text);margin-bottom:12px;}
+  .pp-root ul{padding-left:20px;margin-bottom:12px;}
+  .pp-root li{color:var(--text);margin-bottom:6px;}
+  .pp-root strong{color:#fff;}
+
+  .pp-card{background:var(--bg2);border:1px solid var(--b);border-radius:var(--r);padding:16px 20px;margin:16px 0;}
+  .pp-card p{margin-bottom:0 !important;}
+
+  .pp-root a{color:var(--cyan);text-decoration:none;}
+  .pp-root a:hover{text-decoration:underline;}
+
+  .pp-footer{margin-top:40px;padding-top:20px;border-top:1px solid var(--b);font-size:10px;color:var(--dim);text-align:center;}
+  .pp-footer a{color:var(--cyan);text-decoration:none;}
+  .pp-footer a:hover{text-decoration:underline;}
+`;
+
+export default function PrivacyPolicy() {
   return (
     <>
-      <style>{`
-        @import url('https://fonts.googleapis.com/css2?family=Orbitron:wght@400;700;900&family=JetBrains+Mono:wght@300;400;500&display=swap');
-        :root{--bg:#030312;--bg2:#06071a;--cyan:#00e5ff;--purple:#8800ff;--text:#b8cfff;--dim:#3a4a7a;--b:rgba(0,229,255,.12);--r:8px;}
-        *, *::before, *::after { margin:0; padding:0; box-sizing:border-box; }
-        html, body { background:var(--bg); color:var(--text); font-family:'JetBrains Mono',monospace; font-size:13px; line-height:1.8; }
-        .pp-grid {
-          position:fixed; inset:0;
-          background:linear-gradient(rgba(0,229,255,.01) 1px,transparent 1px),linear-gradient(90deg,rgba(0,229,255,.01) 1px,transparent 1px);
-          background-size:40px 40px; pointer-events:none; z-index:0;
-        }
-        .container { max-width:820px; margin:0 auto; padding:40px 20px 60px; position:relative; z-index:1; }
-        .logo {
-          font-family:'Orbitron',sans-serif; font-size:24px; font-weight:900;
-          background:linear-gradient(135deg,var(--cyan),var(--purple));
-          -webkit-background-clip:text; -webkit-text-fill-color:transparent; background-clip:text;
-          margin-bottom:4px;
-        }
-        .logo-sub { font-size:10px; color:var(--dim); letter-spacing:3px; text-transform:uppercase; margin-bottom:32px; }
-        h1 { font-family:'Orbitron',sans-serif; font-size:20px; color:var(--cyan); margin-bottom:8px; }
-        .updated { font-size:10px; color:var(--dim); margin-bottom:32px; padding-bottom:16px; border-bottom:1px solid var(--b); }
-        h2 { font-family:'Orbitron',sans-serif; font-size:13px; color:var(--cyan); margin:28px 0 10px; letter-spacing:1px; }
-        p  { color:var(--text); margin-bottom:12px; }
-        ul { padding-left:20px; margin-bottom:12px; }
-        li { color:var(--text); margin-bottom:6px; }
-        li strong { color:#fff; }
-        .card { background:var(--bg2); border:1px solid var(--b); border-radius:var(--r); padding:16px 20px; margin:16px 0; }
-        .card p { margin-bottom:0; }
-        a { color:var(--cyan); text-decoration:none; }
-        a:hover { text-decoration:underline; }
-        .nav { display:flex; align-items:center; gap:16px; margin-bottom:40px; padding-bottom:16px; border-bottom:1px solid var(--b); flex-wrap:wrap; }
-        .nav a { color:var(--dim); font-size:11px; transition:.15s; }
-        .nav a:hover { color:var(--cyan); text-decoration:none; }
-        .back-btn {
-          display:inline-flex; align-items:center; gap:6px; padding:6px 14px;
-          background:rgba(0,229,255,.06); border:1px solid var(--b); border-radius:6px;
-          color:var(--cyan); font-size:10px; font-family:'Orbitron',sans-serif;
-          letter-spacing:1px; cursor:pointer; text-decoration:none;
-        }
-        .back-btn:hover { background:rgba(0,229,255,.12); text-decoration:none; }
-        footer { margin-top:40px; padding-top:20px; border-top:1px solid var(--b); font-size:10px; color:var(--dim); text-align:center; line-height:2; }
-        footer a { color:var(--dim); }
-        footer a:hover { color:var(--cyan); }
-      `}</style>
+      <style>{styles}</style>
+      <div className="pp-root">
+        <div className="pp-container">
+          <div className="pp-logo">NEXUS AI</div>
+          <div className="pp-logo-sub">Roblox Dev Intelligence</div>
 
-      <div className="pp-grid" aria-hidden />
+          <div className="pp-nav">
+            <a href="/chats" className="pp-back-btn">← Back to App</a>
+            <a href="/terms">Terms of Service</a>
+            <a href="/privacy">Privacy Policy</a>
+          </div>
 
-      <div className="container">
-        <div className="logo">NEXUS AI</div>
-        <div className="logo-sub">Roblox Dev Intelligence</div>
+          <h1 className="pp-h1">Privacy Policy</h1>
+          <div className="pp-updated">Last updated: April 15, 2026 · Effective immediately</div>
 
-        <nav className="nav">
-          <Link href="/chats" className="back-btn">← Back to App</Link>
-          <Link href="/terms">Terms of Service</Link>
-          <Link href="/privacy">Privacy Policy</Link>
-        </nav>
+          <div className="pp-card">
+            <p>
+              NEXUS AI ("we", "us", "our") is committed to protecting your privacy. This Privacy
+              Policy explains how we collect, use, and protect your information when you use our
+              service at nexusai-com.vercel.app.
+            </p>
+          </div>
 
-        <h1>Privacy Policy</h1>
-        <div className="updated">Last updated: April 15, 2026 · Effective immediately</div>
+          <h2 className="pp-h2">1. INFORMATION WE COLLECT</h2>
+          <p>When you use NEXUS AI, we collect the following information:</p>
+          <ul>
+            <li>
+              <strong>Roblox Account Data:</strong> Your Roblox username, User ID, and display
+              name — obtained through Roblox OAuth 2.0 with your explicit consent.
+            </li>
+            <li>
+              <strong>Google Account Data:</strong> Your Google account email and profile picture
+              — obtained through Google OAuth with your explicit consent.
+            </li>
+            <li>
+              <strong>Usage Data:</strong> AI conversation history, credits balance, selected AI
+              model preferences, language settings, and theme preferences.
+            </li>
+            <li>
+              <strong>Technical Data:</strong> Browser type, access timestamps, and general usage
+              patterns (no IP addresses are stored).
+            </li>
+          </ul>
 
-        <div className="card">
-          <p>NEXUS AI (&quot;we&quot;, &quot;us&quot;, &quot;our&quot;) is committed to protecting your privacy. This Privacy Policy explains how we collect, use, and protect your information when you use our service at nexusai-com.vercel.app.</p>
-        </div>
+          <h2 className="pp-h2">2. HOW WE USE YOUR INFORMATION</h2>
+          <ul>
+            <li>To authenticate you and provide access to NEXUS AI services.</li>
+            <li>To store and sync your AI conversation history across sessions.</li>
+            <li>To manage your credits balance and usage.</li>
+            <li>To enable AI-powered script injection into Roblox Studio.</li>
+            <li>To improve our services and fix bugs.</li>
+            <li>To send service-related communications (no marketing emails).</li>
+          </ul>
 
-        <h2>1. INFORMATION WE COLLECT</h2>
-        <p>When you use NEXUS AI, we collect the following information:</p>
-        <ul>
-          <li><strong>Roblox Account Data:</strong> Your Roblox username, User ID, and display name — obtained through Roblox OAuth 2.0 with your explicit consent.</li>
-          <li><strong>Google Account Data:</strong> Your Google account email and profile picture — obtained through Google OAuth with your explicit consent.</li>
-          <li><strong>Usage Data:</strong> AI conversation history, credits balance, selected AI model preferences, language settings, and theme preferences.</li>
-          <li><strong>Technical Data:</strong> Browser type, access timestamps, and general usage patterns (no IP addresses are stored).</li>
-        </ul>
-
-        <h2>2. HOW WE USE YOUR INFORMATION</h2>
-        <ul>
-          <li>To authenticate you and provide access to NEXUS AI services.</li>
-          <li>To store and sync your AI conversation history across sessions.</li>
-          <li>To manage your credits balance and usage.</li>
-          <li>To enable AI-powered script injection into Roblox Studio.</li>
-          <li>To improve our services and fix bugs.</li>
-          <li>To send service-related communications (no marketing emails).</li>
-        </ul>
-
-        <h2>3. ROBLOX DATA USAGE</h2>
-        <p>We request the following Roblox OAuth scopes:</p>
-        <ul>
-          <li><strong>openid</strong> — To verify your Roblox identity.</li>
-          <li><strong>profile</strong> — To access your Roblox username and display name.</li>
-        </ul>
-        <p>We do <strong>not</strong> access your Roblox games, inventory, friends list, or any other Roblox data beyond what is listed above. We do not post on your behalf or make any changes to your Roblox account.</p>
-
-        <h2>4. DATA STORAGE &amp; SECURITY</h2>
-        <ul>
-          <li>User data is stored securely using Vercel KV (key-value store).</li>
-          <li>Data is stored per Roblox username and is only accessible to the authenticated user.</li>
-          <li>We use HTTPS for all data transmission.</li>
-          <li>Session tokens are stored in your browser&apos;s localStorage and expire after 7 days.</li>
-          <li>We do not sell, trade, or rent your personal information to third parties.</li>
-        </ul>
-
-        <h2>5. DATA RETENTION</h2>
-        <p>We retain your data as long as you have an active account. You can request deletion of your data at any time by contacting us. Conversation history is automatically limited to the last 10 conversations.</p>
-
-        <h2>6. THIRD-PARTY SERVICES</h2>
-        <p>NEXUS AI uses the following third-party services:</p>
-        <ul>
-          <li><strong>Google Gemini API</strong> — AI model for generating responses (Google&apos;s privacy policy applies).</li>
-          <li><strong>Vercel</strong> — Hosting and serverless functions.</li>
-          <li><strong>Roblox API</strong> — Authentication and username lookup.</li>
-          <li><strong>Google OAuth</strong> — Secondary authentication.</li>
-        </ul>
-
-        <h2>7. CHILDREN&apos;S PRIVACY</h2>
-        <p>NEXUS AI is a developer tool intended for Roblox game developers. If you are under 13 years of age, please ensure you have parental consent before using our service. We do not knowingly collect personal information from children under 13 without parental consent.</p>
-
-        <h2>8. YOUR RIGHTS</h2>
-        <p>You have the right to:</p>
-        <ul>
-          <li>Access the personal data we hold about you.</li>
-          <li>Request correction of inaccurate data.</li>
-          <li>Request deletion of your account and associated data.</li>
-          <li>Withdraw consent for data processing at any time.</li>
-          <li>Disconnect your Roblox or Google account from NEXUS AI.</li>
-        </ul>
-
-        <h2>9. COOKIES</h2>
-        <p>We do not use tracking cookies. We only use browser localStorage to maintain your login session and preferences.</p>
-
-        <h2>10. CHANGES TO THIS POLICY</h2>
-        <p>We may update this Privacy Policy from time to time. We will notify users of significant changes by updating the &quot;Last updated&quot; date above. Continued use of NEXUS AI after changes constitutes acceptance of the updated policy.</p>
-
-        <h2>11. CONTACT US</h2>
-        <p>If you have any questions about this Privacy Policy or wish to exercise your data rights, please contact us:</p>
-        <div className="card">
+          <h2 className="pp-h2">3. ROBLOX DATA USAGE</h2>
+          <p>We request the following Roblox OAuth scopes:</p>
+          <ul>
+            <li><strong>openid</strong> — To verify your Roblox identity.</li>
+            <li><strong>profile</strong> — To access your Roblox username and display name.</li>
+          </ul>
           <p>
-            📧 Email: <a href="mailto:arifiinytid@gmail.com">arifiinytid@gmail.com</a><br />
-            🌐 Website: <a href="https://nexusai-com.vercel.app" target="_blank" rel="noopener noreferrer">nexusai-com.vercel.app</a><br />
-            📺 YouTube: NEXUS STUDIO
+            We do <strong>not</strong> access your Roblox games, inventory, friends list, or any
+            other Roblox data beyond what is listed above. We do not post on your behalf or make
+            any changes to your Roblox account.
           </p>
-        </div>
 
-        <footer>
-          © 2026 NEXUS AI · NEXUS STUDIO · Built by FIINYTID25<br />
-          <Link href="/privacy">Privacy Policy</Link>
-          {' · '}
-          <Link href="/terms">Terms of Service</Link>
-          {' · '}
-          <Link href="/">Back to App</Link>
-        </footer>
+          <h2 className="pp-h2">4. DATA STORAGE &amp; SECURITY</h2>
+          <ul>
+            <li>User data is stored securely using Vercel KV (key-value store).</li>
+            <li>Data is stored per Roblox username and is only accessible to the authenticated user.</li>
+            <li>We use HTTPS for all data transmission.</li>
+            <li>Session tokens are stored in your browser's localStorage and expire after 7 days.</li>
+            <li>We do not sell, trade, or rent your personal information to third parties.</li>
+          </ul>
+
+          <h2 className="pp-h2">5. DATA RETENTION</h2>
+          <p>
+            We retain your data as long as you have an active account. You can request deletion of
+            your data at any time by contacting us. Conversation history is automatically limited
+            to the last 10 conversations.
+          </p>
+
+          <h2 className="pp-h2">6. THIRD-PARTY SERVICES</h2>
+          <p>NEXUS AI uses the following third-party services:</p>
+          <ul>
+            <li><strong>Google Gemini API</strong> — AI model for generating responses (Google's privacy policy applies).</li>
+            <li><strong>Vercel</strong> — Hosting and serverless functions.</li>
+            <li><strong>Roblox API</strong> — Authentication and username lookup.</li>
+            <li><strong>Google OAuth</strong> — Secondary authentication.</li>
+          </ul>
+
+          <h2 className="pp-h2">7. CHILDREN'S PRIVACY</h2>
+          <p>
+            NEXUS AI is a developer tool intended for Roblox game developers. If you are under 13
+            years of age, please ensure you have parental consent before using our service. We do
+            not knowingly collect personal information from children under 13 without parental consent.
+          </p>
+
+          <h2 className="pp-h2">8. YOUR RIGHTS</h2>
+          <p>You have the right to:</p>
+          <ul>
+            <li>Access the personal data we hold about you.</li>
+            <li>Request correction of inaccurate data.</li>
+            <li>Request deletion of your account and associated data.</li>
+            <li>Withdraw consent for data processing at any time.</li>
+            <li>Disconnect your Roblox or Google account from NEXUS AI.</li>
+          </ul>
+
+          <h2 className="pp-h2">9. COOKIES</h2>
+          <p>
+            We do not use tracking cookies. We only use browser localStorage to maintain your
+            login session and preferences.
+          </p>
+
+          <h2 className="pp-h2">10. CHANGES TO THIS POLICY</h2>
+          <p>
+            We may update this Privacy Policy from time to time. We will notify users of
+            significant changes by updating the "Last updated" date above. Continued use of
+            NEXUS AI after changes constitutes acceptance of the updated policy.
+          </p>
+
+          <h2 className="pp-h2">11. CONTACT US</h2>
+          <p>
+            If you have any questions about this Privacy Policy or wish to exercise your data
+            rights, please contact us:
+          </p>
+          <div className="pp-card">
+            <p>
+              📧 Email:{" "}
+              <a href="mailto:arifiinytid@gmail.com">arifiinytid@gmail.com</a>
+              <br />
+              🌐 Website:{" "}
+              <a href="https://nexusai-com.vercel.app">nexusai-com.vercel.app</a>
+              <br />
+              📺 YouTube: NEXUS STUDIO
+            </p>
+          </div>
+
+          <div className="pp-footer">
+            © 2026 NEXUS AI · NEXUS STUDIO · Built by FIINYTID25
+            <br />
+            <a href="/privacy">Privacy Policy</a> · <a href="/terms">Terms of Service</a> ·{" "}
+            <a href="/">Back to App</a>
+          </div>
+        </div>
       </div>
     </>
   );

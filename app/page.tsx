@@ -67,6 +67,11 @@ export default function HomePage() {
     };
   }, []);
 
+  // ── Image fallback helper ──
+  const imgFail = (e: React.SyntheticEvent<HTMLImageElement>) => {
+    (e.target as HTMLImageElement).style.display = 'none';
+  };
+
   return (
     <>
       <style>{`
@@ -126,7 +131,12 @@ export default function HomePage() {
         }
         .nav.scrolled { padding:10px 52px; background:rgba(3,3,18,.95); }
         .nav-logo-wrap { display:flex;align-items:center;gap:10px;text-decoration:none; }
-        .nav-logo-img { width:28px;height:28px;border-radius:7px;object-fit:cover;border:1px solid rgba(0,229,255,.22); }
+        .nav-logo-img {
+          width:28px;height:28px;border-radius:7px;object-fit:cover;
+          border:1px solid rgba(0,229,255,.22);
+          background:linear-gradient(135deg,rgba(0,229,255,.15),rgba(136,0,255,.15));
+          flex-shrink:0;
+        }
         .nav-logo {
           font-family:'Orbitron',sans-serif;font-weight:900;font-size:14px;
           background:linear-gradient(135deg,var(--cyan),var(--purple));
@@ -142,7 +152,12 @@ export default function HomePage() {
           transition:.15s;display:flex;align-items:center;gap:6px;
         }
         .nav-discord:hover{background:rgba(88,101,242,.18);border-color:rgba(88,101,242,.6);}
-        .nav-discord img{width:14px;height:14px;border-radius:2px;object-fit:cover;opacity:.85;}
+        .nav-discord-icon {
+          width:14px;height:14px;border-radius:2px;flex-shrink:0;
+          background:rgba(88,101,242,.3);display:flex;align-items:center;justify-content:center;
+          font-size:8px;color:#7289da;font-weight:900;
+        }
+        .nav-discord-icon img { width:14px;height:14px;border-radius:2px;object-fit:cover; }
         .nav-login {
           padding:8px 22px;border-radius:7px;
           background:linear-gradient(135deg,var(--cyan),var(--purple));
@@ -200,7 +215,6 @@ export default function HomePage() {
           backdrop-filter:blur(6px);font-family:'JetBrains Mono',monospace;
         }
         .btn-secondary:hover{border-color:var(--cyan2);color:var(--cyan);background:rgba(0,229,255,.05);}
-        .btn-secondary img{width:14px;height:14px;border-radius:2px;object-fit:cover;opacity:.8;}
 
         .hero-stats{display:flex;gap:40px;margin-top:56px;flex-wrap:wrap;justify-content:center;animation:fadeUp .8s .4s ease both;}
         .stat{text-align:center;}
@@ -262,7 +276,12 @@ export default function HomePage() {
         .screen-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(320px,1fr));gap:20px;max-width:1160px;margin:0 auto;}
         .screen-card{border-radius:12px;overflow:hidden;border:1px solid var(--b);background:var(--bg2);transition:.25s;position:relative;}
         .screen-card:hover{border-color:var(--cyan2);transform:translateY(-5px);box-shadow:0 20px 50px rgba(0,229,255,.1);}
-        .screen-card-img{width:100%;height:210px;object-fit:cover;object-position:top;display:block;border-bottom:1px solid var(--b);background:var(--bg3);}
+        .screen-card-img{
+          width:100%;height:210px;object-fit:cover;object-position:top;display:block;
+          border-bottom:1px solid var(--b);background:var(--bg3);
+          /* nice placeholder gradient if image missing */
+          background-image:linear-gradient(135deg,rgba(0,229,255,.04),rgba(136,0,255,.04));
+        }
         .screen-card-body{padding:16px 18px;}
         .screen-card-title{font-size:11px;color:white;font-weight:700;margin-bottom:5px;display:flex;align-items:center;gap:7px;}
         .screen-card-desc{font-size:10px;color:var(--dim);line-height:1.75;}
@@ -309,7 +328,13 @@ export default function HomePage() {
         .models-grid{display:flex;flex-wrap:wrap;gap:10px;}
         .model-chip{padding:9px 16px;border:1px solid var(--b);border-radius:20px;font-size:10px;color:var(--text);background:var(--bg2);display:flex;align-items:center;gap:8px;transition:.18s;position:relative;}
         .model-chip:hover{border-color:var(--cyan2);color:var(--cyan);background:rgba(0,229,255,.04);}
-        .model-chip img{width:16px;height:16px;border-radius:3px;object-fit:contain;flex-shrink:0;}
+        /* model icon fallback box */
+        .model-icon-wrap{
+          width:16px;height:16px;border-radius:3px;flex-shrink:0;
+          background:rgba(0,229,255,.1);display:flex;align-items:center;justify-content:center;
+          overflow:hidden;
+        }
+        .model-icon-wrap img{width:16px;height:16px;object-fit:contain;}
         .model-chip.is-new{border-color:rgba(255,45,107,.3);background:rgba(255,45,107,.04);}
         .model-chip.is-new:hover{border-color:rgba(255,45,107,.55);}
         .model-chip.is-soon{opacity:.45;cursor:default;}
@@ -371,7 +396,10 @@ export default function HomePage() {
         }
       `}</style>
 
-      <link href="https://fonts.googleapis.com/css2?family=Orbitron:wght@400;600;700;900&family=JetBrains+Mono:wght@300;400;500&display=swap" rel="stylesheet" />
+      <link
+        href="https://fonts.googleapis.com/css2?family=Orbitron:wght@400;600;700;900&family=JetBrains+Mono:wght@300;400;500&display=swap"
+        rel="stylesheet"
+      />
 
       <div className="particles" id="particles" />
       <div className="orbs">
@@ -380,17 +408,31 @@ export default function HomePage() {
         <div className="orb orb3" />
       </div>
 
-      {/* NAVBAR */}
+      {/* ── NAVBAR ── */}
       <nav className="nav" id="navbar">
         <a href="/" className="nav-logo-wrap">
-          <img src="favicon.ico" alt="NEXUS AI" className="nav-logo-img" onError={(e) => { (e.target as HTMLImageElement).style.display = 'none'; }} />
+          {/* favicon.ico — correct absolute path */}
+          <img
+            src="/favicon.ico"
+            alt="NEXUS AI"
+            className="nav-logo-img"
+            onError={imgFail}
+          />
           <span className="nav-logo">NEXUS AI</span>
         </a>
         <div className="nav-pulse" />
         <span className="nav-status">Live</span>
         <div className="nav-r">
-          <a href="https://discord.gg/FzAF48mvK5" target="_blank" rel="noopener" className="nav-discord">
-            <img src="/public/discord.png" alt="Discord" onError={(e) => { (e.target as HTMLImageElement).style.display = 'none'; }} />
+          <a
+            href="https://discord.gg/FzAF48mvK5"
+            target="_blank"
+            rel="noopener"
+            className="nav-discord"
+          >
+            {/* /public/discord.png — in Next.js, files in /public are served at root */}
+            <div className="nav-discord-icon">
+              <img src="/public/discord.png" alt="Discord" onError={imgFail} />
+            </div>
             Discord
           </a>
           <a href="/login" className="nav-login">
@@ -402,7 +444,7 @@ export default function HomePage() {
         </div>
       </nav>
 
-      {/* HERO */}
+      {/* ── HERO ── */}
       <section className="hero" id="top">
         <div className="hero-badge">
           <div className="badge-dot" />
@@ -424,8 +466,14 @@ export default function HomePage() {
             </svg>
             Start Building Free
           </a>
-          <a href="https://discord.gg/FzAF48mvK5" target="_blank" rel="noopener" className="btn-secondary">
-            <img src="/public/discord.png" alt="Discord" onError={(e) => { (e.target as HTMLImageElement).style.display = 'none'; }} />
+          <a
+            href="https://discord.gg/FzAF48mvK5"
+            target="_blank"
+            rel="noopener"
+            className="btn-secondary"
+          >
+            {/* Discord icon with fallback */}
+            <DiscordIcon />
             Join Discord
           </a>
         </div>
@@ -445,7 +493,7 @@ export default function HomePage() {
         </div>
       </section>
 
-      {/* WHAT IS NEXUS AI */}
+      {/* ── WHAT IS NEXUS AI ── */}
       <div className="mystery" id="mystery">
         <div className="mystery-inner">
           <div className="mystery-eyebrow reveal">What is NEXUS AI?</div>
@@ -467,10 +515,34 @@ export default function HomePage() {
           </div>
           <div className="hint-grid">
             {[
-              { icon: <polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2" />, color: 'var(--cyan)', title: 'Zero Copy-Paste', desc: 'Every script goes directly into Roblox Studio via plugin. Type once, it appears instantly.', delay: 'd1' },
-              { icon: <><rect x="2" y="3" width="20" height="14" rx="2" /><line x1="8" y1="21" x2="16" y2="21" /><line x1="12" y1="17" x2="12" y2="21" /></>, color: 'var(--purple)', title: 'Studio-Aware AI', desc: 'The AI sees your workspace. It knows what scripts exist and builds on top of them.', delay: 'd2' },
-              { icon: <path d="M21 15a2 2 0 01-2 2H7l-4 4V5a2 2 0 012-2h14a2 2 0 012 2z" />, color: 'var(--green)', title: 'Natural Language', desc: 'No technical syntax needed. Describe "make a shop with coins" and it happens.', delay: 'd3' },
-              { icon: <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z" />, color: 'var(--yellow)', title: 'Auto Test & Fix', desc: 'AI runs a play test after building. If console errors appear — it stops, reads them, and self-fixes.', delay: 'd4' },
+              {
+                icon: <polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2" />,
+                color: 'var(--cyan)',
+                title: 'Zero Copy-Paste',
+                desc: 'Every script goes directly into Roblox Studio via plugin. Type once, it appears instantly.',
+                delay: 'd1',
+              },
+              {
+                icon: <><rect x="2" y="3" width="20" height="14" rx="2" /><line x1="8" y1="21" x2="16" y2="21" /><line x1="12" y1="17" x2="12" y2="21" /></>,
+                color: 'var(--purple)',
+                title: 'Studio-Aware AI',
+                desc: 'The AI sees your workspace. It knows what scripts exist and builds on top of them.',
+                delay: 'd2',
+              },
+              {
+                icon: <path d="M21 15a2 2 0 01-2 2H7l-4 4V5a2 2 0 012-2h14a2 2 0 012 2z" />,
+                color: 'var(--green)',
+                title: 'Natural Language',
+                desc: 'No technical syntax needed. Describe "make a shop with coins" and it happens.',
+                delay: 'd3',
+              },
+              {
+                icon: <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z" />,
+                color: 'var(--yellow)',
+                title: 'Auto Test & Fix',
+                desc: 'AI runs a play test after building. If console errors appear — it stops, reads them, and self-fixes.',
+                delay: 'd4',
+              },
             ].map((h, i) => (
               <div key={i} className={`hint-card reveal ${h.delay}`}>
                 <div className="hint-icon">
@@ -490,22 +562,60 @@ export default function HomePage() {
         </div>
       </div>
 
-      {/* SCREENSHOTS */}
+      {/* ── SCREENSHOTS ── */}
       <div className="screenshots-section" id="screenshots">
         <div style={{ textAlign: 'center', marginBottom: '48px', maxWidth: '600px', marginLeft: 'auto', marginRight: 'auto' }}>
           <div className="sec-label reveal">See It In Action</div>
           <h2 className="sec-title reveal d1">From Prompt to Studio</h2>
-          <p className="sec-sub reveal d2" style={{ marginBottom: 0 }}>Watch an idea transform into real Roblox content in under 5 seconds.</p>
+          <p className="sec-sub reveal d2" style={{ marginBottom: 0 }}>
+            Watch an idea transform into real Roblox content in under 5 seconds.
+          </p>
         </div>
         <div className="screen-grid">
           {[
-            { badge: 'Web', img: 'public/screen/screen1.png', alt: 'Chat Interface', icon: <path d="M21 15a2 2 0 01-2 2H7l-4 4V5a2 2 0 012-2h14a2 2 0 012 2z" />, iconColor: 'var(--cyan)', title: 'Chat Interface', desc: 'Type your request in plain English. NEXUS AI breaks it down into precise actions and executes them immediately.', delay: 'd1' },
-            { badge: 'Plugin', img: 'public/screen/screen2.png', alt: 'Studio Plugin', icon: <><path d="M20.24 12.24a6 6 0 0 0-8.49-8.49L5 10.5V19h8.5z" /><line x1="16" y1="8" x2="2" y2="22" /></>, iconColor: 'var(--green)', title: 'Studio Plugin', desc: 'The companion plugin in Roblox Studio — connected, listening, injecting in real-time with zero lag.', delay: 'd2' },
-            { badge: 'Connected', img: 'public/screen/screen3.png', alt: 'Connected State', icon: <polyline points="20 6 9 17 4 12" />, iconColor: 'var(--yellow)', title: 'Live & Injecting', desc: 'When connected, every AI command materializes in your place — parts, scripts, GUIs, systems — all live.', delay: 'd3' },
+            {
+              badge: 'Web',
+              /* ── FIXED: leading slash added ── */
+              img: '/public/screen/screen1.png',
+              alt: 'Chat Interface',
+              icon: <path d="M21 15a2 2 0 01-2 2H7l-4 4V5a2 2 0 012-2h14a2 2 0 012 2z" />,
+              iconColor: 'var(--cyan)',
+              title: 'Chat Interface',
+              desc: 'Type your request in plain English. NEXUS AI breaks it down into precise actions and executes them immediately.',
+              delay: 'd1',
+            },
+            {
+              badge: 'Plugin',
+              img: '/public/screen/screen2.png',
+              alt: 'Studio Plugin',
+              icon: <><path d="M20.24 12.24a6 6 0 0 0-8.49-8.49L5 10.5V19h8.5z" /><line x1="16" y1="8" x2="2" y2="22" /></>,
+              iconColor: 'var(--green)',
+              title: 'Studio Plugin',
+              desc: 'The companion plugin in Roblox Studio — connected, listening, injecting in real-time with zero lag.',
+              delay: 'd2',
+            },
+            {
+              badge: 'Connected',
+              img: '/public/screen/screen3.png',
+              alt: 'Connected State',
+              icon: <polyline points="20 6 9 17 4 12" />,
+              iconColor: 'var(--yellow)',
+              title: 'Live & Injecting',
+              desc: 'When connected, every AI command materializes in your place — parts, scripts, GUIs, systems — all live.',
+              delay: 'd3',
+            },
           ].map((s, i) => (
             <div key={i} className={`screen-card reveal ${s.delay}`}>
               <span className="screen-badge">{s.badge}</span>
-              <img src={s.img} alt={s.alt} className="screen-card-img" onError={(e) => { (e.target as HTMLImageElement).style.minHeight = '140px'; }} />
+              <img
+                src={s.img}
+                alt={s.alt}
+                className="screen-card-img"
+                onError={(e) => {
+                  /* Hide broken img; background gradient shows instead */
+                  (e.target as HTMLImageElement).style.opacity = '0';
+                }}
+              />
               <div className="screen-card-body">
                 <div className="screen-card-title">
                   <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke={s.iconColor} strokeWidth="2">{s.icon}</svg>
@@ -518,11 +628,13 @@ export default function HomePage() {
         </div>
       </div>
 
-      {/* FEATURES */}
+      {/* ── FEATURES ── */}
       <section className="section" id="features">
         <div className="sec-label reveal">Core Capabilities</div>
         <h2 className="sec-title reveal d1">Built for Serious Developers</h2>
-        <p className="sec-sub reveal d2">Every tool you need to build a complete Roblox game, powered by AI that actually understands Studio.</p>
+        <p className="sec-sub reveal d2">
+          Every tool you need to build a complete Roblox game, powered by AI that actually understands Studio.
+        </p>
         <div className="features-grid">
           {[
             { iconBg: 'rgba(0,229,255,.08)', iconColor: 'var(--cyan)', icon: <polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2" />, title: 'Direct Studio Injection', desc: 'Scripts, parts, GUIs — AI creates everything directly in Roblox Studio via the companion plugin. No manual copy-paste, ever.', tagBg: 'rgba(0,229,255,.07)', tagColor: 'var(--cyan)', tagLabel: 'Plugin Required', delay: 'd1' },
@@ -544,7 +656,7 @@ export default function HomePage() {
         </div>
       </section>
 
-      {/* HOW IT WORKS */}
+      {/* ── HOW IT WORKS ── */}
       <section className="section" style={{ paddingTop: 0 }} id="how">
         <div className="sec-label reveal">Setup</div>
         <h2 className="sec-title reveal d1">3 Steps. That&apos;s It.</h2>
@@ -585,28 +697,78 @@ export default function HomePage() {
         </div>
       </section>
 
-      {/* AI MODELS */}
+      {/* ── AI MODELS ── */}
       <section className="section" style={{ paddingTop: 0 }} id="models">
         <div className="sec-label reveal">AI Models</div>
         <h2 className="sec-title reveal d1">Best-in-Class Model Selection</h2>
         <p className="sec-sub reveal d2">Handpicked models for speed, precision, and Roblox expertise. Many are completely free.</p>
         <div className="models-wrap reveal d2">
           {[
-            { label: 'Google Gemini', models: [{ name: 'Gemini 3.5 Flash', badge: 'new', cls: 'is-new', icon: 'gemini.png' }, { name: 'Gemini 3.1 Pro', badge: 'cr', badgeTxt: '2 CR', icon: 'gemini.png' }, { name: 'Gemini 2.5 Flash', badge: 'cr', badgeTxt: '1 CR', icon: 'gemini.png' }, { name: 'Gemini 2.5 Flash Lite', badge: 'free', icon: 'gemini.png' }, { name: 'Gemini 3 Flash', badge: 'free', icon: 'gemini.png' }] },
-            { label: 'DeepSeek', models: [{ name: 'DeepSeek V4 Pro', badge: 'new', cls: 'is-new', icon: 'deepseek.svg' }, { name: 'DeepSeek V3', badge: 'cr', badgeTxt: '1 CR', icon: 'deepseek.svg' }] },
-            { label: 'Step Fun', models: [{ name: 'Step 3.5 Flash', badge: 'new', cls: 'is-new', icon: 'stepfun.png' }] },
-            { label: 'Groq · Meta', models: [{ name: 'Llama 3.3 70B', badge: 'free', icon: 'groq.png' }, { name: 'OpenAI OSS 120B', badge: 'free', icon: 'groq.png' }] },
-            { label: 'Mistral', models: [{ name: 'Mistral Small', badge: 'free', icon: 'mistral.png' }] },
-            { label: 'Coming Soon', models: [{ name: 'Claude Sonnet', badge: 'soon', cls: 'is-soon', icon: 'claude.png' }, { name: 'GPT-4o', badge: 'soon', cls: 'is-soon', icon: 'chatgpt.png' }] },
+            {
+              label: 'Google Gemini',
+              models: [
+                { name: 'Gemini 3.5 Flash', badge: 'new', cls: 'is-new', icon: 'gemini.png' },
+                { name: 'Gemini 3.1 Pro',   badge: 'cr',  badgeTxt: '2 CR', icon: 'gemini.png' },
+                { name: 'Gemini 2.5 Flash', badge: 'cr',  badgeTxt: '1 CR', icon: 'gemini.png' },
+                { name: 'Gemini 2.5 Flash Lite', badge: 'free', icon: 'gemini.png' },
+                { name: 'Gemini 3 Flash',   badge: 'free', icon: 'gemini.png' },
+              ],
+            },
+            {
+              label: 'DeepSeek',
+              models: [
+                { name: 'DeepSeek V4 Pro', badge: 'new', cls: 'is-new', icon: 'deepseek.svg' },
+                { name: 'DeepSeek V3',     badge: 'cr',  badgeTxt: '1 CR', icon: 'deepseek.svg' },
+              ],
+            },
+            {
+              label: 'Step Fun',
+              models: [
+                { name: 'Step 3.5 Flash', badge: 'new', cls: 'is-new', icon: 'stepfun.png' },
+              ],
+            },
+            {
+              label: 'Groq · Meta',
+              models: [
+                { name: 'Llama 3.3 70B',    badge: 'free', icon: 'groq.png' },
+                { name: 'OpenAI OSS 120B',  badge: 'free', icon: 'groq.png' },
+              ],
+            },
+            {
+              label: 'Mistral',
+              models: [
+                { name: 'Mistral Small', badge: 'free', icon: 'mistral.png' },
+              ],
+            },
+            {
+              label: 'Coming Soon',
+              models: [
+                { name: 'Claude Sonnet', badge: 'soon', cls: 'is-soon', icon: 'claude.png' },
+                { name: 'GPT-4o',        badge: 'soon', cls: 'is-soon', icon: 'chatgpt.png' },
+              ],
+            },
           ].map((cat, i) => (
             <div key={i}>
-              <div className="model-category"><div className="mc-line" /><div className="mc-label">{cat.label}</div><div className="mc-line" /></div>
+              <div className="model-category">
+                <div className="mc-line" />
+                <div className="mc-label">{cat.label}</div>
+                <div className="mc-line" />
+              </div>
               <div className="models-grid">
                 {cat.models.map((m, j) => (
-                  <div key={j} className={`model-chip ${m.cls || ''}`}>
-                    <img src={`/public/${m.icon}`} alt={m.name} onError={(e) => { (e.target as HTMLImageElement).style.display = 'none'; }} />
+                  <div key={j} className={`model-chip ${(m as any).cls || ''}`}>
+                    {/* Wrapped in a div so broken img doesn't shift layout */}
+                    <div className="model-icon-wrap">
+                      <img
+                        src={`/public/${m.icon}`}
+                        alt={m.name}
+                        onError={imgFail}
+                      />
+                    </div>
                     {m.name}
-                    <span className={`mbadge ${m.badge}`}>{m.badgeTxt || m.badge.toUpperCase()}</span>
+                    <span className={`mbadge ${m.badge}`}>
+                      {(m as any).badgeTxt || m.badge.toUpperCase()}
+                    </span>
                   </div>
                 ))}
               </div>
@@ -615,7 +777,7 @@ export default function HomePage() {
         </div>
       </section>
 
-      {/* GATE */}
+      {/* ── GATE ── */}
       <div className="gate-section" id="gate">
         <div className="gate-box reveal-scale">
           <div className="gate-glow" />
@@ -627,39 +789,52 @@ export default function HomePage() {
             </svg>
           </div>
           <div className="gate-title">The Rest is Inside</div>
-          <div className="gate-sub">Projects, dashboard, full model access, credit system, plugin download, and daily rewards — all waiting behind one login.</div>
+          <div className="gate-sub">
+            Projects, dashboard, full model access, credit system, plugin download, and daily rewards — all waiting behind one login.
+          </div>
           <a href="/login" className="gate-btn">
-            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2" /></svg>
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
+              <polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2" />
+            </svg>
             Enter NEXUS AI
           </a>
           <div className="gate-note"><span>30 free credits</span> &nbsp;·&nbsp; No credit card &nbsp;·&nbsp; Sign in with Roblox</div>
         </div>
       </div>
 
-      {/* CTA */}
+      {/* ── CTA ── */}
       <section className="cta-section">
         <div className="cta-box reveal-scale">
           <div className="cta-free">
-            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2" /></svg>
+            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+              <polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2" />
+            </svg>
             30 Free Credits — No Card Required
           </div>
           <h2 className="cta-title">Ready to Build Faster?</h2>
-          <p className="cta-sub">Join developers who have already stopped copy-pasting and started creating. Your game deserves better than manual scripting.</p>
+          <p className="cta-sub">
+            Join developers who have already stopped copy-pasting and started creating.
+            Your game deserves better than manual scripting.
+          </p>
           <div className="cta-actions">
             <a href="/login" className="btn-primary" style={{ width: '100%', maxWidth: '300px', justifyContent: 'center' }}>
-              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2" /></svg>
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
+                <polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2" />
+              </svg>
               Start Free Now
             </a>
             <a href="https://discord.gg/FzAF48mvK5" target="_blank" rel="noopener" className="cta-discord">
-              <img src="/public/discord.png" alt="Discord" onError={(e) => { (e.target as HTMLImageElement).style.display = 'none'; }} />
-              Join Discord for Plugin & Codes
+              <DiscordIcon />
+              Join Discord for Plugin &amp; Codes
             </a>
           </div>
-          <div className="cta-meta"><span>30 CR on signup</span> &nbsp;·&nbsp; +2 CR daily free &nbsp;·&nbsp; Pro plan for power users</div>
+          <div className="cta-meta">
+            <span>30 CR on signup</span> &nbsp;·&nbsp; +2 CR daily free &nbsp;·&nbsp; Pro plan for power users
+          </div>
         </div>
       </section>
 
-      {/* FOOTER */}
+      {/* ── FOOTER ── */}
       <footer>
         <div className="footer-inner">
           <span className="footer-brand">NEXUS AI</span>
@@ -673,5 +848,21 @@ export default function HomePage() {
         </div>
       </footer>
     </>
+  );
+}
+
+// ── Inline Discord SVG icon (no img dependency) ──────────────────────────────
+function DiscordIcon() {
+  return (
+    <svg
+      width="14"
+      height="14"
+      viewBox="0 0 24 24"
+      fill="#7289da"
+      xmlns="http://www.w3.org/2000/svg"
+      style={{ flexShrink: 0 }}
+    >
+      <path d="M20.317 4.37a19.791 19.791 0 0 0-4.885-1.515.074.074 0 0 0-.079.037c-.21.375-.444.864-.608 1.25a18.27 18.27 0 0 0-5.487 0 12.64 12.64 0 0 0-.617-1.25.077.077 0 0 0-.079-.037A19.736 19.736 0 0 0 3.677 4.37a.07.07 0 0 0-.032.027C.533 9.046-.32 13.58.099 18.057a.082.082 0 0 0 .031.057 19.9 19.9 0 0 0 5.993 3.03.078.078 0 0 0 .084-.028 14.09 14.09 0 0 0 1.226-1.994.076.076 0 0 0-.041-.106 13.107 13.107 0 0 1-1.872-.892.077.077 0 0 1-.008-.128 10.2 10.2 0 0 0 .372-.292.074.074 0 0 1 .077-.01c3.928 1.793 8.18 1.793 12.062 0a.074.074 0 0 1 .078.01c.12.098.246.198.373.292a.077.077 0 0 1-.006.127 12.299 12.299 0 0 1-1.873.892.077.077 0 0 0-.041.107c.36.698.772 1.362 1.225 1.993a.076.076 0 0 0 .084.028 19.839 19.839 0 0 0 6.002-3.03.077.077 0 0 0 .032-.054c.5-5.177-.838-9.674-3.549-13.66a.061.061 0 0 0-.031-.03zM8.02 15.33c-1.183 0-2.157-1.085-2.157-2.419 0-1.333.956-2.419 2.157-2.419 1.21 0 2.176 1.096 2.157 2.42 0 1.333-.956 2.418-2.157 2.418zm7.975 0c-1.183 0-2.157-1.085-2.157-2.419 0-1.333.955-2.419 2.157-2.419 1.21 0 2.176 1.096 2.157 2.42 0 1.333-.946 2.418-2.157 2.418z" />
+    </svg>
   );
 }
