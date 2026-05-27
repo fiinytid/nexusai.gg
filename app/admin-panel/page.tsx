@@ -1,956 +1,1845 @@
-"use client";
+'use client';
 
-import { useState, useEffect, useRef, useCallback } from "react";
+import React, { useState, useEffect, useRef, useCallback } from 'react';
 
-// ─── Types ──────────────────────────────────────────────────────────────────
+// ─── TYPES ──────────────────────────────────────────────────────────────────
 
-interface Session {
-  user?: {
-    displayName?: string;
-    username?: string;
-    avatar?: string;
-  };
+interface UserData {
+  credits?: number;
+  plan?: string;
+  robloxId?: string;
+  banned?: boolean;
+  banReason?: string;
+  googleEmail?: string;
+  roles?: string[];
+  _updated?: string;
 }
 
-interface Message {
+interface Report {
   id: string;
-  role: "user" | "ai";
-  text: string;
-  time: string;
+  type: string;
+  from: string;
+  status: string;
+  time?: string;
+  message?: string;
+  paymentCR?: string;
+  paymentPack?: string;
+  paymentMethod?: string;
+  paymentTotal?: string;
+  transactionId?: string;
 }
 
-// ─── Constants ───────────────────────────────────────────────────────────────
-
-const HINTS = [
-  { icon: "🔌", text: "My Studio plugin shows Studio: OFF, how do I fix it?" },
-  { icon: "💳", text: "I already paid but I still haven't received my credits" },
-  { icon: "🤖", text: "How do I write better prompts to get good AI output?" },
-  { icon: "⚠️", text: "The AI Chat is giving me incomplete or wrong results" },
-  { icon: "🔑", text: "I can't log in to my account, what should I do?" },
-  { icon: "🎟️", text: "My redeem code says it's invalid or already used" },
-] as const;
-
-const CODE_PATTERNS = [
-  /\b(write|create|make|build|generate|code|give me|show me|provide|give)\b.{0,30}\b(script|code|lua|luau|function|module|localscript|serverscript|gui|frame|textbutton|textlabel|imagelabel|scrollingframe|game|npc|shop|leaderboard|datastore|admin|tween|remote|bindable|part|model|tool|weapon|system|handler)\b/i,
-  /\b(fix|debug|complete|finish|improve|optimize|update|edit|modify|add to|continue)\b.{0,20}\b(this code|this script|my code|my script|the code|the script|lua|luau|function)\b/i,
-  /\bcan you\b.{0,20}\b(code|program|script|write|make|create|build)\b/i,
-  /```/,
-  /\b(RemoteEvent|RemoteFunction|BindableEvent|LocalScript|ServerScript|ModuleScript|StarterGui|StarterPack|StarterPlayer|ReplicatedStorage|ServerScriptService|Workspace|Players\.LocalPlayer|game\.Players|game\.Workspace|script\.Parent|Instance\.new|TweenService|UserInputService|RunService|CollectionService|PhysicsService)\b/,
-];
-
-function isCodeRequest(text: string): boolean {
-  return CODE_PATTERNS.some((p) => p.test(text));
+interface RedeemCode {
+  code: string;
+  credits: number;
+  uses: number;
+  maxUses: number;
+  expiresAt?: string;
+  createdAt?: string;
 }
 
-function buildPromptTip(text: string): string {
-  const match = text.match(
-    /\b(loading screen|shop|npc|leaderboard|admin|gui|datastore|inventory|door|weapon|tool|game pass|vehicle|obby|pet|badge|timer|round system)\b/i
-  );
-  if (match) {
-    return `Create a ${match[1]} system that [describe behavior, appearance, and any special logic you need].`;
-  }
-  return "Create a [describe what you want] with [specific details about behavior, appearance, and logic].";
+interface Log {
+  ts?: string;
+  action?: string;
+  user?: string;
+  target?: string;
+  name?: string;
+  details?: string;
 }
 
-function formatTime(): string {
-  const d = new Date();
-  return `${String(d.getHours()).padStart(2, "0")}:${String(d.getMinutes()).padStart(2, "0")}`;
+interface Toast {
+  id: number;
+  msg: string;
+  color: string;
 }
 
-function genId(): string {
-  return Math.random().toString(36).slice(2, 9);
+interface Stats {
+  total: number;
+  pro: number;
+  active: number;
+  credits: number;
 }
 
-// ─── Markdown renderer (lightweight, no deps) ────────────────────────────────
+type TabName = 'overview' | 'users' | 'reports' | 'codes' | 'inbox' | 'logs';
 
-function renderMarkdown(text: string): string {
-  return text
-    // Bold
-    .replace(/\*\*(.+?)\*\*/g, "<strong>$1</strong>")
-    // Italic (em style)
-    .replace(/\*(.+?)\*/g, '<em style="color:#00e5ff;font-style:normal">$1</em>')
-    // Inline code
-    .replace(/`([^`]+)`/g, '<code>$1</code>')
-    // Blockquote
-    .replace(/^> (.+)$/gm, '<blockquote>$1</blockquote>')
-    // Headers
-    .replace(/^### (.+)$/gm, '<h3>$1</h3>')
-    .replace(/^## (.+)$/gm, '<h2>$1</h2>')
-    .replace(/^# (.+)$/gm, '<h1>$1</h1>')
-    // HR
-    .replace(/^---$/gm, '<hr/>')
-    // Unordered list items
-    .replace(/^\s*[-•]\s+(.+)$/gm, '<li>$1</li>')
-    // Wrap consecutive <li> in <ul>
-    .replace(/(<li>[\s\S]+?<\/li>)(?!<li>)/g, '<ul>$1</ul>')
-    // Line breaks → <br> (double newline = paragraph break)
-    .replace(/\n\n/g, '</p><p>')
-    .replace(/\n/g, '<br/>')
-    // Wrap in paragraph if not already block
-    .replace(/^(?!<[hup]|<li|<blockquote|<hr)/, '<p>')
-    .replace(/(?<!>)$/, '</p>')
-    // Links [text](url)
-    .replace(/\[([^\]]+)\]\(([^)]+)\)/g, '<a href="$2">$1</a>');
+// ─── CONSTANTS ──────────────────────────────────────────────────────────────
+
+const SEC = {
+  MAX_ATTEMPTS: 5,
+  LOCKOUT_SEC: 60,
+  SESSION_MS: 30 * 60 * 1000,
+  WARN_MS: 5 * 60 * 1000,
+  TOKEN_KEY: 'nxa_tok',
+  ATTEMPT_KEY: 'nxa_atm',
+  LOCKOUT_KEY: 'nxa_lck',
+};
+
+const PER_PAGE = 20;
+const RPT_PER_PAGE = 15;
+
+// ─── HELPERS ────────────────────────────────────────────────────────────────
+
+function escHtml(str: string | number | undefined | null): string {
+  return String(str ?? '')
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#39;');
 }
 
-// ─── Build system prompt ──────────────────────────────────────────────────────
-
-function buildSystemPrompt(displayName: string, username: string): string {
-  return `
-You are NEXUS AI Support Agent — the official technical support assistant for NEXUS AI, an advanced Roblox Developer AI Assistant platform built by NEXUS STUDIO (FIINYTID25).
-
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-👤 CURRENT USER
-  Display Name : ${displayName}
-  Username     : @${username}
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-
-═══════════════════════════════════════════════
-🎯 IDENTITY & ROLE
-═══════════════════════════════════════════════
-You are a Tier-1 Support Agent. Your ONLY job is:
-  • Troubleshooting platform issues
-  • Guiding users through platform features
-  • Helping users fix errors and configuration problems
-  • Directing users to the right resource or escalation channel
-  • Giving tips to improve prompts for better AI output
-
-You are NOT a code-writing AI. The main NEXUS AI Chat at /chats handles code generation.
-You must NEVER write, generate, complete, or explain Lua, Luau, or any programming code.
-If a user asks you to write code or a script — even partially — ALWAYS redirect them to /chats.
-
-═══════════════════════════════════════════════
-🧠 PLATFORM KNOWLEDGE BASE
-═══════════════════════════════════════════════
-
-── CORE FEATURES ──
-1. AI Chat (/chats)
-   • Generates Lua/Luau scripts, debugs code, builds GUIs, creates full game systems
-   • Available Models: Gemini 3.5 Flash, Mistral, Groq, DeepSeek, and more
-   • Free users have access to basic models; Pro users unlock all models
-
-2. GUI Editor
-   • Drag-and-drop visual builder for Roblox interfaces (no coding required)
-   • Outputs JSON commands injectable via the Studio Plugin
-   • Recommended browser: Google Chrome (latest)
-
-3. Studio Plugin
-   • Injects AI-generated code and GUI JSON directly into Roblox Studio in real time
-   • Install path: C:\\Users\\[YourName]\\AppData\\Local\\Roblox\\Plugins\\
-   • Required Studio permissions: HTTP Requests + Script Injection
-   • Status indicator: "Studio: ON" (green) = connected | "Studio: OFF" (red) = disconnected
-
-── PAGES & NAVIGATION ──
-  /chats      — Main AI Chat (code generation, debugging, scripts)
-  /login.html — Login and registration
-  /payment    — Credits purchase page
-  /agent      — This support agent (current page)
-  /settings   — Account settings, preferences, redeem code
-
-── CREDITS SYSTEM ──
-  Credits (CR) = platform currency; consumed per AI request
-
-  Free Plan:
-    • 30 CR granted on signup
-    • +2 CR added automatically each day
-
-  Pro Plan:
-    • 200 CR granted on activation
-    • +25 CR added automatically each day
-    • All AI models unlocked (including premium models)
-
-  One-Time Credit Packs:
-    • 50 CR / 80 CR / 150 CR / 500 CR (purchased at /payment)
-
-  Payment Methods: OVO & DANA (Indonesian e-wallets only)
-  Code Redemption: Settings → Redeem Code
-
-── COMMON ISSUES & STEP-BY-STEP SOLUTIONS ──
-
-  [STUDIO PLUGIN — "Studio: OFF" / Not Connecting]
-    1. Open Roblox Studio → File → Settings → Security
-    2. Enable "Allow HTTP Requests" and "Allow Script Injection"
-    3. Close and fully restart Roblox Studio
-    4. Reload the NEXUS AI page and check the Studio status indicator
-    5. If still OFF: uninstall the plugin file from the Plugins folder, re-download from NEXUS AI, restart Studio
-
-  [CREDITS NOT RECEIVED AFTER PAYMENT]
-    1. Wait up to 24 hours — payments are processed manually
-    2. Take a screenshot of your payment proof
-    3. Send payment proof + your username to: arifiinytid@gmail.com
-    4. Join the Discord and post in the #payment-support channel
-
-  [LOGIN / REGISTRATION ISSUES]
-    1. Clear browser cache (Ctrl+Shift+Delete) and retry
-    2. Try opening in an Incognito/Private window
-    3. Check your email inbox/spam for a verification email
-    4. If using a VPN, try disabling it
-    5. Still failing? Contact support via email
-
-  [AI CHAT — INCOMPLETE OR POOR OUTPUT]
-    • Use a more detailed and specific prompt
-    • Try switching to a more powerful model (e.g. Gemini 3.5 Flash)
-    • Break large requests into smaller parts
-    • Use the prompt improvement tips below
-
-  [SLOW AI RESPONSE]
-    • Switch to Gemini 3.5 Flash Lite (fastest model)
-    • Check your internet connection
-    • Avoid peak hours if possible
-    • Try refreshing the page
-
-  [GUI EDITOR — NOT SAVING / GLITCHY]
-    • Use Google Chrome (other browsers may have compatibility issues)
-    • Refresh the page and try again
-    • Clear browser cache
-    • Disable browser extensions that may interfere
-
-  [REDEEM CODE NOT WORKING]
-    • Go to Settings → Redeem Code
-    • Make sure you copy the code exactly (no extra spaces)
-    • Codes are case-sensitive and single-use
-    • If expired or invalid, contact support
-
-  [MODEL LOCKED / UNAVAILABLE]
-    • Premium models require an active Pro Plan
-    • Upgrade at /payment → Pro Plan
-
-── PROMPT IMPROVEMENT TIPS ──
-  BAD:  "make gui"
-  GOOD: "Create a loading screen GUI with a centered title 'NEXUS', an animated progress bar from 0 to 100%, and a 'Loading…' label below it."
-
-  BAD:  "npc follow"
-  GOOD: "Make an NPC that follows the nearest player within 50 studs using a simple walk animation, and stops when it reaches 5 studs away."
-
-  Always tell users: the more specific and descriptive the prompt, the better the output.
-
-── SUPPORT CHANNELS ──
-  • In-app Bug Report: Settings → Report Issue
-  • Discord: discord.gg/HuGtbRvD
-  • Email: arifiinytid@gmail.com
-  • For payment/credits issues: always include payment screenshot + username in email
-
-═══════════════════════════════════════════════
-📏 STRICT BEHAVIORAL RULES
-═══════════════════════════════════════════════
-
-✅ YOU MUST:
-  • Only answer questions related to the NEXUS AI platform
-  • Provide clear, step-by-step solutions for technical issues
-  • Address the user by name: ${displayName}
-  • Always redirect code/script requests to /chats
-  • Be patient and friendly — users may be beginners
-  • Admit when you don't know something and direct to official support
-  • Use bullet points for multi-step instructions
-  • Bold important actions and key terms
-  • Keep answers concise — lead with the solution, then explain
-
-❌ YOU MUST NEVER:
-  • Write, generate, complete, explain, or partially show any Lua, Luau, or other code
-  • Generate scripts, GUIs, game systems, functions, or any code snippet — even as an "example"
-  • Pretend to be a code-generating AI
-  • Make up features, prices, or platform details not listed in this knowledge base
-  • Answer questions unrelated to the NEXUS AI platform
-  • Share personal opinions about other AI platforms or services
-
-🚫 IF USER ASKS FOR CODE / SCRIPTS:
-  Respond EXACTLY like this pattern:
-  "I'm the Support Agent — I don't write code here. For that, head to the **[NEXUS AI Chat](/chats)** and ask the same question there! The AI will write it for you and you can inject it straight into Roblox Studio. 🚀
-  
-  **Prompt tip:** Be specific! For example: '[describe what the user wants in detail as a better prompt example]'"
-
-💬 TONE & FORMAT:
-  • Professional but warm and approachable
-  • Short, scannable responses — avoid walls of text
-  • Use **bold** for actions, page names, and key terms
-  • Use bullet lists for steps or options
-  • Use > blockquotes for prompt examples
-  • End with a friendly closing line or offer to help further
-  • If issue is resolved, celebrate with the user! 🎉
-`.trim();
+function fmtDate(ts?: string): string {
+  if (!ts) return '—';
+  try {
+    return new Date(ts).toLocaleString('id-ID', {
+      month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit',
+    });
+  } catch { return String(ts); }
 }
 
-// ─── Sub-components ───────────────────────────────────────────────────────────
-
-function TypingIndicator() {
-  return (
-    <div className="msg-row ai">
-      <div className="avatar ai-avatar">
-        <img src="/favicon.ico" alt="NEXUS" onError={(e) => { (e.target as HTMLImageElement).style.display = "none"; }} />
-        <span className="avatar-fallback">N</span>
-      </div>
-      <div className="typing-bubble">
-        <span className="dot" style={{ animationDelay: "0s" }} />
-        <span className="dot" style={{ animationDelay: "0.22s" }} />
-        <span className="dot" style={{ animationDelay: "0.44s" }} />
-      </div>
-      <style>{`
-        .typing-bubble {
-          background: var(--bg2);
-          border: 1px solid var(--border);
-          border-radius: 2px 10px 10px 10px;
-          padding: 12px 16px;
-          display: flex;
-          gap: 5px;
-          align-items: center;
-        }
-        .dot {
-          width: 7px; height: 7px;
-          border-radius: 50%;
-          background: var(--cyan);
-          animation: pulse 1.4s infinite;
-          display: inline-block;
-        }
-        @keyframes pulse {
-          0%,60%,100%{opacity:.2;transform:scale(1)}
-          30%{opacity:1;transform:scale(1.15)}
-        }
-      `}</style>
-    </div>
-  );
+function fmtRelative(ts?: string): string {
+  if (!ts) return '—';
+  const diff = Date.now() - new Date(ts).getTime();
+  if (isNaN(diff)) return '—';
+  if (diff < 60000) return 'just now';
+  if (diff < 3600000) return Math.floor(diff / 60000) + 'm ago';
+  if (diff < 86400000) return Math.floor(diff / 3600000) + 'h ago';
+  return Math.floor(diff / 86400000) + 'd ago';
 }
 
-interface BubbleProps {
-  msg: Message;
-  displayName: string;
-  avatarUrl: string;
+function getStorage(key: string): string {
+  try { return localStorage.getItem(key) ?? ''; } catch { return ''; }
 }
 
-function MessageBubble({ msg, displayName, avatarUrl }: BubbleProps) {
-  const isUser = msg.role === "user";
-  return (
-    <div className={`msg-row ${isUser ? "user" : "ai"}`}>
-      {!isUser && (
-        <div className="avatar ai-avatar">
-          <img src="/favicon.ico" alt="NEXUS" onError={(e) => { (e.target as HTMLImageElement).style.display = "none"; }} />
-          <span className="avatar-fallback">N</span>
-        </div>
-      )}
-      <div className={`msg-wrap ${isUser ? "user-wrap" : ""}`}>
-        <div className="msg-name">{isUser ? displayName : "NEXUS Support"}</div>
-        <div
-          className={`bubble ${isUser ? "user-bubble" : "ai-bubble"}`}
-          dangerouslySetInnerHTML={{ __html: renderMarkdown(msg.text) }}
-        />
-        <div className={`msg-time ${isUser ? "right" : ""}`}>{msg.time}</div>
-      </div>
-      {isUser && (
-        <div className="avatar user-avatar">
-          {avatarUrl && avatarUrl !== "/favicon.ico" ? (
-            <img
-              src={avatarUrl}
-              alt={displayName}
-              onError={(e) => {
-                const el = e.target as HTMLImageElement;
-                el.style.display = "none";
-                el.parentElement!.querySelector<HTMLSpanElement>(".avatar-fallback")!.style.display = "flex";
-              }}
-            />
-          ) : null}
-          <span className="avatar-fallback user-fallback">{displayName.charAt(0).toUpperCase()}</span>
-        </div>
-      )}
-    </div>
-  );
+function setStorage(key: string, val: string): void {
+  try { localStorage.setItem(key, val); } catch { /* noop */ }
 }
 
-interface WelcomeProps {
-  displayName: string;
-  avatarUrl: string;
-  onHint: (text: string) => void;
+function removeStorage(key: string): void {
+  try { localStorage.removeItem(key); } catch { /* noop */ }
 }
 
-function WelcomeScreen({ displayName, avatarUrl, onHint }: WelcomeProps) {
-  return (
-    <div className="welcome">
-      <div className="welcome-avatar">
-        <img src={avatarUrl} alt="avatar" onError={(e) => { (e.target as HTMLImageElement).src = "/favicon.ico"; }} />
-      </div>
-      <div className="welcome-badge">NEXUS AI · SUPPORT AGENT</div>
-      <h1 className="welcome-title">How can I help?</h1>
-      <p className="welcome-text">
-        Hi, <strong style={{ color: "#fff" }}>{displayName}</strong>! I&apos;m your NEXUS AI Support Agent.
-        <br />I can help with bugs, the Studio plugin, credits, login issues, and more.
-      </p>
-      <hr className="welcome-divider" />
-      <span className="hint-label">Common issues — tap to ask:</span>
-      <div className="hint-list">
-        {HINTS.map((h) => (
-          <button key={h.text} className="hint-chip" onClick={() => onHint(h.text)}>
-            <span className="hint-icon">{h.icon}</span>
-            {h.text}
-          </button>
-        ))}
-      </div>
-    </div>
-  );
-}
+// ─── MAIN COMPONENT ─────────────────────────────────────────────────────────
 
-// ─── Main Page ────────────────────────────────────────────────────────────────
+export default function AdminPanel() {
+  // Auth state
+  const [adminToken, setAdminToken] = useState('');
+  const [loginInput, setLoginInput] = useState('');
+  const [showPass, setShowPass] = useState(false);
+  const [loginErr, setLoginErr] = useState('');
+  const [loginOk, setLoginOk] = useState('');
+  const [loginLoading, setLoginLoading] = useState(false);
+  const [loginAttempts, setLoginAttempts] = useState(0);
+  const [lockoutUntil, setLockoutUntil] = useState(0);
+  const [lockoutRemain, setLockoutRemain] = useState(0);
+  const [showLogin, setShowLogin] = useState(true);
+  const [sessionUser, setSessionUser] = useState('Token Auth');
+  const [sessionLabel, setSessionLabel] = useState('🔑 Admin Token');
+  const [inactivityWarn, setInactivityWarn] = useState(false);
 
-export default function AgentPage() {
-  const [displayName, setDisplayName] = useState("User");
-  const [username, setUsername] = useState("user");
-  const [avatarUrl, setAvatarUrl] = useState("/favicon.ico");
+  // Tabs
+  const [activeTab, setActiveTab] = useState<TabName>('overview');
 
-  const [messages, setMessages] = useState<Message[]>([]);
-  const [input, setInput] = useState("");
-  const [isProcessing, setIsProcessing] = useState(false);
-  const [showWelcome, setShowWelcome] = useState(true);
+  // Stats
+  const [stats, setStats] = useState<Stats>({ total: 0, pro: 0, active: 0, credits: 0 });
+  const [pendingPayments, setPendingPayments] = useState<Report[]>([]);
 
-  const chatRef = useRef<HTMLDivElement>(null);
-  const textareaRef = useRef<HTMLTextAreaElement>(null);
+  // Users
+  const [allUsers, setAllUsers] = useState<[string, UserData][]>([]);
+  const [userSearch, setUserSearch] = useState('');
+  const [userPage, setUserPage] = useState(1);
+  const [usersLoaded, setUsersLoaded] = useState(false);
 
-  // Load session
-  useEffect(() => {
+  // User lookup
+  const [lookupInput, setLookupInput] = useState('');
+  const [foundUser, setFoundUser] = useState('');
+  const [foundData, setFoundData] = useState<UserData | null>(null);
+  const [lookupLoading, setLookupLoading] = useState(false);
+
+  // Quick manage
+  const [qUsername, setQUsername] = useState('');
+  const [qAmount, setQAmount] = useState(50);
+  const [qStatus, setQStatus] = useState('');
+  const [qStatusType, setQStatusType] = useState<'ok' | 'err' | 'info'>('info');
+
+  // Credits manage
+  const [credU, setCredU] = useState('');
+  const [credAmt, setCredAmt] = useState('');
+  const [credPlan, setCredPlan] = useState('');
+  const [credSt, setCredSt] = useState('');
+  const [credStType, setCredStType] = useState<'ok' | 'err' | 'info'>('info');
+
+  // Ban/Unban
+  const [banU, setBanU] = useState('');
+  const [banReason, setBanReason] = useState('');
+  const [banSt, setBanSt] = useState('');
+  const [banStType, setBanStType] = useState<'ok' | 'err' | 'info'>('info');
+
+  // Set Plan
+  const [planU, setPlanU] = useState('');
+  const [planChoice, setPlanChoice] = useState('free');
+  const [planCR, setPlanCR] = useState('');
+  const [planSt, setPlanSt] = useState('');
+  const [planStType, setPlanStType] = useState<'ok' | 'err' | 'info'>('info');
+
+  // Reports
+  const [allReports, setAllReports] = useState<Report[]>([]);
+  const [rptType, setRptType] = useState('');
+  const [rptStatus, setRptStatus] = useState('');
+  const [rptFrom, setRptFrom] = useState('');
+  const [rptPage, setRptPage] = useState(1);
+  const [rptModalOpen, setRptModalOpen] = useState(false);
+  const [currentReport, setCurrentReport] = useState<Report | null>(null);
+  const [rptAdminNote, setRptAdminNote] = useState('');
+  const [rptModalSt, setRptModalSt] = useState('');
+  const [rptModalStType, setRptModalStType] = useState<'ok' | 'err' | 'info'>('info');
+  const [rptModalProcessing, setRptModalProcessing] = useState(false);
+
+  // Redeem Codes
+  const [codes, setCodes] = useState<RedeemCode[]>([]);
+  const [codeCredits, setCodeCredits] = useState(50);
+  const [codeUses, setCodeUses] = useState(10);
+  const [codeExpiry, setCodeExpiry] = useState('');
+  const [codeSt, setCodeSt] = useState('');
+  const [codeStType, setCodeStType] = useState<'ok' | 'err' | 'info'>('info');
+
+  // Inbox
+  const [inboxTo, setInboxTo] = useState('');
+  const [inboxSubject, setInboxSubject] = useState('');
+  const [inboxContent, setInboxContent] = useState('');
+  const [inboxType, setInboxType] = useState('general');
+  const [inboxSt, setInboxSt] = useState('');
+  const [inboxStType, setInboxStType] = useState<'ok' | 'err' | 'info'>('info');
+  const [bcRecipients, setBcRecipients] = useState('');
+  const [bcSubject, setBcSubject] = useState('');
+  const [bcContent, setBcContent] = useState('');
+  const [bcSt, setBcSt] = useState('');
+  const [bcStType, setBcStType] = useState<'ok' | 'err' | 'info'>('info');
+
+  // Logs
+  const [logs, setLogs] = useState<Log[]>([]);
+  const [history, setHistory] = useState<Log[]>([]);
+  const [logFilter, setLogFilter] = useState('');
+
+  // Toasts
+  const [toasts, setToasts] = useState<Toast[]>([]);
+  const toastIdRef = useRef(0);
+
+  // Timers
+  const inactivityTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const warnTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const lockoutIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
+
+  // ── Toast helper ──────────────────────────────────────────────────────────
+
+  const addToast = useCallback((msg: string, color = 'var(--cyan)') => {
+    const id = ++toastIdRef.current;
+    setToasts(prev => [...prev, { id, msg, color }]);
+    setTimeout(() => setToasts(prev => prev.filter(t => t.id !== id)), 3200);
+  }, []);
+
+  // ── API helper ────────────────────────────────────────────────────────────
+
+  const api = useCallback(async (
+    url: string,
+    opts?: { method?: string; body?: Record<string, unknown> },
+    token?: string
+  ) => {
+    const tok = token ?? adminToken;
+    if (!tok) return { ok: false, status: 401, data: { error: 'No token.' } };
+
+    const body = opts?.body;
+    let cleanedBody: Record<string, unknown> | undefined;
+    if (body) {
+      cleanedBody = {};
+      for (const k of Object.keys(body)) {
+        const v = body[k];
+        cleanedBody[k] = typeof v === 'string' ? v.replace(/\0/g, '').substring(0, 2000) : v;
+      }
+    }
+
+    const headers: Record<string, string> = {
+      'Content-Type': 'application/json',
+      'Authorization': 'Bearer ' + tok,
+      'X-Admin-Token': tok,
+      'X-Requested-With': 'XMLHttpRequest',
+    };
+
+    const init: RequestInit = {
+      method: opts?.method ?? 'GET',
+      headers,
+      ...(cleanedBody ? { body: JSON.stringify(cleanedBody) } : {}),
+    };
+
     try {
-      const raw = localStorage.getItem("nexus_session");
+      const r = await fetch(url, init);
+      let data: Record<string, unknown>;
+      try { data = await r.json(); } catch { data = { error: 'Invalid JSON (status ' + r.status + ')' }; }
+      if (r.status === 401) addToast('⛔ Unauthorized — token salah atau kadaluarsa.', 'var(--pink)');
+      return { ok: r.ok, status: r.status, data };
+    } catch (e: unknown) {
+      const msg = e instanceof Error ? e.message : String(e);
+      return { ok: false, status: 0, data: { error: 'Network error: ' + msg } };
+    }
+  }, [adminToken, addToast]);
+
+  // ── Inactivity ────────────────────────────────────────────────────────────
+
+  const resetActivity = useCallback(() => {
+    if (inactivityTimerRef.current) clearTimeout(inactivityTimerRef.current);
+    if (warnTimerRef.current) clearTimeout(warnTimerRef.current);
+    setInactivityWarn(false);
+    if (!adminToken) return;
+    warnTimerRef.current = setTimeout(() => setInactivityWarn(true), SEC.SESSION_MS - SEC.WARN_MS);
+    inactivityTimerRef.current = setTimeout(() => {
+      addToast('⏱ Session expired due to inactivity.', 'var(--yellow)');
+      doLogout();
+    }, SEC.SESSION_MS);
+  }, [adminToken, addToast]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  useEffect(() => {
+    const events = ['mousemove', 'keydown', 'click', 'scroll', 'touchstart'];
+    events.forEach(ev => document.addEventListener(ev, resetActivity, { passive: true }));
+    return () => events.forEach(ev => document.removeEventListener(ev, resetActivity));
+  }, [resetActivity]);
+
+  // ── Lockout timer ─────────────────────────────────────────────────────────
+
+  useEffect(() => {
+    if (lockoutUntil && lockoutUntil > Date.now()) {
+      lockoutIntervalRef.current = setInterval(() => {
+        const remain = lockoutUntil - Date.now();
+        if (remain <= 0) {
+          setLockoutRemain(0);
+          setLockoutUntil(0);
+          setLoginAttempts(0);
+          setLoginErr('You may try again.');
+          removeStorage(SEC.LOCKOUT_KEY);
+          removeStorage(SEC.ATTEMPT_KEY);
+          if (lockoutIntervalRef.current) clearInterval(lockoutIntervalRef.current);
+        } else {
+          setLockoutRemain(Math.ceil(remain / 1000));
+        }
+      }, 1000);
+    }
+    return () => { if (lockoutIntervalRef.current) clearInterval(lockoutIntervalRef.current); };
+  }, [lockoutUntil]);
+
+  // ── Auto-refresh pending ──────────────────────────────────────────────────
+
+  useEffect(() => {
+    if (!adminToken) return;
+    const iv = setInterval(() => {
+      if (!document.hidden) loadPendingPayments();
+    }, 30000);
+    return () => clearInterval(iv);
+  }, [adminToken]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  // ── Boot: restore token ───────────────────────────────────────────────────
+
+  useEffect(() => {
+    const lockTs = parseInt(getStorage(SEC.LOCKOUT_KEY) || '0', 10);
+    if (lockTs && Date.now() < lockTs) setLockoutUntil(lockTs);
+    const attempts = parseInt(getStorage(SEC.ATTEMPT_KEY) || '0', 10);
+    setLoginAttempts(attempts);
+
+    const saved = getStorage(SEC.TOKEN_KEY);
+    if (!saved) return;
+    setLoginOk('⟳ Resuming session...');
+    setLoginLoading(true);
+    fetch('/api/sync?admin_check=1', {
+      headers: {
+        'Authorization': 'Bearer ' + saved,
+        'X-Admin-Token': saved,
+        'X-Requested-With': 'XMLHttpRequest',
+      },
+    }).then(r => {
+      if (r.ok) {
+        setAdminToken(saved);
+        setLoginOk('✅ Session resumed!');
+        setTimeout(() => { setShowLogin(false); mountPanel(saved); }, 400);
+      } else {
+        removeStorage(SEC.TOKEN_KEY);
+        setLoginOk('');
+        setLoginErr('Previous session expired. Please re-authenticate.');
+        setLoginLoading(false);
+      }
+    }).catch(() => {
+      setLoginLoading(false);
+      setLoginOk('');
+    });
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
+
+  // ── Mount panel ───────────────────────────────────────────────────────────
+
+  const mountPanel = useCallback((tok: string) => {
+    try {
+      const raw = localStorage.getItem('nexus_session');
       if (raw) {
-        const session: Session = JSON.parse(raw);
-        const u = session.user;
-        if (u) {
-          setDisplayName(u.displayName || u.username || "User");
-          setUsername(u.username || "user");
-          setAvatarUrl(u.avatar || "/favicon.ico");
+        const session = JSON.parse(raw);
+        if (session?.user) {
+          const sdata = session.data ?? {};
+          const roles: string[] = sdata.roles ?? [];
+          const isOwner = sdata.plan === 'owner' || roles.includes('owner');
+          const isAdmin = isOwner || roles.includes('admin');
+          setSessionLabel(isOwner ? '⭐ Owner' : isAdmin ? '🛡 Admin' : '🔑 Admin Token');
+          setSessionUser('@' + (session.user.username ?? '?'));
+          return;
         }
       }
-    } catch { /* ignore */ }
-  }, []);
+    } catch { /* noop */ }
+    setSessionUser('Token Auth');
+    setSessionLabel('🔑 Admin Token');
+    setTimeout(() => {
+      loadStats(tok);
+      loadPendingPaymentsWithToken(tok);
+    }, 100);
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
-  // Auto-scroll
-  useEffect(() => {
-    if (chatRef.current) {
-      chatRef.current.scrollTop = chatRef.current.scrollHeight;
-    }
-  }, [messages, isProcessing]);
+  // ── Login ─────────────────────────────────────────────────────────────────
 
-  // Auto-resize textarea
-  const handleInputChange = (e: React.ChangeEvent<HTMLTextAreaElement>) => {
-    setInput(e.target.value);
-    const ta = e.target;
-    ta.style.height = "auto";
-    ta.style.height = Math.min(ta.scrollHeight, 120) + "px";
-  };
+  const doLogin = async () => {
+    setLoginErr('');
+    setLoginOk('');
 
-  const addMessage = useCallback((role: "user" | "ai", text: string) => {
-    setMessages((prev) => [
-      ...prev,
-      { id: genId(), role, text, time: formatTime() },
-    ]);
-  }, []);
+    const now = Date.now();
+    if (lockoutUntil && now < lockoutUntil) return;
 
-  const sendMsg = useCallback(async () => {
-    const text = input.trim();
-    if (!text || isProcessing) return;
+    const token = loginInput.trim();
+    if (!token) { setLoginErr('Token cannot be empty.'); return; }
+    if (token.length > 512) { setLoginErr('Token too long.'); return; }
 
-    setInput("");
-    if (textareaRef.current) {
-      textareaRef.current.style.height = "auto";
-    }
-    setShowWelcome(false);
-    addMessage("user", text);
-
-    // Hard block: code requests
-    if (isCodeRequest(text)) {
-      const tip = buildPromptTip(text);
-      const redirectMsg = [
-        "🙅 I'm the **Support Agent** — writing code isn't my job here!",
-        "",
-        "For scripts and code, head to the **[NEXUS AI Chat →](/chats)** — the AI there will write it for you instantly and you can inject it straight into Roblox Studio.",
-        "",
-        "**💡 Prompt tip** — try something like:",
-        `> *"${tip}"*`,
-        "",
-        "The more detail you give, the better the output!",
-        "",
-        "Is there anything else I can help you with here on the support side? 😊",
-      ].join("\n");
-      addMessage("ai", redirectMsg);
-      return;
-    }
-
-    setIsProcessing(true);
+    setLoginLoading(true);
 
     try {
-      const res = await fetch("/api/ai", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          provider: "gemini",
-          model: "gemini-3.5-flash",
-          messages: [{ role: "user", content: text }],
-          system: buildSystemPrompt(displayName, username),
-          max_tokens: 1024,
-        }),
+      const r = await fetch('/api/sync?admin_check=1', {
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': 'Bearer ' + token,
+          'X-Admin-Token': token,
+          'X-Requested-With': 'XMLHttpRequest',
+        },
       });
 
-      if (!res.ok) {
-        let errText = "";
-        try {
-          const errData = await res.json();
-          errText = errData.error || "";
-        } catch { /* ignore */ }
-        throw new Error(`HTTP ${res.status}${errText ? ": " + errText : ""}`);
+      if (r.status === 401 || r.status === 403) {
+        const newAttempts = loginAttempts + 1;
+        setLoginAttempts(newAttempts);
+        setStorage(SEC.ATTEMPT_KEY, String(newAttempts));
+
+        if (newAttempts >= SEC.MAX_ATTEMPTS) {
+          const lockTs = Date.now() + SEC.LOCKOUT_SEC * 1000;
+          setLockoutUntil(lockTs);
+          setStorage(SEC.LOCKOUT_KEY, String(lockTs));
+          setLoginAttempts(0);
+          setStorage(SEC.ATTEMPT_KEY, '0');
+        } else {
+          const left = SEC.MAX_ATTEMPTS - newAttempts;
+          setLoginErr(`✗ Invalid token. ${left} attempt${left === 1 ? '' : 's'} remaining.`);
+          setLoginInput('');
+        }
+        setLoginLoading(false);
+        return;
       }
 
-      const data = await res.json();
-      const reply = (data.content || "").trim() || "I got an empty response. Please try again or contact support.";
-      addMessage("ai", reply);
-    } catch (err) {
-      const errMsg = [
-        "⚠️ **Connection error** — Failed to reach the server.",
-        "",
-        `Details: \`${err instanceof Error ? err.message : "Unknown error"}\``,
-        "",
-        "Please try again in a moment. If this keeps happening, contact us at **arifiinytid@gmail.com** or join our **[Discord](https://discord.gg/HuGtbRvD)**.",
-      ].join("\n");
-      addMessage("ai", errMsg);
-    } finally {
-      setIsProcessing(false);
-    }
-  }, [input, isProcessing, displayName, username, addMessage]);
+      let data: Record<string, unknown> = {};
+      try { data = await r.json(); } catch { /* noop */ }
 
-  const handleKeyDown = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
-    if (e.key === "Enter" && !e.shiftKey) {
-      e.preventDefault();
-      sendMsg();
+      if (!r.ok) {
+        setLoginErr('✗ ' + ((data.error as string) ?? 'Authentication failed.'));
+        setLoginLoading(false);
+        return;
+      }
+
+      // Success
+      setAdminToken(token);
+      setStorage(SEC.TOKEN_KEY, token);
+      setLoginAttempts(0);
+      setStorage(SEC.ATTEMPT_KEY, '0');
+      removeStorage(SEC.LOCKOUT_KEY);
+      setLoginOk('✅ Authenticated! Loading panel...');
+
+      setTimeout(() => {
+        setShowLogin(false);
+        mountPanel(token);
+      }, 600);
+    } catch (e: unknown) {
+      const msg = e instanceof Error ? e.message : String(e);
+      setLoginErr('✗ Network error: ' + msg);
+      setLoginLoading(false);
     }
   };
 
-  const handleHint = (text: string) => {
-    setInput(text);
-    textareaRef.current?.focus();
+  const doLogout = () => {
+    setAdminToken('');
+    removeStorage(SEC.TOKEN_KEY);
+    if (inactivityTimerRef.current) clearTimeout(inactivityTimerRef.current);
+    if (warnTimerRef.current) clearTimeout(warnTimerRef.current);
+    setShowLogin(true);
+    setLoginInput('');
+    setLoginErr('');
+    setLoginOk('');
+    setLoginLoading(false);
+    addToast('Signed out.', 'var(--dim)');
   };
 
-  const handleBack = () => {
-    if (document.referrer && document.referrer !== window.location.href) {
-      history.back();
-    } else if (window.opener && !window.opener.closed) {
-      window.close();
+  // ── Stats ─────────────────────────────────────────────────────────────────
+
+  const loadStats = useCallback(async (tok?: string) => {
+    const r = await api('/api/sync?list=1', undefined, tok);
+    if (!r.ok) return;
+    const entries = Object.entries(r.data ?? {}).filter(
+      ([k]) => !k.startsWith('_')
+    ) as [string, UserData][];
+    setAllUsers(entries.sort((a, b) => (b[1]?.credits ?? 0) - (a[1]?.credits ?? 0)));
+    const today = new Date().toDateString();
+    setStats({
+      total: entries.length,
+      pro: entries.filter(([, d]) => d?.plan === 'pro' || d?.plan === 'owner').length,
+      active: entries.filter(([, d]) => d?._updated && new Date(d._updated).toDateString() === today).length,
+      credits: entries.reduce((s, [, d]) => s + parseFloat(String(d?.credits ?? 0)), 0),
+    });
+  }, [api]);
+
+  const loadPendingPayments = useCallback(async () => {
+    const r = await api('/api/report?status=pending&type=payment&limit=5');
+    if (!r.ok) return;
+    const reports = (r.data as { reports?: Report[] })?.reports ?? [];
+    setPendingPayments(reports);
+  }, [api]);
+
+  const loadPendingPaymentsWithToken = useCallback(async (tok: string) => {
+    const r = await api('/api/report?status=pending&type=payment&limit=5', undefined, tok);
+    if (!r.ok) return;
+    const reports = (r.data as { reports?: Report[] })?.reports ?? [];
+    setPendingPayments(reports);
+  }, [api]);
+
+  // ── Tab switching ─────────────────────────────────────────────────────────
+
+  const switchTab = (tab: TabName) => {
+    setActiveTab(tab);
+    if (tab === 'users' && !usersLoaded) loadUsers();
+    if (tab === 'reports') loadReports();
+    if (tab === 'codes') loadCodes();
+    if (tab === 'logs') { loadLogs(); loadHistory(); }
+  };
+
+  // ── Quick manage ──────────────────────────────────────────────────────────
+
+  const qAction = async (type: string) => {
+    const u = qUsername.trim().toLowerCase();
+    const amt = qAmount;
+    if (!u) { setQStatus('⚠ Masukkan username!'); setQStatusType('err'); return; }
+    if (!/^[a-z0-9_]{3,20}$/.test(u)) { setQStatus('⚠ Username tidak valid.'); setQStatusType('err'); return; }
+    setQStatus('⟳ Processing...'); setQStatusType('info');
+
+    let payload: Record<string, unknown> = {};
+    if (type === 'give')  payload = { action: 'give-credits',  target: u, amount: amt };
+    if (type === 'take')  payload = { action: 'give-credits',  target: u, amount: -amt };
+    if (type === 'pro')   payload = { action: 'set-plan',       target: u, plan: 'pro' };
+    if (type === 'ban')   payload = { action: 'ban',            target: u, reason: 'Admin action' };
+    if (type === 'unban') payload = { action: 'unban',          target: u };
+    if (type === 'reset') payload = { action: 'reset-credits',  target: u };
+
+    const r = await api('/api/sync', { method: 'POST', body: payload });
+    const d = r.data as { success?: boolean; error?: string };
+    if (r.ok && d.success !== false && !d.error) {
+      const msg: Record<string, string> = { give: '+'+amt+' CR', take: '-'+amt+' CR', pro: 'Plan Pro set', ban: 'Banned', unban: 'Unbanned', reset: 'Credits reset' };
+      setQStatus('✅ ' + (msg[type] ?? 'Done') + ' → @' + u); setQStatusType('ok');
+      addToast((msg[type] ?? 'Done') + ' → @' + u, 'var(--green)');
+      loadStats();
     } else {
-      window.location.href = "/";
+      setQStatus('✗ ' + escHtml(d?.error ?? 'Gagal.')); setQStatusType('err');
     }
   };
+
+  // ── User lookup ───────────────────────────────────────────────────────────
+
+  const lookupUser = async (u?: string) => {
+    const username = (u ?? lookupInput).trim().toLowerCase();
+    if (!username) return;
+    if (!/^[a-z0-9_]{1,25}$/.test(username)) { addToast('Username tidak valid.', 'var(--pink)'); return; }
+    setLookupLoading(true);
+    setFoundUser('');
+    setFoundData(null);
+    const r = await api('/api/sync?user=' + encodeURIComponent(username));
+    setLookupLoading(false);
+    if (!r.ok || !r.data || !Object.keys(r.data).length) {
+      addToast('User @' + username + ' tidak ditemukan.', 'var(--pink)'); return;
+    }
+    setFoundUser(username);
+    setFoundData(r.data as UserData);
+  };
+
+  const urAction = async (type: string) => {
+    if (!foundUser) return;
+    let payload: Record<string, unknown> = {};
+    if (type === 'give')  payload = { action: 'give-credits', target: foundUser, amount: 50 };
+    if (type === 'take')  payload = { action: 'give-credits', target: foundUser, amount: -50 };
+    if (type === 'ban')   payload = { action: 'ban',           target: foundUser, reason: 'Admin action' };
+    if (type === 'unban') payload = { action: 'unban',         target: foundUser };
+    if (type === 'pro')   payload = { action: 'set-plan',      target: foundUser, plan: 'pro' };
+    if (type === 'free')  payload = { action: 'set-plan',      target: foundUser, plan: 'free' };
+    if (type === 'reset') payload = { action: 'reset-credits', target: foundUser };
+
+    const r = await api('/api/sync', { method: 'POST', body: payload });
+    const d = r.data as { success?: boolean; error?: string };
+    if (r.ok && d.success !== false && !d.error) {
+      addToast('✅ Done → @' + foundUser, 'var(--green)');
+      await lookupUser(foundUser);
+      loadStats();
+    } else {
+      addToast('✗ ' + escHtml(d?.error ?? 'Gagal'), 'var(--pink)');
+    }
+  };
+
+  // ── Credits manage ────────────────────────────────────────────────────────
+
+  const manageCredits = async (dir: number) => {
+    const u = credU.trim().toLowerCase();
+    const amt = parseFloat(credAmt);
+    if (!u || isNaN(amt) || amt <= 0) { setCredSt('⚠ Isi username dan amount!'); setCredStType('err'); return; }
+    if (!/^[a-z0-9_]{1,25}$/.test(u)) { setCredSt('⚠ Username tidak valid.'); setCredStType('err'); return; }
+    setCredSt('⟳ Processing...'); setCredStType('info');
+
+    const r = await api('/api/sync', { method: 'POST', body: { action: 'give-credits', target: u, amount: amt * dir } });
+    const d = r.data as { error?: string; newCredits?: number };
+    if (!r.ok || d.error) { setCredSt('✗ ' + escHtml(d?.error ?? 'Gagal.')); setCredStType('err'); return; }
+    setCredSt(`✅ ${dir > 0 ? '+' : ''}${amt * dir} CR → @${u} | Total: ${parseFloat(String(d.newCredits ?? 0)).toFixed(2)}`);
+    setCredStType('ok');
+    if (credPlan) await api('/api/sync', { method: 'POST', body: { action: 'set-plan', target: u, plan: credPlan } });
+    addToast(`${dir > 0 ? '+' : ''}${amt * dir} CR → @${u}`, dir > 0 ? 'var(--green)' : 'var(--pink)');
+    loadStats();
+  };
+
+  // ── Ban / Unban ───────────────────────────────────────────────────────────
+
+  const doBan = async (isBan: boolean) => {
+    const u = banU.trim().toLowerCase();
+    const reason = banReason.trim() || 'No reason given';
+    if (!u) { setBanSt('⚠ Isi username!'); setBanStType('err'); return; }
+    if (!/^[a-z0-9_]{1,25}$/.test(u)) { setBanSt('⚠ Username tidak valid.'); setBanStType('err'); return; }
+    setBanSt('⟳ Processing...'); setBanStType('info');
+
+    const r = await api('/api/sync', { method: 'POST', body: { action: isBan ? 'ban' : 'unban', target: u, reason } });
+    const d = r.data as { success?: boolean; error?: string };
+    if (r.ok && d.success !== false && !d.error) {
+      setBanSt(`✅ User @${u} ${isBan ? 'BANNED' : 'UNBANNED'}`); setBanStType('ok');
+      addToast((isBan ? '🔨 Banned' : '✅ Unbanned') + ' @' + u, isBan ? 'var(--pink)' : 'var(--green)');
+      loadStats();
+    } else {
+      setBanSt('✗ ' + escHtml(d?.error ?? 'Gagal.')); setBanStType('err');
+    }
+  };
+
+  // ── Set Plan ──────────────────────────────────────────────────────────────
+
+  const doSetPlan = async () => {
+    const u = planU.trim().toLowerCase();
+    if (!u) { setPlanSt('⚠ Isi username!'); setPlanStType('err'); return; }
+    if (!/^[a-z0-9_]{1,25}$/.test(u)) { setPlanSt('⚠ Username tidak valid.'); setPlanStType('err'); return; }
+    setPlanSt('⟳ Setting plan...'); setPlanStType('info');
+
+    const r = await api('/api/sync', { method: 'POST', body: { action: 'set-plan', target: u, plan: planChoice } });
+    const d = r.data as { error?: string };
+    if (!r.ok || d.error) { setPlanSt('✗ ' + escHtml(d?.error ?? 'Gagal')); setPlanStType('err'); return; }
+    if (planCR && !isNaN(parseFloat(planCR))) {
+      await api('/api/sync', { method: 'POST', body: { action: 'set-credits', target: u, amount: parseFloat(planCR) } });
+    }
+    setPlanSt(`✅ @${u} → ${planChoice.toUpperCase()}${planCR ? ' + ' + planCR + ' CR' : ''}`); setPlanStType('ok');
+    addToast('Plan @' + u + ' → ' + planChoice.toUpperCase(), 'var(--yellow)');
+    loadStats();
+  };
+
+  // ── Users list ────────────────────────────────────────────────────────────
+
+  const loadUsers = useCallback(async () => {
+    const r = await api('/api/sync?list=1');
+    if (!r.ok) return;
+    const entries = Object.entries(r.data ?? {}).filter(
+      ([k]) => !k.startsWith('_')
+    ) as [string, UserData][];
+    const sorted = entries.sort((a, b) => (b[1]?.credits ?? 0) - (a[1]?.credits ?? 0));
+    setAllUsers(sorted);
+    setUsersLoaded(true);
+    setUserPage(1);
+  }, [api]);
+
+  const filteredUsers = allUsers.filter(([u]) =>
+    !userSearch || u.includes(userSearch.toLowerCase())
+  );
+
+  const userPageCount = Math.ceil(filteredUsers.length / PER_PAGE);
+  const userSlice = filteredUsers.slice((userPage - 1) * PER_PAGE, userPage * PER_PAGE);
+
+  const quickBanUser = async (u: string) => {
+    if (!confirm('Ban @' + u + '?')) return;
+    const r = await api('/api/sync', { method: 'POST', body: { action: 'ban', target: u, reason: 'Admin panel action' } });
+    if (r.ok) { addToast('🔨 Banned @' + u, 'var(--pink)'); loadUsers(); }
+    else addToast('Error: ' + escHtml((r.data as { error?: string })?.error ?? '?'), 'var(--pink)');
+  };
+
+  const quickUnban = async (u: string) => {
+    const r = await api('/api/sync', { method: 'POST', body: { action: 'unban', target: u } });
+    if (r.ok) { addToast('✅ Unbanned @' + u, 'var(--green)'); loadUsers(); }
+    else addToast('Error: ' + escHtml((r.data as { error?: string })?.error ?? '?'), 'var(--pink)');
+  };
+
+  // ── Reports ───────────────────────────────────────────────────────────────
+
+  const loadReports = useCallback(async () => {
+    const params = new URLSearchParams();
+    if (rptType)   params.set('type',   rptType);
+    if (rptStatus) params.set('status', rptStatus);
+    if (rptFrom)   params.set('from',   rptFrom.trim());
+    params.set('limit', '100');
+
+    const r = await api('/api/report?' + params.toString());
+    if (!r.ok) return;
+    const reports = (r.data as { reports?: Report[] })?.reports ?? [];
+    setAllReports(reports);
+    setRptPage(1);
+  }, [api, rptType, rptStatus, rptFrom]);
+
+  useEffect(() => {
+    if (activeTab === 'reports') loadReports();
+  }, [rptType, rptStatus]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  const rptPageCount = Math.ceil(allReports.length / RPT_PER_PAGE);
+  const rptSlice = allReports.slice((rptPage - 1) * RPT_PER_PAGE, rptPage * RPT_PER_PAGE);
+
+  const openReportModal = (rpt: Report) => {
+    setCurrentReport(rpt);
+    setRptAdminNote('');
+    setRptModalSt('');
+    setRptModalOpen(true);
+  };
+
+  const processReport = async (action: 'confirm' | 'reject') => {
+    if (!currentReport) return;
+    setRptModalProcessing(true);
+    setRptModalSt('⟳ Processing...'); setRptModalStType('info');
+
+    const r = await api('/api/report', { method: 'PATCH', body: { id: currentReport.id, action, adminNote: rptAdminNote } });
+    const d = r.data as { success?: boolean; error?: string };
+    setRptModalProcessing(false);
+
+    if (r.ok && d.success) {
+      setRptModalSt('✅ ' + (action === 'confirm' ? 'Payment confirmed!' : 'Payment rejected.')); setRptModalStType('ok');
+      addToast(action === 'confirm' ? '✅ Payment Confirmed!' : '❌ Payment Rejected', action === 'confirm' ? 'var(--green)' : 'var(--pink)');
+      setTimeout(() => {
+        setRptModalOpen(false);
+        loadReports();
+        loadPendingPayments();
+      }, 1500);
+    } else {
+      setRptModalSt('✗ ' + escHtml(d?.error ?? 'Gagal.')); setRptModalStType('err');
+    }
+  };
+
+  const deleteReport = async (id: string) => {
+    if (!confirm('Delete report ' + id + '?')) return;
+    const r = await api('/api/report', { method: 'DELETE', body: { id } });
+    const d = r.data as { success?: boolean; error?: string };
+    if (r.ok && d.success) { addToast('Report deleted.', 'var(--dim)'); loadReports(); }
+    else addToast('Error: ' + escHtml(d?.error ?? '?'), 'var(--pink)');
+  };
+
+  const quickConfirm = async (id: string) => {
+    if (!confirm('Confirm payment ' + id + '?')) return;
+    const r = await api('/api/report', { method: 'PATCH', body: { id, action: 'confirm', adminNote: '' } });
+    const d = r.data as { success?: boolean; error?: string };
+    if (r.ok && d.success) { addToast('✅ Payment confirmed!', 'var(--green)'); loadPendingPayments(); }
+    else addToast('Error: ' + escHtml(d?.error ?? '?'), 'var(--pink)');
+  };
+
+  const quickReject = async (id: string) => {
+    if (!confirm('Reject payment ' + id + '?')) return;
+    const r = await api('/api/report', { method: 'PATCH', body: { id, action: 'reject', adminNote: 'Rejected by admin' } });
+    const d = r.data as { success?: boolean; error?: string };
+    if (r.ok && d.success) { addToast('❌ Payment rejected.', 'var(--pink)'); loadPendingPayments(); }
+    else addToast('Error: ' + escHtml(d?.error ?? '?'), 'var(--pink)');
+  };
+
+  // ── Redeem Codes ──────────────────────────────────────────────────────────
+
+  const loadCodes = useCallback(async () => {
+    const r = await api('/api/redeem?list=1');
+    if (!r.ok) return;
+    setCodes((r.data as { codes?: RedeemCode[] })?.codes ?? []);
+  }, [api]);
+
+  const createCode = async () => {
+    if (codeCredits <= 0 || codeUses <= 0) { setCodeSt('⚠ Isi credits dan max uses!'); setCodeStType('err'); return; }
+    setCodeSt('⟳ Creating...'); setCodeStType('info');
+    const body: Record<string, unknown> = { action: 'create', credits: codeCredits, maxUses: codeUses };
+    if (codeExpiry) body.expiresInDays = parseInt(codeExpiry);
+    const r = await api('/api/redeem', { method: 'POST', body });
+    const d = r.data as { success?: boolean; error?: string; code?: { code: string } };
+    if (r.ok && d.success) {
+      setCodeSt('✅ Code created: ' + d.code?.code); setCodeStType('ok');
+      addToast(`🎟 ${d.code?.code} (${codeCredits} CR × ${codeUses} uses)`, 'var(--green)');
+      setCodeCredits(50); setCodeUses(10); setCodeExpiry('');
+      loadCodes();
+    } else {
+      setCodeSt('✗ ' + escHtml(d?.error ?? 'Gagal.')); setCodeStType('err');
+    }
+  };
+
+  const deleteCode = async (code: string) => {
+    if (!confirm('Delete code ' + code + '?')) return;
+    const r = await api('/api/redeem', { method: 'DELETE', body: { code } });
+    const d = r.data as { success?: boolean; error?: string };
+    if (r.ok && d.success) { addToast('Code deleted.', 'var(--pink)'); loadCodes(); }
+    else addToast('Error: ' + escHtml(d?.error ?? '?'), 'var(--pink)');
+  };
+
+  // ── Inbox ─────────────────────────────────────────────────────────────────
+
+  const sendInbox = async () => {
+    const to = inboxTo.trim().toLowerCase();
+    const content = inboxContent.trim();
+    if (!to || !content) { setInboxSt('⚠ Isi username dan message!'); setInboxStType('err'); return; }
+    if (!/^[a-z0-9_]{1,25}$/.test(to)) { setInboxSt('⚠ Username tidak valid.'); setInboxStType('err'); return; }
+    setInboxSt('⟳ Sending...'); setInboxStType('info');
+
+    const r = await api('/api/inbox', { method: 'POST', body: {
+      to, from: 'NEXUS Admin',
+      subject: inboxSubject || 'Message from NEXUS Admin',
+      content, type: inboxType,
+      sender_id: sessionUser !== 'Token Auth' ? sessionUser.replace('@', '') : 'admin',
+    }});
+    const d = r.data as { status?: string; error?: string; id?: string };
+    if (r.ok && d.status === 'ok') {
+      setInboxSt(`✅ Sent to @${to}! (ID: ${d.id ?? '?'})`); setInboxStType('ok');
+      addToast('✉ Sent to @' + to, 'var(--green)');
+      setInboxContent('');
+    } else {
+      setInboxSt('✗ ' + escHtml(d?.error ?? 'Gagal.')); setInboxStType('err');
+    }
+  };
+
+  const sendBroadcast = async () => {
+    const recipientsRaw = bcRecipients.trim();
+    const content = bcContent.trim();
+    if (!recipientsRaw || !content) { setBcSt('⚠ Isi recipients dan message!'); setBcStType('err'); return; }
+    setBcSt('⟳ Sending...'); setBcStType('info');
+
+    let targets: string[] = [];
+    if (recipientsRaw.toLowerCase() === 'all') {
+      targets = allUsers.map(([u]) => u);
+      if (!targets.length) { setBcSt('Load users first! (tab Users → Refresh)'); setBcStType('err'); return; }
+      if (!confirm('Send to ALL ' + targets.length + ' users?')) { setBcSt(''); return; }
+    } else {
+      targets = recipientsRaw.split(',').map(s => s.trim().toLowerCase()).filter(Boolean);
+    }
+
+    let success = 0, fail = 0;
+    for (let i = 0; i < targets.length; i++) {
+      if (!/^[a-z0-9_]{1,25}$/.test(targets[i])) { fail++; continue; }
+      const r = await api('/api/inbox', { method: 'POST', body: {
+        to: targets[i], from: 'NEXUS Admin',
+        subject: bcSubject || 'Broadcast from NEXUS Admin',
+        content, type: 'system',
+        sender_id: sessionUser !== 'Token Auth' ? sessionUser.replace('@', '') : 'admin',
+      }});
+      const d = r.data as { status?: string };
+      if (r.ok && d.status === 'ok') success++; else fail++;
+      if (i % 5 === 4) setBcSt(`⟳ Sent ${i + 1}/${targets.length}...`);
+    }
+    setBcSt(`✅ Sent: ${success} | Failed: ${fail}`); setBcStType(fail > 0 ? 'info' : 'ok');
+    addToast(`Broadcast: ${success}/${targets.length} sent`, 'var(--yellow)');
+  };
+
+  // ── Logs ──────────────────────────────────────────────────────────────────
+
+  const loadLogs = useCallback(async () => {
+    let r = await api('/api/control?get_logs=1&limit=50');
+    if (!r.ok) r = await api('/api/control', { method: 'POST', body: { type: 'get_logs', limit: 50 } });
+    let data = (r.data as { logs?: Log[] })?.logs ?? [];
+    if (logFilter) data = data.filter(l => l.action === logFilter);
+    setLogs(data.slice(0, 50));
+  }, [api, logFilter]);
+
+  const loadHistory = useCallback(async () => {
+    let r = await api('/api/control?get_history=1&limit=30');
+    if (!r.ok) r = await api('/api/control', { method: 'POST', body: { type: 'get_history', limit: 30 } });
+    setHistory((r.data as { history?: Log[] })?.history?.slice(0, 30) ?? []);
+  }, [api]);
+
+  useEffect(() => {
+    if (activeTab === 'logs') loadLogs();
+  }, [logFilter]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  // ── Inline styles ─────────────────────────────────────────────────────────
+
+  const css = `
+    :root {
+      --bg:#030312;--bg2:#06071a;--bg3:#0a0b22;--bg4:#0d0e28;
+      --cyan:#00e5ff;--purple:#8800ff;--pink:#ff2d6b;
+      --green:#00ffaa;--yellow:#ffd600;--orange:#ff8c00;
+      --text:#b8cfff;--dim:#3a4a7a;--dim2:#1e2a4a;
+      --b:rgba(0,229,255,.1);--b2:rgba(0,229,255,.06);
+    }
+    *{box-sizing:border-box;margin:0;padding:0;}
+    body{background:var(--bg);color:var(--text);font-family:'JetBrains Mono',monospace;font-size:13px;}
+    @import url('https://fonts.googleapis.com/css2?family=Orbitron:wght@400;700;900&family=JetBrains+Mono:wght@300;400;500;700&display=swap');
+    @keyframes pulse{0%,100%{opacity:1;}50%{opacity:.4;}}
+    @keyframes spin{to{transform:rotate(360deg)}}
+    @keyframes toastIn{from{opacity:0;transform:translateX(10px)}to{opacity:1;transform:none}}
+  `;
+
+  // ─── RENDER ────────────────────────────────────────────────────────────────
+
+  if (showLogin) {
+    return (
+      <>
+        <style>{css}</style>
+        <style>{`
+          @import url('https://fonts.googleapis.com/css2?family=Orbitron:wght@400;700;900&family=JetBrains+Mono:wght@300;400;500;700&display=swap');
+          html,body{min-height:100%;background:var(--bg);color:var(--text);font-family:'JetBrains Mono',monospace;}
+          body::before{content:'';position:fixed;inset:0;
+            background:linear-gradient(rgba(0,229,255,.012) 1px,transparent 1px),
+                       linear-gradient(90deg,rgba(0,229,255,.012) 1px,transparent 1px);
+            background-size:40px 40px;pointer-events:none;z-index:0;}
+        `}</style>
+        <div style={{
+          position:'fixed',inset:0,zIndex:9000,display:'flex',alignItems:'center',justifyContent:'center',
+          background:'var(--bg)',padding:'20px',
+        }}>
+          <div style={{
+            background:'var(--bg2)',border:'1px solid var(--b)',borderRadius:'16px',
+            padding:'32px',width:'100%',maxWidth:'400px',textAlign:'center',
+            boxShadow:'0 0 60px rgba(0,229,255,.05)',
+          }}>
+            <div style={{
+              fontFamily:'Orbitron,sans-serif',fontSize:'22px',fontWeight:900,
+              background:'linear-gradient(135deg,var(--cyan),var(--purple))',
+              WebkitBackgroundClip:'text',WebkitTextFillColor:'transparent',marginBottom:'4px',
+            }}>NEXUS AI</div>
+            <div style={{fontSize:'9px',color:'var(--dim)',letterSpacing:'2px',fontFamily:'Orbitron,sans-serif',marginBottom:'24px'}}>ADMIN PANEL</div>
+
+            <div style={{
+              width:'56px',height:'56px',background:'rgba(0,229,255,.05)',border:'1px solid var(--b)',
+              borderRadius:'50%',display:'flex',alignItems:'center',justifyContent:'center',margin:'0 auto 20px',
+            }}>
+              <svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="var(--cyan)" strokeWidth="2">
+                <rect x="3" y="11" width="18" height="11" rx="2"/>
+                <path d="M7 11V7a5 5 0 0110 0v4"/>
+                <circle cx="12" cy="16" r="1" fill="var(--cyan)"/>
+              </svg>
+            </div>
+
+            <div style={{fontSize:'8px',color:'var(--dim)',textTransform:'uppercase',letterSpacing:'1px',marginBottom:'6px',textAlign:'left'}}>Admin Token</div>
+            <div style={{position:'relative',marginBottom:'14px'}}>
+              <input
+                type={showPass ? 'text' : 'password'}
+                value={loginInput}
+                onChange={e => setLoginInput(e.target.value)}
+                onKeyDown={e => e.key === 'Enter' && doLogin()}
+                placeholder="Enter ADMIN_TOKEN..."
+                disabled={loginLoading || lockoutUntil > Date.now()}
+                style={{
+                  width:'100%',background:'var(--bg3)',border:'1px solid var(--b)',borderRadius:'8px',
+                  padding:'10px 40px 10px 12px',color:'white',fontFamily:'JetBrains Mono,monospace',
+                  fontSize:'12px',outline:'none',letterSpacing:'2px',
+                }}
+              />
+              <button
+                onClick={() => setShowPass(p => !p)}
+                style={{position:'absolute',right:'10px',top:'50%',transform:'translateY(-50%)',
+                  background:'none',border:'none',color:'var(--dim)',cursor:'pointer',padding:'4px'}}
+              >
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                  {showPass
+                    ? <><path d="M17.94 17.94A10.07 10.07 0 0112 20c-7 0-11-8-11-8a18.45 18.45 0 015.06-5.94"/><path d="M9.9 4.24A9.12 9.12 0 0112 4c7 0 11 8 11 8a18.5 18.5 0 01-2.16 3.19"/><line x1="1" y1="1" x2="23" y2="23"/></>
+                    : <><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></>
+                  }
+                </svg>
+              </button>
+            </div>
+
+            <button
+              onClick={doLogin}
+              disabled={loginLoading || lockoutUntil > Date.now()}
+              style={{
+                width:'100%',padding:'11px',
+                background: loginLoading || lockoutUntil > Date.now() ? 'rgba(0,229,255,.2)' : 'linear-gradient(135deg,var(--cyan),#0066dd)',
+                border:'none',borderRadius:'8px',color:'#030312',fontFamily:'Orbitron,sans-serif',
+                fontSize:'9px',fontWeight:700,letterSpacing:'1.5px',cursor: loginLoading || lockoutUntil > Date.now() ? 'not-allowed' : 'pointer',
+                marginTop:'4px',opacity: loginLoading || lockoutUntil > Date.now() ? 0.4 : 1,
+              }}
+            >
+              {loginLoading ? 'AUTHENTICATING...' : lockoutUntil > Date.now() ? `🔒 LOCKED (${lockoutRemain}s)` : 'AUTHENTICATE'}
+            </button>
+
+            {loginErr && <div style={{fontSize:'9px',color:'var(--pink)',marginTop:'8px'}}>{loginErr}</div>}
+            {loginOk  && <div style={{fontSize:'9px',color:'var(--green)',marginTop:'8px'}}>{loginOk}</div>}
+
+            {/* Lockout progress */}
+            {lockoutUntil > Date.now() && (
+              <div style={{height:'3px',background:'var(--dim2)',borderRadius:'3px',marginTop:'10px',overflow:'hidden'}}>
+                <div style={{
+                  height:'3px',background:'var(--pink)',borderRadius:'3px',
+                  width: `${Math.max(0,(lockoutUntil - Date.now()) / (SEC.LOCKOUT_SEC * 1000) * 100)}%`,
+                  transition:'width 1s linear',
+                }}/>
+              </div>
+            )}
+
+            {/* Attempt dots */}
+            <div style={{display:'flex',gap:'5px',justifyContent:'center',marginTop:'10px'}}>
+              {[0,1,2,3,4].map(i => (
+                <div key={i} style={{
+                  width:'8px',height:'8px',borderRadius:'50%',
+                  background: i < loginAttempts ? 'var(--pink)' : 'var(--dim2)',
+                  transition:'.2s',
+                }}/>
+              ))}
+            </div>
+          </div>
+        </div>
+      </>
+    );
+  }
+
+  // ─── PANEL ─────────────────────────────────────────────────────────────────
+
+  const tabButtons: { id: TabName; label: string }[] = [
+    { id: 'overview', label: '📊 Overview' },
+    { id: 'users',    label: '👥 Users' },
+    { id: 'reports',  label: '📋 Reports & Payments' },
+    { id: 'codes',    label: '🎟 Redeem Codes' },
+    { id: 'inbox',    label: '✉ Inbox' },
+    { id: 'logs',     label: '📜 Logs' },
+  ];
+
+  const stColor = (t: 'ok'|'err'|'info') => t === 'ok' ? 'var(--green)' : t === 'err' ? 'var(--pink)' : 'var(--yellow)';
 
   return (
     <>
-      {/* ── Global Styles ── */}
+      {/* ── Global styles ── */}
       <style>{`
-        @import url('https://fonts.googleapis.com/css2?family=Orbitron:wght@400;600;700;900&family=JetBrains+Mono:wght@300;400;500&display=swap');
-
-        *, *::before, *::after { margin:0; padding:0; box-sizing:border-box; }
-
-        :root {
-          --bg:      #030312;
-          --bg2:     #06071a;
-          --bg3:     #0a0b22;
-          --cyan:    #00e5ff;
-          --cyan2:   rgba(0,229,255,.35);
-          --purple:  #8800ff;
-          --pink:    #ff2d6b;
-          --green:   #00ffaa;
-          --yellow:  #ffd600;
-          --text:    #b8cfff;
-          --dim:     #3a4a7a;
-          --border:  rgba(0,229,255,.12);
-          --r:       8px;
+        @import url('https://fonts.googleapis.com/css2?family=Orbitron:wght@400;700;900&family=JetBrains+Mono:wght@300;400;500;700&display=swap');
+        :root{
+          --bg:#030312;--bg2:#06071a;--bg3:#0a0b22;--bg4:#0d0e28;
+          --cyan:#00e5ff;--purple:#8800ff;--pink:#ff2d6b;
+          --green:#00ffaa;--yellow:#ffd600;--orange:#ff8c00;
+          --text:#b8cfff;--dim:#3a4a7a;--dim2:#1e2a4a;
+          --b:rgba(0,229,255,.1);--b2:rgba(0,229,255,.06);
         }
-
-        html, body {
-          height: 100%;
-          font-family: 'JetBrains Mono', monospace;
-          background: var(--bg);
-          color: var(--text);
-          font-size: 13px;
-          overflow: hidden;
-        }
-
-        /* Grid bg */
-        body::before {
-          content:'';
-          position:fixed; inset:0;
-          background:
-            linear-gradient(rgba(0,229,255,.013) 1px, transparent 1px),
-            linear-gradient(90deg, rgba(0,229,255,.013) 1px, transparent 1px);
-          background-size: 40px 40px;
-          pointer-events:none; z-index:0;
-        }
-        body::after {
-          content:'';
-          position:fixed;
-          top:50%; left:50%;
-          transform:translate(-50%,-50%);
-          width:700px; height:700px;
-          background: radial-gradient(circle, rgba(136,0,255,.05) 0%, transparent 70%);
-          pointer-events:none; z-index:0;
-        }
-
-        /* ── Layout ── */
-        .page {
-          display:flex; flex-direction:column;
-          height:100vh;
-          position:relative; z-index:1;
-        }
-
-        /* ── Header ── */
-        .header {
-          padding:10px 16px;
-          background:rgba(6,7,26,.97);
-          border-bottom:1px solid var(--border);
-          display:flex; align-items:center; gap:10px;
-          flex-shrink:0;
-          backdrop-filter:blur(16px);
-        }
-        .header-logo {
-          width:32px; height:32px;
-          border-radius:8px; overflow:hidden; flex-shrink:0;
-          border:1px solid rgba(0,229,255,.2);
-          background:linear-gradient(135deg,#00e5ff,#8800ff);
-        }
-        .header-logo img { width:100%; height:100%; object-fit:cover; display:block; }
-        .header-title {
-          font-family:'Orbitron',sans-serif;
-          font-size:12px; font-weight:700;
-          color:var(--cyan); flex:1; letter-spacing:.5px;
-        }
-        .header-title span {
-          color:var(--dim); font-weight:400;
-          font-size:10px; margin-left:6px;
-          font-family:'JetBrains Mono',monospace;
-        }
-        .header-user { display:flex; align-items:center; gap:8px; }
-        .header-avatar {
-          width:26px; height:26px; border-radius:50%;
-          border:1.5px solid var(--cyan2);
-          object-fit:cover; background:var(--bg3);
-        }
-        .header-name {
-          font-size:10px; color:white; font-weight:500;
-          max-width:90px; white-space:nowrap;
-          overflow:hidden; text-overflow:ellipsis;
-        }
-        .back-btn {
-          background:rgba(0,229,255,.06);
-          border:1px solid rgba(0,229,255,.18);
-          color:var(--cyan);
-          padding:5px 12px; border-radius:var(--r);
-          font-size:10px; font-family:'JetBrains Mono',monospace;
-          cursor:pointer; transition:.15s; flex-shrink:0;
-          display:flex; align-items:center; gap:5px;
-        }
-        .back-btn:hover { background:rgba(0,229,255,.12); border-color:var(--cyan); }
-        .back-btn svg { width:12px; height:12px; stroke:currentColor; fill:none; stroke-width:2.5; }
-
-        /* ── Status bar ── */
-        .status-bar {
-          padding:5px 16px;
-          background:rgba(0,255,170,.04);
-          border-bottom:1px solid rgba(0,255,170,.08);
-          display:flex; align-items:center; justify-content:space-between;
-          flex-shrink:0;
-        }
-        .status-left { display:flex; align-items:center; gap:8px; }
-        .status-dot {
-          width:6px; height:6px; border-radius:50%;
-          background:var(--green);
-          animation:blink 2s ease infinite;
-        }
-        @keyframes blink { 0%,100%{opacity:1} 50%{opacity:.35} }
-        .status-text { font-size:9px; color:var(--green); letter-spacing:.5px; }
-        .status-model { font-size:9px; color:var(--dim); letter-spacing:.3px; }
-
-        /* ── Chat area ── */
-        .chat-area {
-          flex:1; overflow-y:auto;
-          padding:16px; display:flex;
-          flex-direction:column; gap:12px;
-        }
-        .chat-area::-webkit-scrollbar { width:3px; }
-        .chat-area::-webkit-scrollbar-thumb { background:var(--border); border-radius:2px; }
-
-        /* ── Welcome ── */
-        .welcome {
-          display:flex; flex-direction:column;
-          align-items:center;
-          flex:1; text-align:center;
-          gap:14px; padding:32px 24px;
-        }
-        .welcome-avatar {
-          width:72px; height:72px; border-radius:50%; overflow:hidden;
-          border:2px solid rgba(0,229,255,.3);
-          box-shadow:0 0 32px rgba(0,229,255,.12), 0 0 0 6px rgba(0,229,255,.04);
-        }
-        .welcome-avatar img { width:100%; height:100%; object-fit:cover; }
-        .welcome-badge {
-          font-size:8px; font-family:'Orbitron',sans-serif; letter-spacing:2px;
-          color:var(--dim); background:rgba(0,229,255,.06);
-          border:1px solid var(--border); padding:3px 12px; border-radius:20px;
-        }
-        .welcome-title {
-          font-family:'Orbitron',sans-serif;
-          font-size:20px; font-weight:900;
-          background:linear-gradient(135deg,var(--cyan),var(--purple));
-          -webkit-background-clip:text; -webkit-text-fill-color:transparent;
-          letter-spacing:1px;
-        }
-        .welcome-text {
-          font-size:12px; max-width:380px;
-          line-height:1.8; color:var(--text);
-        }
-        .welcome-divider {
-          width:100%; max-width:360px;
-          border:none; border-top:1px solid var(--border);
-          margin:2px 0;
-        }
-        .hint-label {
-          font-size:9px; color:var(--dim); letter-spacing:1px;
-          text-transform:uppercase;
-        }
-        .hint-list {
-          display:flex; flex-direction:column; gap:7px;
-          width:100%; max-width:360px;
-        }
-        .hint-chip {
-          background:var(--bg2); border:1px solid var(--border);
-          border-radius:7px; padding:9px 13px;
-          font-size:10.5px; color:var(--text);
-          cursor:pointer; text-align:left; transition:.15s;
-          display:flex; align-items:center; gap:9px;
-          line-height:1.4; font-family:'JetBrains Mono',monospace;
-        }
-        .hint-chip:hover {
-          border-color:rgba(0,229,255,.35);
-          color:var(--cyan);
-          background:rgba(0,229,255,.04);
-        }
-        .hint-icon { flex-shrink:0; font-size:13px; }
-
-        /* ── Messages ── */
-        .msg-row {
-          display:flex; gap:9px;
-          animation:msgIn .22s ease;
-        }
-        @keyframes msgIn {
-          from{opacity:0;transform:translateY(7px)}
-          to{opacity:1;transform:none}
-        }
-        .msg-row.user { flex-direction:row-reverse; }
-        .avatar {
-          width:28px; height:28px; border-radius:50%; overflow:hidden;
-          flex-shrink:0; background:var(--bg3);
-          display:flex; align-items:center; justify-content:center;
-          font-size:11px; font-weight:700;
-          border:1px solid var(--border);
-          position:relative;
-        }
-        .avatar img {
-          width:100%; height:100%; object-fit:cover;
-          position:absolute; inset:0;
-        }
-        .avatar-fallback {
-          color:var(--cyan);
-          display:flex; align-items:center; justify-content:center;
-          width:100%; height:100%;
-        }
-        .user-fallback { color:var(--purple); }
-        .ai-avatar { }
-        .user-avatar { }
-        .msg-wrap {
-          display:flex; flex-direction:column;
-          max-width:80%; min-width:0;
-        }
-        .user-wrap { align-items:flex-end; }
-        .msg-name {
-          font-size:9px; color:var(--dim);
-          margin-bottom:3px; letter-spacing:.3px;
-        }
-        .bubble {
-          padding:10px 14px; border-radius:10px;
-          line-height:1.7; font-size:12.5px;
-          word-break:break-word; overflow-wrap:break-word;
-        }
-        .user-bubble {
-          background:linear-gradient(135deg,rgba(0,229,255,.08),rgba(136,0,255,.08));
-          border:1px solid rgba(0,229,255,.16);
-          border-radius:10px 2px 10px 10px;
-          color:white;
-        }
-        .ai-bubble {
-          background:var(--bg2);
-          border:1px solid var(--border);
-          border-radius:2px 10px 10px 10px;
-          color:var(--text);
-        }
-        /* Markdown inside bubble */
-        .bubble p { margin:0 0 6px; }
-        .bubble p:last-child { margin-bottom:0; }
-        .bubble ul { padding-left:18px; margin:6px 0; }
-        .bubble li { margin-bottom:4px; line-height:1.6; }
-        .bubble strong { color:white; }
-        .bubble h1,.bubble h2,.bubble h3 {
-          color:white; margin:8px 0 4px;
-          font-family:'Orbitron',sans-serif;
-          font-size:11px; font-weight:700; letter-spacing:.5px;
-        }
-        .bubble code {
-          background:rgba(0,229,255,.08);
-          padding:2px 5px; border-radius:3px;
-          font-size:10.5px; color:var(--cyan);
-          word-break:break-all;
-        }
-        .bubble pre {
-          background:rgba(0,0,0,.4);
-          border:1px solid var(--border);
-          border-radius:6px; padding:10px;
-          overflow-x:auto; margin:6px 0;
-        }
-        .bubble a { color:var(--cyan); text-decoration:none; }
-        .bubble a:hover { text-decoration:underline; }
-        .bubble blockquote {
-          border-left:2px solid var(--cyan2);
-          padding-left:10px; color:var(--dim);
-          margin:6px 0;
-        }
-        .bubble hr { border:none; border-top:1px solid var(--border); margin:8px 0; }
-        .msg-time { font-size:9px; color:var(--dim); margin-top:4px; }
-        .msg-time.right { text-align:right; }
-
-        /* ── Input area ── */
-        .input-area {
-          padding:10px 14px 14px;
-          border-top:1px solid var(--border);
-          background:rgba(6,7,26,.97);
-          backdrop-filter:blur(16px);
-          display:flex; gap:8px; align-items:flex-end;
-          flex-shrink:0;
-        }
-        .user-textarea {
-          flex:1;
-          background:var(--bg3);
-          border:1px solid var(--border);
-          border-radius:10px;
-          padding:10px 14px;
-          color:white;
-          font-family:'JetBrains Mono',monospace;
-          font-size:13px;
-          resize:none;
-          min-height:44px; max-height:120px;
-          outline:none; line-height:1.55;
-          transition:border-color .15s;
-        }
-        .user-textarea::placeholder { color:var(--dim); }
-        .user-textarea:focus { border-color:var(--cyan2); }
-        .send-btn {
-          width:40px; height:40px; flex-shrink:0;
-          background:linear-gradient(135deg,var(--cyan),var(--purple));
-          border:none; border-radius:50%;
-          color:white; cursor:pointer;
-          display:flex; align-items:center; justify-content:center;
-          transition:.2s; box-shadow:0 0 14px rgba(0,229,255,.2);
-        }
-        .send-btn:hover:not(:disabled) { opacity:.82; transform:scale(1.07); }
-        .send-btn:disabled { opacity:.3; cursor:not-allowed; box-shadow:none; }
-        .send-btn svg { width:16px; height:16px; stroke:currentColor; fill:none; stroke-width:2; }
-        .input-hint {
-          font-size:9px; color:var(--dim);
-          padding:0 14px 6px;
-          background:rgba(6,7,26,.97);
-          letter-spacing:.3px;
-          flex-shrink:0;
-        }
-
-        @media(max-width:600px) {
-          .header { padding:8px 11px; }
-          .chat-area { padding:10px; }
-          .welcome-avatar { width:56px; height:56px; }
-          .welcome-title { font-size:17px; }
-          .input-area { padding:8px 10px 11px; }
-        }
+        *{box-sizing:border-box;margin:0;padding:0;}
+        html,body{background:var(--bg);color:var(--text);font-family:'JetBrains Mono',monospace;font-size:13px;}
+        body::before{content:'';position:fixed;inset:0;
+          background:linear-gradient(rgba(0,229,255,.012) 1px,transparent 1px),
+                     linear-gradient(90deg,rgba(0,229,255,.012) 1px,transparent 1px);
+          background-size:40px 40px;pointer-events:none;z-index:0;}
+        input,textarea,select{-webkit-user-select:text;user-select:text;}
+        @keyframes pulse{0%,100%{opacity:1;}50%{opacity:.4;}}
+        @keyframes spin{to{transform:rotate(360deg)}}
+        @keyframes toastIn{from{opacity:0;transform:translateX(10px)}to{opacity:1;transform:none}}
+        .spin{animation:spin 1s linear infinite;display:inline-block;}
+        .nav-dot{animation:pulse 2s infinite;}
+        ::-webkit-scrollbar{width:4px;height:4px;}
+        ::-webkit-scrollbar-thumb{background:var(--b);border-radius:2px;}
+        .tbl-row:hover td{background:rgba(0,229,255,.025);}
+        .btn-hover:hover{opacity:.85;transform:translateY(-1px);}
+        .btn-hover:active{transform:translateY(0);}
+        .tab-btn-hover:hover{color:var(--text)!important;}
+        .pbtn-hover:hover{color:var(--cyan);border-color:var(--cyan);}
       `}</style>
 
-      <div className="page">
-        {/* ── Header ── */}
-        <header className="header">
-          <div className="header-logo">
-            <img src="/favicon.ico" alt="NEXUS" onError={(e) => { (e.target as HTMLImageElement).style.display = "none"; }} />
-          </div>
-          <div className="header-title">
-            NEXUS AI<span>· Support Agent</span>
-          </div>
-          <div className="header-user">
-            <img
-              className="header-avatar"
-              src={avatarUrl}
-              alt="avatar"
-              onError={(e) => { (e.target as HTMLImageElement).style.display = "none"; }}
-            />
-            <span className="header-name">{displayName}</span>
-          </div>
-          <button className="back-btn" onClick={handleBack}>
-            <svg viewBox="0 0 24 24">
-              <polyline points="15 18 9 12 15 6" />
-            </svg>
-            Back
-          </button>
-        </header>
+      {/* ── Toasts ── */}
+      <div style={{position:'fixed',bottom:'20px',right:'20px',zIndex:9999,display:'flex',flexDirection:'column',gap:'8px'}}>
+        {toasts.map(t => (
+          <div key={t.id} style={{
+            background:'var(--bg3)',border:'1px solid var(--b)',borderRadius:'8px',
+            padding:'10px 16px',fontSize:'11px',maxWidth:'320px',pointerEvents:'none',
+            color:t.color,animation:'toastIn .2s ease',fontFamily:'JetBrains Mono,monospace',
+          }}>{t.msg}</div>
+        ))}
+      </div>
 
-        {/* ── Status Bar ── */}
-        <div className="status-bar">
-          <div className="status-left">
-            <div className="status-dot" />
-            <span className="status-text">ONLINE · Support Active</span>
+      {/* ── Report detail modal ── */}
+      {rptModalOpen && (
+        <div
+          onClick={e => { if (e.target === e.currentTarget) setRptModalOpen(false); }}
+          style={{position:'fixed',inset:0,background:'rgba(0,0,0,.7)',zIndex:500,display:'flex',alignItems:'center',justifyContent:'center',padding:'16px'}}
+        >
+          <div style={{background:'var(--bg2)',border:'1px solid var(--b)',borderRadius:'12px',padding:'20px',maxWidth:'480px',width:'100%',maxHeight:'80vh',overflowY:'auto'}}>
+            <div style={{display:'flex',alignItems:'center',justifyContent:'space-between',fontFamily:'Orbitron,sans-serif',fontSize:'11px',color:'var(--cyan)',marginBottom:'14px'}}>
+              Report Detail
+              <button onClick={() => setRptModalOpen(false)} style={{background:'none',border:'none',color:'var(--dim)',cursor:'pointer',fontSize:'16px'}}>✕</button>
+            </div>
+
+            {currentReport && (
+              <div style={{background:'var(--bg3)',borderRadius:'8px',padding:'12px',marginBottom:'12px',fontSize:'10px'}}>
+                {[
+                  ['From', '@' + currentReport.from, 'var(--cyan)'],
+                  ['Package', currentReport.paymentPack ?? '—', ''],
+                  ['Credits', (currentReport.paymentCR ?? '?') + ' CR', 'var(--yellow)'],
+                  ['Method', (currentReport.paymentMethod ?? '—').toUpperCase(), ''],
+                  ['Total', currentReport.paymentTotal ?? '—', 'var(--green)'],
+                  ...(currentReport.transactionId ? [['TXN ID', currentReport.transactionId, '']] : []),
+                  ['Time', fmtDate(currentReport.time), ''],
+                ].map(([k,v,c]) => (
+                  <div key={String(k)} style={{display:'flex',justifyContent:'space-between',padding:'3px 0',borderBottom:'1px solid var(--b2)'}}>
+                    <span style={{color:'var(--dim)'}}>{k}</span>
+                    <span style={{color: String(c) || 'var(--text)'}}>{v}</span>
+                  </div>
+                ))}
+              </div>
+            )}
+
+            {currentReport?.message && (
+              <div style={{background:'var(--bg3)',borderLeft:'3px solid var(--cyan)',borderRadius:'4px',padding:'10px',marginBottom:'12px',fontSize:'10px'}}>
+                <div style={{color:'var(--dim)',fontSize:'8px',marginBottom:'4px'}}>USER NOTE</div>
+                {currentReport.message.substring(0, 500)}
+              </div>
+            )}
+
+            <div style={{marginBottom:'10px'}}>
+              <label style={{fontSize:'8px',color:'var(--dim)',textTransform:'uppercase',letterSpacing:'1px',display:'block',marginBottom:'4px'}}>Admin Note (optional)</label>
+              <input
+                value={rptAdminNote}
+                onChange={e => setRptAdminNote(e.target.value)}
+                placeholder="Catatan untuk record..."
+                style={{width:'100%',background:'var(--bg3)',border:'1px solid var(--b)',borderRadius:'5px',padding:'7px 10px',color:'white',fontFamily:'JetBrains Mono,monospace',fontSize:'11px',outline:'none'}}
+              />
+            </div>
+
+            <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:'6px',marginTop:'10px'}}>
+              <Btn color="green" onClick={() => processReport('confirm')} disabled={rptModalProcessing}>✅ Confirm Payment</Btn>
+              <Btn color="red"   onClick={() => processReport('reject')}  disabled={rptModalProcessing}>❌ Reject</Btn>
+            </div>
+            {rptModalSt && <div style={{fontSize:'10px',marginTop:'8px',color:stColor(rptModalStType)}}>{rptModalSt}</div>}
           </div>
-          <span className="status-model">Model: Gemini 3.5 Flash</span>
         </div>
+      )}
 
-        {/* ── Chat ── */}
-        <div className="chat-area" ref={chatRef}>
-          {showWelcome && messages.length === 0 && (
-            <WelcomeScreen
-              displayName={displayName}
-              avatarUrl={avatarUrl}
-              onHint={handleHint}
-            />
-          )}
-
-          {messages.map((msg) => (
-            <MessageBubble
-              key={msg.id}
-              msg={msg}
-              displayName={displayName}
-              avatarUrl={avatarUrl}
-            />
-          ))}
-
-          {isProcessing && <TypingIndicator />}
+      {/* ── Nav ── */}
+      <nav style={{
+        position:'sticky',top:0,zIndex:200,display:'flex',alignItems:'center',gap:'12px',
+        padding:'8px 20px',background:'rgba(3,3,18,.97)',borderBottom:'1px solid var(--b)',
+        backdropFilter:'blur(12px)',
+      }}>
+        <a href="/" style={{fontFamily:'Orbitron,sans-serif',fontSize:'12px',fontWeight:900,
+          background:'linear-gradient(135deg,var(--cyan),var(--purple))',
+          WebkitBackgroundClip:'text',WebkitTextFillColor:'transparent',textDecoration:'none',flexShrink:0}}>
+          NEXUS AI
+        </a>
+        <span style={{fontSize:'8px',color:'var(--dim)',fontFamily:'Orbitron,sans-serif',letterSpacing:'2px',flexShrink:0}}>ADMIN PANEL</span>
+        <div style={{flex:1}}/>
+        {inactivityWarn && (
+          <div style={{fontSize:'8px',color:'var(--yellow)',display:'flex',alignItems:'center',gap:'4px'}}>
+            <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>
+            Session expires soon
+          </div>
+        )}
+        <div style={{fontSize:'9px',color:'var(--dim)',display:'flex',alignItems:'center',gap:'6px'}}>
+          <div className="nav-dot" style={{width:'6px',height:'6px',background:'var(--green)',borderRadius:'50%'}}/>
+          <span>{sessionLabel} — {sessionUser}</span>
         </div>
+        <button onClick={doLogout} className="btn-hover" style={{background:'none',border:'1px solid rgba(255,45,107,.3)',borderRadius:'5px',color:'var(--pink)',fontSize:'9px',padding:'4px 10px',cursor:'pointer',fontFamily:'JetBrains Mono,monospace'}}>
+          Sign Out
+        </button>
+        <a href="/" style={{background:'none',border:'1px solid var(--b)',borderRadius:'5px',color:'var(--dim)',fontSize:'9px',padding:'4px 10px',cursor:'pointer',fontFamily:'JetBrains Mono,monospace',textDecoration:'none'}}>
+          ← Back
+        </a>
+      </nav>
 
-        {/* ── Input ── */}
-        <div className="input-area">
-          <textarea
-            ref={textareaRef}
-            className="user-textarea"
-            placeholder="Describe your issue or ask a question…"
-            rows={1}
-            value={input}
-            onChange={handleInputChange}
-            onKeyDown={handleKeyDown}
-            disabled={isProcessing}
-          />
+      {/* ── Tab nav ── */}
+      <div style={{
+        display:'flex',gap:'2px',padding:'12px 20px 0',overflowX:'auto',
+        borderBottom:'1px solid var(--b)',background:'rgba(6,7,26,.6)',
+        position:'sticky',top:'49px',zIndex:100,backdropFilter:'blur(10px)',
+      }}>
+        {tabButtons.map(({ id, label }) => (
           <button
-            className="send-btn"
-            onClick={sendMsg}
-            disabled={isProcessing || !input.trim()}
-            title="Send (Enter)"
-          >
-            <svg viewBox="0 0 24 24">
-              <line x1="22" y1="2" x2="11" y2="13" />
-              <polygon points="22 2 15 22 11 13 2 9 22 2" />
-            </svg>
-          </button>
-        </div>
-        <div className="input-hint">Enter = Send &nbsp;·&nbsp; Shift+Enter = New line</div>
+            key={id}
+            onClick={() => switchTab(id)}
+            className="tab-btn-hover"
+            style={{
+              background:'none',border:'none',
+              borderBottom: activeTab === id ? '2px solid var(--cyan)' : '2px solid transparent',
+              color: activeTab === id ? 'var(--cyan)' : 'var(--dim)',
+              fontFamily:'Orbitron,sans-serif',fontSize:'8px',fontWeight:700,letterSpacing:'1.5px',
+              padding:'8px 14px',cursor:'pointer',whiteSpace:'nowrap',marginBottom:'-1px',transition:'.15s',
+            }}
+          >{label}</button>
+        ))}
+      </div>
+
+      {/* ── Tab panels ── */}
+      <div style={{maxWidth:'1000px',margin:'0 auto',padding:'20px 16px 60px',position:'relative',zIndex:1}}>
+
+        {/* ══ OVERVIEW ═══════════════════════════════════════════════════════ */}
+        {activeTab === 'overview' && (
+          <div>
+            <div style={{marginBottom:'14px'}}>
+              <div style={{fontFamily:'Orbitron,sans-serif',fontSize:'16px',fontWeight:900,
+                background:'linear-gradient(135deg,var(--cyan),var(--purple))',
+                WebkitBackgroundClip:'text',WebkitTextFillColor:'transparent',marginBottom:'2px'}}>
+                Admin Actions Panel
+              </div>
+              <div style={{fontSize:'9px',color:'var(--dim)'}}>{sessionLabel} — {sessionUser}</div>
+            </div>
+
+            {/* Stats */}
+            <div style={{display:'grid',gridTemplateColumns:'repeat(4,1fr)',gap:'10px',marginBottom:'16px'}}>
+              {[
+                { n: stats.total,             label:'Total Users',   accent:'var(--cyan)' },
+                { n: stats.pro,               label:'Pro / Owner',   accent:'var(--purple)' },
+                { n: stats.active,            label:'Active Today',  accent:'var(--green)' },
+                { n: stats.credits.toFixed(0),label:'Total Credits', accent:'var(--yellow)' },
+              ].map(s => (
+                <div key={s.label} style={{
+                  background:'var(--bg2)',border:'1px solid var(--b)',borderRadius:'10px',
+                  padding:'14px',textAlign:'center',position:'relative',overflow:'hidden',
+                }}>
+                  <div style={{position:'absolute',top:0,left:0,right:0,height:'2px',background:s.accent,opacity:.5}}/>
+                  <div style={{fontFamily:'Orbitron,sans-serif',fontSize:'22px',fontWeight:900,color:'var(--yellow)'}}>{s.n}</div>
+                  <div style={{fontSize:'8px',color:'var(--dim)',marginTop:'4px',textTransform:'uppercase',letterSpacing:'1px'}}>{s.label}</div>
+                </div>
+              ))}
+            </div>
+
+            <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:'12px'}}>
+              {/* Quick Manage */}
+              <Card title="Quick Manage" icon={
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" width="12" height="12">
+                  <path d="M12 20h9"/><path d="M16.5 3.5a2.121 2.121 0 013 3L7 19l-4 1 1-4L16.5 3.5z"/>
+                </svg>
+              }>
+                <Field label="Username">
+                  <input className="fi" value={qUsername} onChange={e => setQUsername(e.target.value)} placeholder="Roblox username..." style={inputSt}/>
+                </Field>
+                <Field label="Credits Amount">
+                  <input type="number" value={qAmount} onChange={e => setQAmount(Number(e.target.value))} min={1} max={999999} style={inputSt}/>
+                </Field>
+                <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:'6px',marginTop:'8px'}}>
+                  <Btn color="green" full onClick={() => qAction('give')}>+ Give Credits</Btn>
+                  <Btn color="red"   full onClick={() => qAction('take')}>− Take Credits</Btn>
+                  <Btn color="yellow" full onClick={() => qAction('pro')}>⭐ Set Pro</Btn>
+                  <Btn color="red"   full onClick={() => qAction('ban')}>🚫 Ban User</Btn>
+                  <Btn color="green" full onClick={() => qAction('unban')}>✅ Unban User</Btn>
+                  <Btn color="dim"   full onClick={() => qAction('reset')}>↻ Reset CR</Btn>
+                </div>
+                {qStatus && <div style={{fontSize:'10px',marginTop:'8px',color:stColor(qStatusType)}}>{qStatus}</div>}
+              </Card>
+
+              {/* Pending Payments */}
+              <Card title="Pending Payments" action={
+                <Btn color="dim" sm onClick={() => switchTab('reports')}>View All</Btn>
+              }>
+                {pendingPayments.length === 0
+                  ? <div style={{color:'var(--green)',fontSize:'10px'}}>✅ No pending payments.</div>
+                  : pendingPayments.map(rpt => (
+                    <div key={rpt.id} style={{display:'flex',justifyContent:'space-between',alignItems:'center',padding:'6px 0',borderBottom:'1px solid var(--b2)'}}>
+                      <div>
+                        <div style={{color:'white',fontSize:'10px'}}>@{rpt.from}</div>
+                        <div style={{color:'var(--dim)',fontSize:'8px'}}>{rpt.paymentTotal ?? '—'} · {rpt.paymentPack ?? '—'}</div>
+                      </div>
+                      <div style={{display:'flex',gap:'4px'}}>
+                        <Btn color="green" xs onClick={() => quickConfirm(rpt.id)}>✓</Btn>
+                        <Btn color="red"   xs onClick={() => quickReject(rpt.id)}>✗</Btn>
+                      </div>
+                    </div>
+                  ))
+                }
+              </Card>
+            </div>
+          </div>
+        )}
+
+        {/* ══ USERS ══════════════════════════════════════════════════════════ */}
+        {activeTab === 'users' && (
+          <div>
+            <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:'12px',marginBottom:'12px'}}>
+              {/* Lookup */}
+              <Card title="User Lookup" icon={<SearchIcon/>}>
+                <Field label="Roblox Username">
+                  <input value={lookupInput} onChange={e => setLookupInput(e.target.value)}
+                    onKeyDown={e => e.key === 'Enter' && lookupUser()}
+                    placeholder="username..." style={inputSt}/>
+                </Field>
+                <Btn color="cyan" full onClick={() => lookupUser()}>
+                  <SearchIcon/> Search
+                </Btn>
+                {lookupLoading && <div style={{color:'var(--dim)',fontSize:'10px',marginTop:'8px'}}>⟳ Searching @{lookupInput}...</div>}
+                {foundUser && foundData && (
+                  <div style={{background:'var(--bg3)',border:'1px solid var(--b)',borderRadius:'8px',padding:'12px',marginTop:'10px',fontSize:'10px'}}>
+                    {foundData.robloxId && (
+                      <img
+                        src={`https://www.roblox.com/headshot-thumbnail/image?userId=${encodeURIComponent(foundData.robloxId)}&width=80&height=80&format=png`}
+                        onError={e => { (e.target as HTMLImageElement).style.display = 'none'; }}
+                        alt="" loading="lazy"
+                        style={{width:'44px',height:'44px',borderRadius:'50%',border:'2px solid var(--cyan)',display:'block',marginBottom:'8px',objectFit:'cover'}}
+                      />
+                    )}
+                    <div style={{fontWeight:700,color:'white',fontSize:'13px',marginBottom:'6px'}}>@{foundUser}</div>
+                    {[
+                      ['Credits', parseFloat(String(foundData.credits ?? 0)).toFixed(2) + ' CR', 'var(--yellow)'],
+                      ['Plan', (foundData.plan ?? 'free').toUpperCase(), foundData.plan === 'owner' ? 'var(--yellow)' : foundData.plan === 'pro' ? 'var(--cyan)' : ''],
+                      ['Roblox ID', foundData.robloxId ?? '—', ''],
+                      ['Status', foundData.banned ? '🔴 BANNED' : '🟢 Active', foundData.banned ? 'var(--pink)' : 'var(--green)'],
+                      ['Email', foundData.googleEmail ?? '—', ''],
+                      ['Roles', (foundData.roles ?? []).join(', ') || 'user', ''],
+                      ['Last Seen', fmtDate(foundData._updated), ''],
+                      ...(foundData.banned && foundData.banReason ? [['Ban Reason', foundData.banReason, 'var(--pink)']] : []),
+                    ].map(([k,v,c]) => (
+                      <div key={String(k)} style={{display:'flex',justifyContent:'space-between',padding:'3px 0',borderBottom:'1px solid var(--b2)'}}>
+                        <span style={{color:'var(--dim)'}}>{k}</span>
+                        <span style={{color: String(c) || 'var(--text)'}}>{v}</span>
+                      </div>
+                    ))}
+                    <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:'4px',marginTop:'10px'}}>
+                      <Btn color="green" full onClick={() => urAction('give')}>+50 CR</Btn>
+                      <Btn color={foundData.banned ? 'green' : 'red'} full onClick={() => urAction(foundData.banned ? 'unban' : 'ban')}>
+                        {foundData.banned ? '✅ Unban' : '🔨 Ban'}
+                      </Btn>
+                      <Btn color="yellow" full onClick={() => urAction('pro')}>⭐ Set Pro</Btn>
+                      <Btn color="dim"    full onClick={() => urAction('reset')}>↻ Reset CR</Btn>
+                      <Btn color="purple" full onClick={() => { switchTab('inbox'); setTimeout(() => setInboxTo(foundUser), 100); }}>✉ Inbox</Btn>
+                      <Btn color="dim"    full onClick={() => urAction('free')}>Set Free</Btn>
+                    </div>
+                  </div>
+                )}
+              </Card>
+
+              {/* Credits manage */}
+              <Card title="Manage Credits">
+                <Field label="Username"><input value={credU} onChange={e => setCredU(e.target.value)} placeholder="Target username..." style={inputSt}/></Field>
+                <Field label="Amount"><input type="number" value={credAmt} onChange={e => setCredAmt(e.target.value)} placeholder="100" min={1} max={999999} style={inputSt}/></Field>
+                <Field label="Set Plan (optional)">
+                  <select value={credPlan} onChange={e => setCredPlan(e.target.value)} style={selectSt}>
+                    <option value="">— No change —</option>
+                    <option value="free">Free</option>
+                    <option value="pro">Pro</option>
+                    <option value="owner">Owner</option>
+                  </select>
+                </Field>
+                <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:'6px'}}>
+                  <Btn color="green" full onClick={() => manageCredits(1)}>+ Add</Btn>
+                  <Btn color="red"   full onClick={() => manageCredits(-1)}>− Remove</Btn>
+                </div>
+                {credSt && <div style={{fontSize:'10px',marginTop:'8px',color:stColor(credStType)}}>{credSt}</div>}
+              </Card>
+            </div>
+
+            <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:'12px',marginBottom:'12px'}}>
+              {/* Ban / Unban */}
+              <Card title="Ban / Unban">
+                <Field label="Username"><input value={banU} onChange={e => setBanU(e.target.value)} placeholder="Username..." style={inputSt}/></Field>
+                <Field label="Reason (for ban)"><input value={banReason} onChange={e => setBanReason(e.target.value)} placeholder="Alasan..." style={inputSt}/></Field>
+                <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:'6px'}}>
+                  <Btn color="red"   full onClick={() => doBan(true)}>🔨 Ban</Btn>
+                  <Btn color="green" full onClick={() => doBan(false)}>✅ Unban</Btn>
+                </div>
+                {banSt && <div style={{fontSize:'10px',marginTop:'8px',color:stColor(banStType)}}>{banSt}</div>}
+              </Card>
+
+              {/* Set Plan */}
+              <Card title="Set Plan">
+                <Field label="Username"><input value={planU} onChange={e => setPlanU(e.target.value)} placeholder="Username..." style={inputSt}/></Field>
+                <Field label="Plan">
+                  <select value={planChoice} onChange={e => setPlanChoice(e.target.value)} style={selectSt}>
+                    <option value="free">Free</option>
+                    <option value="pro">Pro (200 CR min)</option>
+                    <option value="owner">Owner (unlimited)</option>
+                  </select>
+                </Field>
+                <Field label="Custom Credits (optional)"><input type="number" value={planCR} onChange={e => setPlanCR(e.target.value)} placeholder="Leave empty = default" min={0} style={inputSt}/></Field>
+                <Btn color="yellow" full onClick={doSetPlan}>⭐ Set Plan</Btn>
+                {planSt && <div style={{fontSize:'10px',marginTop:'8px',color:stColor(planStType)}}>{planSt}</div>}
+              </Card>
+            </div>
+
+            {/* Users table */}
+            <Card title="All Users" action={
+              <div style={{display:'flex',gap:'6px',alignItems:'center'}}>
+                <input value={userSearch} onChange={e => { setUserSearch(e.target.value); setUserPage(1); }}
+                  placeholder="Filter..." style={{...inputSt,width:'140px',padding:'4px 8px',fontSize:'9px'}}/>
+                <Btn color="dim" sm onClick={loadUsers}>↻ Refresh</Btn>
+              </div>
+            }>
+              <div style={{overflowX:'auto',borderRadius:'7px',border:'1px solid var(--b)'}}>
+                <table style={{width:'100%',borderCollapse:'collapse',fontSize:'10px'}}>
+                  <thead>
+                    <tr>
+                      {['Username','Credits','Plan','Last Seen','Status','Actions'].map(h => (
+                        <th key={h} style={{color:'var(--dim)',fontSize:'7.5px',textTransform:'uppercase',letterSpacing:'1px',
+                          padding:'7px 10px',textAlign:'left',background:'rgba(0,0,0,.3)',borderBottom:'1px solid var(--b)'}}>{h}</th>
+                      ))}
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {userSlice.length === 0
+                      ? <tr><td colSpan={6} style={{textAlign:'center',color:'var(--dim)',padding:'24px'}}>No users found.</td></tr>
+                      : userSlice.map(([u, d]) => (
+                        <tr key={u} className="tbl-row">
+                          <td style={{color:'var(--cyan)',cursor:'pointer',padding:'7px 10px',borderBottom:'1px solid var(--b2)'}}
+                            onClick={() => { setLookupInput(u); lookupUser(u); switchTab('users'); }}>@{u}</td>
+                          <td style={{padding:'7px 10px',borderBottom:'1px solid var(--b2)',color:'var(--yellow)'}}>{parseFloat(String(d?.credits ?? 0)).toFixed(1)} CR</td>
+                          <td style={{padding:'7px 10px',borderBottom:'1px solid var(--b2)'}}>
+                            <PlanBadge plan={d?.plan ?? 'free'} roles={d?.roles}/>
+                          </td>
+                          <td style={{padding:'7px 10px',borderBottom:'1px solid var(--b2)',color:'var(--dim)'}}>{fmtRelative(d?._updated)}</td>
+                          <td style={{padding:'7px 10px',borderBottom:'1px solid var(--b2)'}}>
+                            {d?.banned
+                              ? <span style={{display:'inline-block',fontSize:'7px',fontWeight:700,padding:'2px 7px',borderRadius:'10px',background:'rgba(255,45,107,.12)',color:'var(--pink)'}}>BANNED</span>
+                              : <span style={{color:'var(--green)',fontSize:'9px'}}>Active</span>
+                            }
+                          </td>
+                          <td style={{padding:'7px 10px',borderBottom:'1px solid var(--b2)'}}>
+                            <div style={{display:'flex',gap:'4px'}}>
+                              <Btn color="dim" xs onClick={() => { setLookupInput(u); lookupUser(u); }}>👤</Btn>
+                              <Btn color="dim" xs onClick={() => { switchTab('inbox'); setTimeout(() => setInboxTo(u), 100); }}>✉</Btn>
+                              {d?.banned
+                                ? <Btn color="green" xs onClick={() => quickUnban(u)}>Unban</Btn>
+                                : <Btn color="red"   xs onClick={() => quickBanUser(u)}>Ban</Btn>
+                              }
+                            </div>
+                          </td>
+                        </tr>
+                      ))
+                    }
+                  </tbody>
+                </table>
+              </div>
+              {userPageCount > 1 && (
+                <div style={{display:'flex',gap:'5px',marginTop:'10px',justifyContent:'center',flexWrap:'wrap'}}>
+                  {Array.from({length: Math.min(userPageCount, 10)}, (_, i) => i + 1).map(p => (
+                    <button key={p} onClick={() => setUserPage(p)} className="pbtn-hover" style={{
+                      background: p === userPage ? 'rgba(0,229,255,.06)' : 'var(--bg3)',
+                      border: p === userPage ? '1px solid rgba(0,229,255,.4)' : '1px solid var(--b)',
+                      borderRadius:'4px',
+                      color: p === userPage ? 'var(--cyan)' : 'var(--dim)',
+                      fontSize:'8px',padding:'3px 9px',cursor:'pointer',fontFamily:'JetBrains Mono,monospace',
+                    }}>{p}</button>
+                  ))}
+                </div>
+              )}
+            </Card>
+          </div>
+        )}
+
+        {/* ══ REPORTS & PAYMENTS ════════════════════════════════════════════ */}
+        {activeTab === 'reports' && (
+          <div>
+            {/* Filter bar */}
+            <div style={{background:'var(--bg2)',border:'1px solid var(--b)',borderRadius:'10px',padding:'12px 16px',marginBottom:'16px'}}>
+              <div style={{display:'flex',flexWrap:'wrap',gap:'8px',alignItems:'center'}}>
+                <div style={{fontFamily:'Orbitron,sans-serif',fontSize:'8px',color:'var(--dim)',letterSpacing:'1px'}}>FILTER:</div>
+                <select value={rptType} onChange={e => setRptType(e.target.value)} style={{...selectSt,width:'auto',padding:'4px 8px',fontSize:'9px'}}>
+                  <option value="">All Types</option>
+                  <option value="payment">Payment</option>
+                  <option value="bug">Bug Report</option>
+                </select>
+                <select value={rptStatus} onChange={e => setRptStatus(e.target.value)} style={{...selectSt,width:'auto',padding:'4px 8px',fontSize:'9px'}}>
+                  <option value="">All Status</option>
+                  <option value="pending">Pending</option>
+                  <option value="confirmed">Confirmed</option>
+                  <option value="rejected">Rejected</option>
+                </select>
+                <input value={rptFrom} onChange={e => setRptFrom(e.target.value)}
+                  onKeyDown={e => e.key === 'Enter' && loadReports()}
+                  placeholder="Filter username..." style={{...inputSt,width:'160px',padding:'4px 8px',fontSize:'9px'}}/>
+                <Btn color="cyan" sm onClick={loadReports}>Search</Btn>
+                <Btn color="dim" sm onClick={() => { setRptType(''); setRptStatus(''); setRptFrom(''); setTimeout(loadReports, 50); }}>Clear</Btn>
+                <div style={{flex:1}}/>
+                <span style={{fontSize:'9px',color:'var(--dim)'}}>{allReports.length} reports</span>
+              </div>
+            </div>
+
+            <Card title="Reports & Payments" action={<Btn color="dim" sm onClick={loadReports}>↻ Refresh</Btn>}>
+              <div style={{overflowX:'auto',borderRadius:'7px',border:'1px solid var(--b)'}}>
+                <table style={{width:'100%',borderCollapse:'collapse',fontSize:'10px'}}>
+                  <thead>
+                    <tr>
+                      {['Time','Type','From','Amount','Status','Actions'].map(h => (
+                        <th key={h} style={{color:'var(--dim)',fontSize:'7.5px',textTransform:'uppercase',letterSpacing:'1px',
+                          padding:'7px 10px',textAlign:'left',background:'rgba(0,0,0,.3)',borderBottom:'1px solid var(--b)'}}>{h}</th>
+                      ))}
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {rptSlice.length === 0
+                      ? <tr><td colSpan={6} style={{textAlign:'center',color:'var(--dim)',padding:'24px'}}><span className="spin">⟳</span> Loading...</td></tr>
+                      : rptSlice.map(rpt => (
+                        <tr key={rpt.id} className="tbl-row">
+                          <td style={{padding:'7px 10px',borderBottom:'1px solid var(--b2)',color:'var(--dim)',fontSize:'9px'}}>{fmtRelative(rpt.time)}</td>
+                          <td style={{padding:'7px 10px',borderBottom:'1px solid var(--b2)'}}>
+                            <span style={{display:'inline-block',fontSize:'7px',fontWeight:700,padding:'2px 7px',borderRadius:'10px',
+                              background: rpt.type === 'payment' ? 'rgba(0,255,170,.12)' : 'rgba(255,140,0,.12)',
+                              color: rpt.type === 'payment' ? 'var(--green)' : 'var(--orange)'}}>
+                              {(rpt.type ?? 'bug').toUpperCase()}
+                            </span>
+                          </td>
+                          <td style={{padding:'7px 10px',borderBottom:'1px solid var(--b2)',color:'var(--cyan)'}}>@{rpt.from ?? '?'}</td>
+                          <td style={{padding:'7px 10px',borderBottom:'1px solid var(--b2)'}}>
+                            {rpt.type === 'payment'
+                              ? <><span style={{color:'var(--yellow)'}}>{rpt.paymentCR ?? '?'} CR</span><br/><span style={{color:'var(--dim)',fontSize:'8px'}}>{rpt.paymentTotal ?? ''}</span></>
+                              : <span style={{color:'var(--dim)',fontSize:'9px'}}>—</span>
+                            }
+                          </td>
+                          <td style={{padding:'7px 10px',borderBottom:'1px solid var(--b2)'}}>
+                            <StatusBadge status={rpt.status}/>
+                          </td>
+                          <td style={{padding:'7px 10px',borderBottom:'1px solid var(--b2)'}}>
+                            <div style={{display:'flex',gap:'4px'}}>
+                              {rpt.type === 'payment' && rpt.status === 'pending'
+                                ? <Btn color="green" xs onClick={() => openReportModal(rpt)}>Review</Btn>
+                                : <>
+                                    <Btn color="dim" xs onClick={() => alert(`Report #${rpt.id}\nFrom: @${rpt.from}\nType: ${rpt.type}\nStatus: ${rpt.status}\n\n${(rpt.message ?? '').substring(0,500)}`)}>View</Btn>
+                                    {rpt.type === 'bug' && <Btn color="red" xs onClick={() => deleteReport(rpt.id)}>Del</Btn>}
+                                  </>
+                              }
+                            </div>
+                          </td>
+                        </tr>
+                      ))
+                    }
+                  </tbody>
+                </table>
+              </div>
+              {rptPageCount > 1 && (
+                <div style={{display:'flex',gap:'5px',marginTop:'10px',justifyContent:'center',flexWrap:'wrap'}}>
+                  {Array.from({length: Math.min(rptPageCount, 10)}, (_, i) => i + 1).map(p => (
+                    <button key={p} onClick={() => setRptPage(p)} className="pbtn-hover" style={{
+                      background: p === rptPage ? 'rgba(0,229,255,.06)' : 'var(--bg3)',
+                      border: p === rptPage ? '1px solid rgba(0,229,255,.4)' : '1px solid var(--b)',
+                      borderRadius:'4px',
+                      color: p === rptPage ? 'var(--cyan)' : 'var(--dim)',
+                      fontSize:'8px',padding:'3px 9px',cursor:'pointer',fontFamily:'JetBrains Mono,monospace',
+                    }}>{p}</button>
+                  ))}
+                </div>
+              )}
+            </Card>
+          </div>
+        )}
+
+        {/* ══ REDEEM CODES ══════════════════════════════════════════════════ */}
+        {activeTab === 'codes' && (
+          <div>
+            <Card title="Create Redeem Code">
+              <div style={{display:'grid',gridTemplateColumns:'1fr 1fr 1fr',gap:'10px'}}>
+                <Field label="Credits"><input type="number" value={codeCredits} onChange={e => setCodeCredits(Number(e.target.value))} min={1} max={10000} style={inputSt}/></Field>
+                <Field label="Max Uses"><input type="number" value={codeUses} onChange={e => setCodeUses(Number(e.target.value))} min={1} max={10000} style={inputSt}/></Field>
+                <Field label="Expires (days, blank=never)"><input type="number" value={codeExpiry} onChange={e => setCodeExpiry(e.target.value)} placeholder="30 days..." min={1} style={inputSt}/></Field>
+              </div>
+              <Btn color="cyan" onClick={createCode}>
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" width="11" height="11"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+                Create Code
+              </Btn>
+              {codeSt && <div style={{fontSize:'10px',marginTop:'8px',color:stColor(codeStType)}}>{codeSt}</div>}
+            </Card>
+
+            <Card title="Active Codes" action={<Btn color="dim" sm onClick={loadCodes}>↻ Refresh</Btn>}>
+              <div style={{overflowX:'auto',borderRadius:'7px',border:'1px solid var(--b)'}}>
+                <table style={{width:'100%',borderCollapse:'collapse',fontSize:'10px'}}>
+                  <thead>
+                    <tr>
+                      {['Code','Credits','Used / Max','Created','Expires','Action'].map(h => (
+                        <th key={h} style={{color:'var(--dim)',fontSize:'7.5px',textTransform:'uppercase',letterSpacing:'1px',
+                          padding:'7px 10px',textAlign:'left',background:'rgba(0,0,0,.3)',borderBottom:'1px solid var(--b)'}}>{h}</th>
+                      ))}
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {codes.length === 0
+                      ? <tr><td colSpan={6} style={{textAlign:'center',color:'var(--dim)',padding:'24px'}}>No codes. Create one above.</td></tr>
+                      : codes.map(c => {
+                          const expired = c.expiresAt && new Date(c.expiresAt) < new Date();
+                          const usePct = c.maxUses > 0 ? Math.round(c.uses / c.maxUses * 100) : 0;
+                          const barColor = usePct >= 100 ? 'var(--pink)' : usePct > 70 ? 'var(--yellow)' : 'var(--green)';
+                          return (
+                            <tr key={c.code} className="tbl-row">
+                              <td style={{padding:'7px 10px',borderBottom:'1px solid var(--b2)',color:'var(--cyan)',fontWeight:700}}>{c.code}</td>
+                              <td style={{padding:'7px 10px',borderBottom:'1px solid var(--b2)',color:'var(--yellow)'}}>{c.credits} CR</td>
+                              <td style={{padding:'7px 10px',borderBottom:'1px solid var(--b2)'}}>
+                                <div style={{fontSize:'9px'}}>{c.uses} / {c.maxUses}</div>
+                                <div style={{height:'3px',background:'var(--b2)',borderRadius:'2px',marginTop:'3px',width:'60px'}}>
+                                  <div style={{height:'3px',background:barColor,borderRadius:'2px',width:`${Math.min(usePct,100)}%`}}/>
+                                </div>
+                              </td>
+                              <td style={{padding:'7px 10px',borderBottom:'1px solid var(--b2)',color:'var(--dim)'}}>{fmtRelative(c.createdAt)}</td>
+                              <td style={{padding:'7px 10px',borderBottom:'1px solid var(--b2)',color: expired ? 'var(--pink)' : 'var(--dim)'}}>
+                                {c.expiresAt ? new Date(c.expiresAt).toLocaleDateString('id-ID') : 'Never'}
+                                {expired && <span style={{color:'var(--pink)'}}> (expired)</span>}
+                              </td>
+                              <td style={{padding:'7px 10px',borderBottom:'1px solid var(--b2)'}}>
+                                <Btn color="red" xs onClick={() => deleteCode(c.code)}>Delete</Btn>
+                              </td>
+                            </tr>
+                          );
+                        })
+                    }
+                  </tbody>
+                </table>
+              </div>
+            </Card>
+          </div>
+        )}
+
+        {/* ══ INBOX ══════════════════════════════════════════════════════════ */}
+        {activeTab === 'inbox' && (
+          <div>
+            <Card title="Send Message to User Inbox">
+              <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:'12px'}}>
+                <div>
+                  <Field label="To (Roblox Username)"><input value={inboxTo} onChange={e => setInboxTo(e.target.value)} placeholder="username..." style={inputSt}/></Field>
+                  <Field label="Subject"><input value={inboxSubject} onChange={e => setInboxSubject(e.target.value)} placeholder="Subject line..." style={inputSt}/></Field>
+                  <Field label="Type">
+                    <select value={inboxType} onChange={e => setInboxType(e.target.value)} style={selectSt}>
+                      <option value="general">General</option>
+                      <option value="warning">⚠️ Warning</option>
+                      <option value="reward">🎁 Reward</option>
+                      <option value="system">⚙️ System</option>
+                      <option value="payment">💳 Payment</option>
+                    </select>
+                  </Field>
+                </div>
+                <div>
+                  <Field label="Message Content">
+                    <textarea value={inboxContent} onChange={e => setInboxContent(e.target.value)}
+                      placeholder="Write your message..."
+                      style={{...inputSt,minHeight:'120px',resize:'vertical'}}/>
+                  </Field>
+                  <Btn color="cyan" full onClick={sendInbox}>
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" width="11" height="11"><line x1="22" y1="2" x2="11" y2="13"/><polygon points="22 2 15 22 11 13 2 9 22 2"/></svg>
+                    Send Message
+                  </Btn>
+                  {inboxSt && <div style={{fontSize:'10px',marginTop:'8px',color:stColor(inboxStType)}}>{inboxSt}</div>}
+                </div>
+              </div>
+            </Card>
+
+            <Card title="Broadcast (Send to Multiple)">
+              <Field label="Recipients (comma-separated usernames, or 'all')">
+                <input value={bcRecipients} onChange={e => setBcRecipients(e.target.value)} placeholder="user1, user2, user3 ... or 'all'" style={inputSt}/>
+              </Field>
+              <Field label="Subject">
+                <input value={bcSubject} onChange={e => setBcSubject(e.target.value)} placeholder="Broadcast subject..." style={inputSt}/>
+              </Field>
+              <Field label="Message">
+                <textarea value={bcContent} onChange={e => setBcContent(e.target.value)} placeholder="Broadcast message..." style={{...inputSt,resize:'vertical',minHeight:'70px'}}/>
+              </Field>
+              <Btn color="yellow" onClick={sendBroadcast}>
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" width="11" height="11"><polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5"/><path d="M19.07 4.93a10 10 0 010 14.14"/></svg>
+                Send Broadcast
+              </Btn>
+              {bcSt && <div style={{fontSize:'10px',marginTop:'8px',color:stColor(bcStType)}}>{bcSt}</div>}
+            </Card>
+          </div>
+        )}
+
+        {/* ══ LOGS ════════════════════════════════════════════════════════════ */}
+        {activeTab === 'logs' && (
+          <div>
+            <Card title="Activity Log" action={
+              <div style={{display:'flex',gap:'6px'}}>
+                <select value={logFilter} onChange={e => setLogFilter(e.target.value)} style={{...selectSt,width:'auto',padding:'3px 8px',fontSize:'8px'}}>
+                  <option value="">All</option>
+                  <option value="give-credits">Credits</option>
+                  <option value="ban">Ban</option>
+                  <option value="execute_json">AI Commands</option>
+                </select>
+                <Btn color="dim" sm onClick={loadLogs}>↻ Refresh</Btn>
+              </div>
+            }>
+              <div style={{background:'rgba(0,0,0,.4)',border:'1px solid var(--b)',borderRadius:'6px',padding:'8px',maxHeight:'280px',overflowY:'auto',fontSize:'9px',lineHeight:'1.7'}}>
+                {logs.length === 0
+                  ? <div style={{color:'var(--dim)'}}>No logs yet.</div>
+                  : logs.map((l, i) => {
+                      const t = l.ts ? new Date(l.ts).toLocaleTimeString('id-ID', { hour12: false }) : '?';
+                      const color = l.action === 'ban' ? 'var(--pink)' : l.action?.includes('credit') ? 'var(--yellow)' : 'var(--green)';
+                      return (
+                        <div key={i} style={{color}}>
+                          [{t}] <strong>{l.action ?? '?'}</strong>
+                          {l.user   ? ` by @${l.user}`   : ''}
+                          {l.target ? ` → @${l.target}`  : ''}
+                          {l.name   ? ` (${l.name})`     : ''}
+                        </div>
+                      );
+                    })
+                }
+              </div>
+            </Card>
+
+            <Card title="Command History" action={<Btn color="dim" sm onClick={loadHistory}>↻ Refresh</Btn>}>
+              <div style={{background:'rgba(0,0,0,.4)',border:'1px solid var(--b)',borderRadius:'6px',padding:'8px',maxHeight:'280px',overflowY:'auto',fontSize:'9px',lineHeight:'1.7'}}>
+                {history.length === 0
+                  ? <div style={{color:'var(--dim)'}}>No history.</div>
+                  : history.map((h, i) => {
+                      const t = h.ts ? new Date(h.ts).toLocaleTimeString('id-ID', { hour12: false }) : '?';
+                      return (
+                        <div key={i} style={{color:'var(--dim)'}}>
+                          [{t}] <span style={{color:'var(--cyan)'}}>{h.action ?? '?'}</span>
+                          {h.user    ? ` by @${h.user}`   : ''}
+                          {h.details ? ` — ${String(h.details).substring(0,60)}` : ''}
+                        </div>
+                      );
+                    })
+                }
+              </div>
+            </Card>
+          </div>
+        )}
+
       </div>
     </>
   );
 }
+
+// ─── SUB-COMPONENTS ──────────────────────────────────────────────────────────
+
+function Card({ title, icon, action, children }: {
+  title: string;
+  icon?: React.ReactNode;
+  action?: React.ReactNode;
+  children: React.ReactNode;
+}) {
+  return (
+    <div style={{background:'var(--bg2)',border:'1px solid var(--b)',borderRadius:'10px',padding:'16px',marginBottom:'0'}}>
+      <div style={{fontFamily:'Orbitron,sans-serif',fontSize:'8px',color:'var(--cyan)',letterSpacing:'2px',textTransform:'uppercase',
+        marginBottom:'12px',display:'flex',alignItems:'center',justifyContent:'space-between',gap:'8px'}}>
+        <div style={{display:'flex',alignItems:'center',gap:'6px'}}>{icon}{title}</div>
+        {action && <div>{action}</div>}
+      </div>
+      {children}
+    </div>
+  );
+}
+
+function Field({ label, children }: { label: string; children: React.ReactNode }) {
+  return (
+    <div style={{marginBottom:'10px'}}>
+      <label style={{fontSize:'8px',color:'var(--dim)',textTransform:'uppercase',letterSpacing:'1px',display:'block',marginBottom:'4px'}}>{label}</label>
+      {children}
+    </div>
+  );
+}
+
+type BtnColor = 'cyan'|'green'|'red'|'yellow'|'purple'|'dim';
+
+function Btn({
+  color = 'dim', full, sm, xs, onClick, children, disabled,
+}: {
+  color?: BtnColor;
+  full?: boolean;
+  sm?: boolean;
+  xs?: boolean;
+  onClick?: () => void;
+  children?: React.ReactNode;
+  disabled?: boolean;
+}) {
+  const bgMap: Record<BtnColor, string> = {
+    cyan:   'linear-gradient(135deg,var(--cyan),#0088ff)',
+    green:  'rgba(0,255,170,.12)',
+    red:    'rgba(255,45,107,.12)',
+    yellow: 'rgba(255,214,0,.12)',
+    purple: 'rgba(136,0,255,.12)',
+    dim:    'rgba(255,255,255,.05)',
+  };
+  const colorMap: Record<BtnColor, string> = {
+    cyan:   '#030312',
+    green:  'var(--green)',
+    red:    'var(--pink)',
+    yellow: 'var(--yellow)',
+    purple: '#bb55ff',
+    dim:    'var(--text)',
+  };
+  const borderMap: Record<BtnColor, string> = {
+    cyan:   'none',
+    green:  '1px solid rgba(0,255,170,.25)',
+    red:    '1px solid rgba(255,45,107,.25)',
+    yellow: '1px solid rgba(255,214,0,.25)',
+    purple: '1px solid rgba(136,0,255,.25)',
+    dim:    '1px solid var(--b)',
+  };
+  const pad = xs ? '3px 7px' : sm ? '4px 9px' : '7px 14px';
+  const fs  = xs ? '6.5px'  : sm ? '7px'      : '7.5px';
+
+  return (
+    <button
+      onClick={onClick}
+      disabled={disabled}
+      className="btn-hover"
+      style={{
+        padding: pad,
+        borderRadius:'6px',
+        border: borderMap[color],
+        background: bgMap[color],
+        color: colorMap[color],
+        fontFamily:'Orbitron,sans-serif',
+        fontSize: fs,
+        fontWeight:700,
+        cursor: disabled ? 'not-allowed' : 'pointer',
+        letterSpacing:'1px',
+        display:'inline-flex',alignItems:'center',gap:'5px',whiteSpace:'nowrap',
+        width: full ? '100%' : undefined,
+        justifyContent: full ? 'center' : undefined,
+        opacity: disabled ? .35 : 1,
+        transition:'.15s',
+      }}
+    >{children}</button>
+  );
+}
+
+function PlanBadge({ plan, roles }: { plan: string; roles?: string[] }) {
+  const map: Record<string, { bg: string; color: string }> = {
+    free:  { bg:'rgba(58,74,122,.3)',      color:'var(--dim)' },
+    pro:   { bg:'rgba(0,229,255,.12)',     color:'var(--cyan)' },
+    owner: { bg:'rgba(255,214,0,.12)',     color:'var(--yellow)' },
+    admin: { bg:'rgba(136,0,255,.12)',     color:'#bb55ff' },
+  };
+  const s = map[plan] ?? map.free;
+  return (
+    <>
+      <span style={{display:'inline-block',fontSize:'7px',fontWeight:700,padding:'2px 7px',borderRadius:'10px',background:s.bg,color:s.color,fontFamily:'Orbitron,monospace',letterSpacing:'.5px'}}>
+        {plan.toUpperCase()}
+      </span>
+      {(roles ?? []).includes('admin') && (
+        <span style={{display:'inline-block',fontSize:'7px',fontWeight:700,padding:'2px 7px',borderRadius:'10px',background:'rgba(136,0,255,.12)',color:'#bb55ff',fontFamily:'Orbitron,monospace',letterSpacing:'.5px',marginLeft:'3px'}}>
+          ADMIN
+        </span>
+      )}
+    </>
+  );
+}
+
+function StatusBadge({ status }: { status?: string }) {
+  const map: Record<string, { bg: string; color: string }> = {
+    pending:   { bg:'rgba(255,214,0,.12)',  color:'var(--yellow)' },
+    confirmed: { bg:'rgba(0,255,170,.12)',  color:'var(--green)' },
+    rejected:  { bg:'rgba(255,45,107,.12)', color:'var(--pink)' },
+  };
+  const s = status ? (map[status] ?? { bg:'rgba(58,74,122,.3)', color:'var(--dim)' }) : { bg:'rgba(58,74,122,.3)', color:'var(--dim)' };
+  return (
+    <span style={{display:'inline-block',fontSize:'7px',fontWeight:700,padding:'2px 7px',borderRadius:'10px',background:s.bg,color:s.color,fontFamily:'Orbitron,monospace',letterSpacing:'.5px'}}>
+      {(status ?? 'NONE').toUpperCase()}
+    </span>
+  );
+}
+
+function SearchIcon() {
+  return (
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" width="12" height="12">
+      <circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/>
+    </svg>
+  );
+}
+
+// ─── SHARED INPUT STYLES ────────────────────────────────────────────────────
+
+const inputSt: React.CSSProperties = {
+  width:'100%',background:'var(--bg3)',border:'1px solid var(--b)',borderRadius:'5px',
+  padding:'7px 10px',color:'white',fontFamily:'JetBrains Mono,monospace',fontSize:'11px',
+  outline:'none',
+};
+
+const selectSt: React.CSSProperties = {
+  ...inputSt,cursor:'pointer',appearance:'none' as 'none',
+};
