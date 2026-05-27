@@ -1,9 +1,10 @@
 'use client';
 
 import Script from 'next/script';
+import { use } from 'react';
 
 /* ─────────────────────────────────────────────────────────────────────────────
-   Stub declarations — implementations will live in js/chats.ts (added later)
+   Stub declarations — implementations in /public/js/chats.js
 ───────────────────────────────────────────────────────────────────────────── */
 declare function openAvatarModal(): void;
 declare function openSettings(): void;
@@ -39,35 +40,24 @@ declare function generateGuiFromAI(): void;
 declare function copyPreviewCode(): void;
 declare function copyShareText(): void;
 
-/* ─────────────────────────────────────────────────────────────────────────────
-   Component
-───────────────────────────────────────────────────────────────────────────── */
-export default function ChatsPage() {
+interface PageProps {
+  params: Promise<{ id: string }>;
+}
+
+export default function ChatsPage({ params }: PageProps) {
+  const { id } = use(params);
+
   return (
     <>
       {/* ── External scripts ─────────────────────────────────────────── */}
-      <Script
-        src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"
-        strategy="beforeInteractive"
-      />
-      <Script
-        src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/highlight.min.js"
-        strategy="beforeInteractive"
-      />
-      <Script
-        src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/languages/lua.min.js"
-        strategy="beforeInteractive"
-      />
-      <Script
-        src="https://challenges.cloudflare.com/turnstile/v0/api.js?render=explicit"
-        strategy="lazyOnload"
-      />
-      {/* App scripts — will be implemented later */}
-      {/* <Script src="/js/system_prompt.js" strategy="beforeInteractive" /> */}
-      {/* <Script src="/js/chats.js" strategy="afterInteractive" /> */}
+      <Script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js" strategy="beforeInteractive" />
+      <Script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/highlight.min.js" strategy="beforeInteractive" />
+      <Script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/languages/lua.min.js" strategy="beforeInteractive" />
+      <Script src="https://challenges.cloudflare.com/turnstile/v0/api.js?render=explicit" strategy="lazyOnload" />
+      <Script src="/js/chats.js" strategy="afterInteractive" />
 
-      {/* ── Component-scoped CSS ──────────────────────────────────────── */}
       <style>{`
+        @import url('https://fonts.googleapis.com/css2?family=Orbitron:wght@400;700;900&family=JetBrains+Mono:wght@300;400;500;700&display=swap');
         @import url('https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/styles/atom-one-dark.min.css');
 
         /* ── DESIGN TOKENS ── */
@@ -83,6 +73,18 @@ export default function ChatsPage() {
           --btn-h: 32px; --btn-sm: 28px;
         }
 
+        *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+        html, body {
+          height: 100%;
+          background: var(--bg);
+          color: var(--text);
+          font-family: 'JetBrains Mono', monospace;
+          font-size: 13px;
+          line-height: 1.5;
+          overflow: hidden;
+        }
+
         /* ── GRID BG ── */
         body::before {
           content:'';position:fixed;inset:0;
@@ -91,8 +93,10 @@ export default function ChatsPage() {
             linear-gradient(90deg,rgba(0,229,255,.012) 1px,transparent 1px);
           background-size:40px 40px;pointer-events:none;z-index:0;
         }
-        ::-webkit-scrollbar{width:2px;height:2px;}
-        ::-webkit-scrollbar-thumb{background:var(--b);border-radius:2px;}
+
+        ::-webkit-scrollbar{width:3px;height:3px;}
+        ::-webkit-scrollbar-thumb{background:var(--b);border-radius:3px;}
+        ::-webkit-scrollbar-track{background:transparent;}
 
         /* ── PAGE LOADER ── */
         #pageLoader{
@@ -101,7 +105,7 @@ export default function ChatsPage() {
           gap:16px;transition:opacity .5s ease;
         }
         #pageLoader.hide{opacity:0;pointer-events:none;}
-        .pl-logo{width:72px;height:72px;border-radius:18px;overflow:hidden;border:2px solid rgba(0,229,255,.4);}
+        .pl-logo{width:72px;height:72px;border-radius:18px;overflow:hidden;border:2px solid rgba(0,229,255,.4);flex-shrink:0;}
         .pl-logo img{width:100%;height:100%;object-fit:cover;display:block;}
         .pl-title{font-family:'Orbitron',sans-serif;font-size:22px;font-weight:900;
           background:linear-gradient(135deg,var(--cyan),var(--purple));
@@ -111,7 +115,7 @@ export default function ChatsPage() {
         .pl-txt{font-size:10px;color:rgba(0,229,255,.5);letter-spacing:1px;min-height:16px;text-align:center;}
 
         /* ── APP SHELL ── */
-        #app{display:grid;grid-template-columns:255px 1fr;height:100vh;position:relative;z-index:1;transition:grid-template-columns .2s;}
+        #app{display:grid;grid-template-columns:255px 1fr;height:100vh;position:relative;z-index:1;transition:grid-template-columns .25s cubic-bezier(.4,0,.2,1);}
         #app.sb-hidden{grid-template-columns:0 1fr;}
 
         /* ── SIDEBAR ── */
@@ -122,6 +126,7 @@ export default function ChatsPage() {
         .sb-logo-text{font-family:'Orbitron',sans-serif;font-weight:900;font-size:12px;
           background:linear-gradient(135deg,var(--cyan),var(--purple));-webkit-background-clip:text;-webkit-text-fill-color:transparent;}
         .sb-logo-sub{font-size:8px;color:var(--dim);}
+
         .sb-user{padding:8px 12px;display:flex;align-items:center;gap:8px;border-bottom:1px solid var(--b);flex-shrink:0;}
         .sb-av{width:32px;height:32px;border-radius:50%;border:1.5px solid var(--cyan2);object-fit:cover;background:var(--bg3);flex-shrink:0;transition:.2s;cursor:pointer;}
         .sb-av:hover{border-color:var(--cyan);transform:scale(1.08);}
@@ -132,7 +137,11 @@ export default function ChatsPage() {
         .sb-gear svg{width:15px;height:15px;stroke:currentColor;fill:none;stroke-width:2;}
 
         /* ── CREDITS ── */
-        .creds{margin:7px 12px;padding:8px 12px;background:linear-gradient(135deg,rgba(255,214,0,.06),rgba(255,119,0,.06));border:1px solid rgba(255,214,0,.18);border-radius:var(--r);display:flex;align-items:center;justify-content:space-between;flex-shrink:0;cursor:pointer;transition:.15s;}
+        .creds{margin:7px 12px;padding:8px 12px;
+          background:linear-gradient(135deg,rgba(255,214,0,.06),rgba(255,119,0,.06));
+          border:1px solid rgba(255,214,0,.18);border-radius:var(--r);
+          display:flex;align-items:center;justify-content:space-between;
+          flex-shrink:0;cursor:pointer;transition:.15s;}
         .creds:hover{border-color:rgba(255,214,0,.35);}
         .creds.low{border-color:rgba(255,45,107,.4);background:rgba(255,45,107,.06);}
         .cred-v{font-family:'Orbitron',sans-serif;font-size:18px;color:var(--yellow);font-weight:700;}
@@ -141,7 +150,11 @@ export default function ChatsPage() {
 
         /* ── SIDEBAR BUTTONS ── */
         .sb-btn-group{display:flex;flex-direction:column;gap:4px;padding:0 12px 2px;flex-shrink:0;}
-        .btn-nc,.help-btn,.inbox-btn{display:flex;align-items:center;gap:7px;width:100%;height:var(--btn-h);padding:0 11px;border-radius:var(--r);font-family:'JetBrains Mono',monospace;font-size:11px;cursor:pointer;transition:background .15s,border-color .15s,color .15s;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
+        .btn-nc,.help-btn,.inbox-btn{
+          display:flex;align-items:center;gap:7px;width:100%;height:var(--btn-h);
+          padding:0 11px;border-radius:var(--r);font-family:'JetBrains Mono',monospace;
+          font-size:11px;cursor:pointer;transition:background .15s,border-color .15s,color .15s;
+          white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
         .btn-nc svg,.help-btn svg,.inbox-btn svg{width:13px;height:13px;stroke:currentColor;fill:none;stroke-width:2;flex-shrink:0;}
         .btn-nc{background:rgba(0,229,255,.06);border:1px solid var(--b);color:var(--cyan);}
         .btn-nc:hover{border-color:var(--cyan);background:var(--hover);}
@@ -155,14 +168,12 @@ export default function ChatsPage() {
 
         /* ── CONV LIST ── */
         .convs{flex:1;overflow-y:auto;padding:3px 7px;}
-        .convs::-webkit-scrollbar{width:2px;}
-        .convs::-webkit-scrollbar-thumb{background:var(--b);}
         .ci{padding:6px 9px;border-radius:6px;cursor:pointer;display:flex;align-items:center;gap:6px;transition:background .1s;}
         .ci:hover{background:var(--hover);}
         .ci.act{background:rgba(0,229,255,.06);border-left:2px solid var(--cyan);padding-left:7px;}
         .ci-title{font-size:11px;color:var(--text);flex:1;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
         .ci-time{font-size:9px;color:var(--dim);flex-shrink:0;}
-        .ci-del{font-size:10px;color:var(--dim);opacity:0;padding:1px 5px;cursor:pointer;background:none;border:none;border-radius:3px;}
+        .ci-del{font-size:10px;color:var(--dim);opacity:0;padding:1px 5px;cursor:pointer;background:none;border:none;border-radius:3px;transition:.1s;}
         .ci:hover .ci-del{opacity:1;}
         .ci-del:hover{color:var(--pink);background:rgba(255,45,107,.1);}
         .conv-empty{padding:20px 14px;text-align:center;color:var(--dim);font-size:11px;line-height:1.7;}
@@ -175,10 +186,12 @@ export default function ChatsPage() {
 
         /* ── CHAT PANEL ── */
         #chat{display:flex;flex-direction:column;overflow:hidden;position:relative;}
-        .plug-banner{padding:5px 14px;background:rgba(255,45,107,.08);border-bottom:1px solid rgba(255,45,107,.2);font-size:10px;color:var(--pink);display:flex;align-items:center;gap:7px;flex-shrink:0;}
+
+        .plug-banner{padding:5px 14px;background:rgba(255,45,107,.08);border-bottom:1px solid rgba(255,45,107,.2);font-size:10px;color:var(--pink);display:flex;align-items:center;gap:7px;flex-shrink:0;transition:.3s;}
         .plug-banner svg{width:11px;height:11px;stroke:currentColor;fill:none;stroke-width:2;flex-shrink:0;}
         .plug-banner a{color:var(--cyan);cursor:pointer;text-decoration:none;}
         .plug-banner.connected{background:rgba(0,255,170,.05);border-color:rgba(0,255,170,.2);color:var(--green);}
+
         .chat-hdr{padding:9px 16px;border-bottom:1px solid var(--b);background:var(--bg2);display:flex;align-items:center;gap:9px;flex-shrink:0;}
         .chat-title{font-family:'Orbitron',sans-serif;font-size:11px;font-weight:700;color:white;flex:1;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
         .proj-badge-hdr{font-size:9px;padding:3px 9px;border-radius:10px;background:rgba(255,170,50,.07);border:1px solid rgba(255,170,50,.2);color:rgba(255,170,50,.8);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:130px;flex-shrink:0;}
@@ -188,6 +201,7 @@ export default function ChatsPage() {
         .sdot{width:5px;height:5px;border-radius:50%;background:currentColor;}
         .sdot.pulse{animation:pd 1.8s infinite;}
         @keyframes pd{0%,100%{opacity:1}50%{opacity:.25}}
+
         .toggle-sw{width:38px;height:20px;border-radius:10px;background:var(--dim);border:none;cursor:pointer;position:relative;transition:.25s;flex-shrink:0;outline:none;}
         .toggle-sw.on{background:var(--cyan);}
         .toggle-sw::after{content:'';position:absolute;top:3px;left:3px;width:14px;height:14px;border-radius:50%;background:white;transition:.25s;box-shadow:0 1px 4px rgba(0,0,0,.4);}
@@ -201,22 +215,20 @@ export default function ChatsPage() {
         .tab-btn:hover:not(.act){color:var(--text);}
 
         /* ── MESSAGES ── */
-        #msgs{flex:1;overflow-y:auto;padding:14px 16px;display:flex;flex-direction:column;gap:10px;}
-        #msgs::-webkit-scrollbar{width:3px;}
-        #msgs::-webkit-scrollbar-thumb{background:var(--b);}
+        #msgs{flex:1;overflow-y:auto;padding:14px 16px;display:flex;flex-direction:column;gap:10px;scroll-behavior:smooth;}
         .welcome{display:flex;flex-direction:column;align-items:center;justify-content:center;flex:1;text-align:center;gap:12px;padding:30px 16px;color:var(--dim);}
         .wt{font-family:'Orbitron',sans-serif;font-size:22px;font-weight:900;background:linear-gradient(135deg,var(--cyan),var(--purple));-webkit-background-clip:text;-webkit-text-fill-color:transparent;}
         .ws{font-size:11.5px;line-height:1.9;max-width:340px;}
         .suggs{display:grid;grid-template-columns:1fr 1fr;gap:7px;max-width:440px;margin-top:4px;}
         .sugg{padding:9px 11px;background:var(--card);border:1px solid var(--b);border-radius:var(--r);cursor:pointer;transition:.18s;text-align:left;font-family:'JetBrains Mono',monospace;font-size:11px;color:var(--text);line-height:1.5;}
-        .sugg:hover{border-color:var(--cyan2);background:var(--hover);color:white;}
+        .sugg:hover{border-color:var(--cyan2);background:var(--hover);color:white;transform:translateY(-1px);}
         .sugg-title{color:var(--cyan);display:flex;align-items:center;gap:5px;margin-bottom:3px;font-size:10px;font-weight:700;}
         .sugg-title svg{width:12px;height:12px;stroke:currentColor;fill:none;stroke-width:2;flex-shrink:0;}
 
         /* ── BUBBLES ── */
         .msg{display:flex;gap:9px;animation:mi .22s ease;}
         .msg.user{flex-direction:row-reverse;}
-        @keyframes mi{from{opacity:0;transform:translateY(5px)}to{opacity:1;transform:none}}
+        @keyframes mi{from{opacity:0;transform:translateY(6px)}to{opacity:1;transform:none}}
         .av{width:30px;height:30px;border-radius:50%;flex-shrink:0;overflow:hidden;background:var(--bg3);}
         .av img{width:100%;height:100%;object-fit:cover;}
         .mb-wrap{max-width:82%;display:flex;flex-direction:column;gap:3px;min-width:0;}
@@ -228,6 +240,8 @@ export default function ChatsPage() {
         .msg-imgs{display:flex;flex-wrap:wrap;gap:5px;margin-bottom:7px;}
         .msg-img{max-width:160px;max-height:130px;border-radius:6px;object-fit:cover;border:1px solid var(--b);cursor:pointer;transition:.15s;}
         .msg-img:hover{border-color:var(--cyan);transform:scale(1.02);}
+
+        /* ── CODE BLOCKS ── */
         .code-block-wrap{position:relative;margin:8px 0;border-radius:7px;overflow:hidden;border:1px solid rgba(0,229,255,.1);}
         .code-lang-bar{display:flex;align-items:center;justify-content:space-between;padding:4px 10px;background:rgba(0,229,255,.06);border-bottom:1px solid rgba(0,229,255,.1);font-size:9px;color:var(--cyan);}
         .code-block-wrap pre{margin:0;}
@@ -248,6 +262,8 @@ export default function ChatsPage() {
         .bubble table{width:100%;border-collapse:collapse;margin:7px 0;font-size:11px;}
         .bubble th,.bubble td{padding:5px 9px;border:1px solid var(--b);}
         .bubble th{background:rgba(0,229,255,.06);color:var(--cyan);}
+
+        /* ── MSG ACTIONS ── */
         .msg-acts{display:flex;gap:2px;padding:2px;flex-wrap:wrap;}
         .mab{font-size:9px;color:var(--dim);background:none;border:1px solid transparent;cursor:pointer;padding:3px 6px;border-radius:4px;transition:.12s;display:flex;align-items:center;gap:3px;font-family:'JetBrains Mono',monospace;}
         .mab:hover{color:var(--cyan);border-color:var(--b);background:var(--card);}
@@ -265,7 +281,7 @@ export default function ChatsPage() {
 
         /* ── INPUT AREA ── */
         .inp-area{padding:9px 14px;border-top:1px solid var(--b);background:var(--bg2);flex-shrink:0;position:relative;}
-        .inp-box{background:var(--bg3);border:1px solid var(--b);border-radius:12px;transition:border-color .2s;overflow:hidden;}
+        .inp-box{background:var(--bg3);border:1px solid var(--b);border-radius:12px;transition:border-color .2s,box-shadow .2s;overflow:hidden;}
         .inp-box.drag-over{border-color:var(--cyan);box-shadow:0 0 0 2px rgba(0,229,255,.1);}
         .inp-box:focus-within{border-color:var(--cyan2);box-shadow:0 0 0 2px rgba(0,229,255,.04);}
         #inp{width:100%;background:transparent;border:none;outline:none;color:white;font-family:'JetBrains Mono',monospace;font-size:13px;padding:11px 14px;resize:none;min-height:44px;max-height:130px;line-height:1.55;display:block;}
@@ -293,9 +309,8 @@ export default function ChatsPage() {
         /* ── DROPDOWNS ── */
         .model-dd,.theme-dd{position:fixed;background:var(--bg3);border:1px solid var(--b);border-radius:var(--r);z-index:9000;display:none;box-shadow:0 8px 32px rgba(0,0,0,.95);}
         .model-dd{max-height:380px;overflow-y:auto;min-width:265px;}
-        .model-dd::-webkit-scrollbar{width:3px;}
-        .model-dd::-webkit-scrollbar-thumb{background:var(--b);}
-        .model-dd.open,.theme-dd.open{display:block;}
+        .model-dd.open,.theme-dd.open{display:block;animation:ddIn .15s ease;}
+        @keyframes ddIn{from{opacity:0;transform:translateY(6px)}to{opacity:1;transform:none}}
         .mg{padding:6px 11px 3px;font-size:9px;color:var(--dim);text-transform:uppercase;letter-spacing:2px;border-top:1px solid var(--b);}
         .mg:first-child{border-top:none;}
         .mo{padding:7px 11px;display:flex;align-items:center;gap:7px;cursor:pointer;transition:.1s;}
@@ -320,7 +335,7 @@ export default function ChatsPage() {
         .theme-opt-name{font-size:10px;color:var(--text);flex:1;font-family:'JetBrains Mono',monospace;}
         .theme-opt-check{width:12px;height:12px;color:var(--cyan);stroke:currentColor;fill:none;stroke-width:2.5;}
 
-        /* ── STEPS ── */
+        /* ── THINKING STEPS ── */
         .steps-wrap{display:flex;gap:9px;animation:mi .22s ease;}
         .steps-box{background:var(--bg2);border:1px solid var(--b);border-radius:2px 10px 10px 10px;padding:0;overflow:hidden;min-width:300px;max-width:520px;}
         .steps-hdr{padding:9px 13px 8px;display:flex;align-items:center;gap:7px;border-bottom:1px solid var(--b);}
@@ -329,7 +344,7 @@ export default function ChatsPage() {
         .steps-hdr-count{font-size:8px;color:var(--dim);}
         .steps-list{padding:4px 0;}
         .step-row{display:flex;align-items:flex-start;gap:7px;padding:3px 12px;font-size:11px;line-height:1.5;animation:stepIn .18s ease;}
-        @keyframes stepIn{from{opacity:0;transform:translateX(-3px)}to{opacity:1;transform:none}}
+        @keyframes stepIn{from{opacity:0;transform:translateX(-4px)}to{opacity:1;transform:none}}
         .step-ic{width:14px;flex-shrink:0;display:flex;align-items:center;justify-content:center;margin-top:1px;}
         .step-spin{width:10px;height:10px;border:1.5px solid rgba(0,229,255,.15);border-top-color:var(--cyan);border-radius:50%;animation:spin .6s linear infinite;}
         .step-check{width:10px;height:10px;color:var(--green);stroke:currentColor;fill:none;stroke-width:2.5;}
@@ -368,10 +383,11 @@ export default function ChatsPage() {
         .gui-resize{position:absolute;bottom:-4px;right:-4px;width:9px;height:9px;background:var(--cyan);border-radius:2px;cursor:se-resize;}
         .gui-props{width:210px;background:var(--bg2);border-left:1px solid var(--b);overflow-y:auto;padding:8px;flex-shrink:0;}
         .gui-prop-label{font-size:9px;color:var(--dim);margin-bottom:2px;margin-top:6px;}
-        .gui-prop-input{width:100%;background:var(--bg3);border:1px solid var(--b);border-radius:4px;padding:4px 7px;color:white;font-family:'JetBrains Mono',monospace;font-size:11px;outline:none;}
+        .gui-prop-input{width:100%;background:var(--bg3);border:1px solid var(--b);border-radius:4px;padding:4px 7px;color:white;font-family:'JetBrains Mono',monospace;font-size:11px;outline:none;transition:border-color .15s;}
         .gui-prop-input:focus{border-color:var(--cyan2);}
-        .gui-gen-btn{display:flex;align-items:center;gap:4px;height:var(--btn-sm);padding:0 12px;background:linear-gradient(135deg,var(--cyan),var(--purple));border:none;border-radius:6px;color:white;font-family:'Orbitron',sans-serif;font-size:10px;font-weight:700;cursor:pointer;white-space:nowrap;}
-        .gui-ai-btn{display:flex;align-items:center;gap:4px;height:var(--btn-sm);padding:0 11px;background:rgba(136,0,255,.15);border:1px solid rgba(136,0,255,.4);border-radius:6px;color:#cc55ff;font-family:'JetBrains Mono',monospace;font-size:10px;cursor:pointer;white-space:nowrap;}
+        .gui-gen-btn{display:flex;align-items:center;gap:4px;height:var(--btn-sm);padding:0 12px;background:linear-gradient(135deg,var(--cyan),var(--purple));border:none;border-radius:6px;color:white;font-family:'Orbitron',sans-serif;font-size:10px;font-weight:700;cursor:pointer;white-space:nowrap;transition:.15s;}
+        .gui-gen-btn:hover{opacity:.85;}
+        .gui-ai-btn{display:flex;align-items:center;gap:4px;height:var(--btn-sm);padding:0 11px;background:rgba(136,0,255,.15);border:1px solid rgba(136,0,255,.4);border-radius:6px;color:#cc55ff;font-family:'JetBrains Mono',monospace;font-size:10px;cursor:pointer;white-space:nowrap;transition:.15s;}
         .gui-ai-btn:hover{background:rgba(136,0,255,.25);}
         .gui-ai-btn svg,.gui-gen-btn svg{width:11px;height:11px;stroke:currentColor;fill:none;stroke-width:2;flex-shrink:0;}
         .gui-loading{position:absolute;inset:0;background:rgba(3,3,18,.85);display:none;align-items:center;justify-content:center;flex-direction:column;gap:10px;font-size:11px;color:var(--cyan);}
@@ -381,7 +397,8 @@ export default function ChatsPage() {
 
         /* ── MODALS ── */
         .ov{position:fixed;inset:0;background:rgba(3,3,18,.93);z-index:500;display:none;align-items:center;justify-content:center;backdrop-filter:blur(5px);padding:16px;}
-        .ov.show{display:flex;}
+        .ov.show{display:flex;animation:ovIn .2s ease;}
+        @keyframes ovIn{from{opacity:0}to{opacity:1}}
         .modal{background:var(--bg2);border:1px solid var(--b);border-radius:13px;padding:22px;width:500px;max-width:100%;box-shadow:0 24px 64px rgba(0,0,0,.9);max-height:90vh;overflow-y:auto;}
         .modal-t{font-family:'Orbitron',sans-serif;font-size:13px;font-weight:700;color:var(--cyan);margin-bottom:12px;display:flex;align-items:center;gap:8px;}
         .modal-t svg{width:16px;height:16px;stroke:currentColor;fill:none;stroke-width:2;flex-shrink:0;}
@@ -419,14 +436,15 @@ export default function ChatsPage() {
         .badge-pro{background:rgba(136,0,255,.12);color:#cc55ff;border:1px solid rgba(136,0,255,.3);padding:2px 8px;border-radius:10px;font-size:9px;font-weight:700;}
         .share-modal-ta{width:100%;background:var(--bg3);border:1px solid var(--b);border-radius:6px;padding:8px 10px;color:var(--text);font-family:'JetBrains Mono',monospace;font-size:10px;outline:none;resize:none;height:200px;margin-top:8px;}
 
-        /* ── MISC ── */
-        .hidden{display:none !important;}
+        /* ── STUDIO SUMMARY ── */
         .studio-summary-box{margin-top:8px;padding:8px 10px;background:rgba(0,255,170,.04);border:1px solid rgba(0,255,170,.15);border-radius:6px;font-size:10.5px;}
         .studio-summary-title{color:var(--green);font-size:9px;font-weight:700;margin-bottom:4px;display:flex;align-items:center;gap:4px;}
         .studio-summary-item{color:var(--text);padding:1px 0;display:flex;align-items:center;gap:5px;}
         .studio-summary-dot{display:inline-block;width:6px;height:6px;border-radius:50%;background:var(--green);flex-shrink:0;}
+
+        /* ── MENTION DD ── */
         .mention-dd{position:fixed;background:var(--bg3);border:1px solid var(--bb);border-radius:var(--r);z-index:8000;max-height:260px;overflow-y:auto;box-shadow:0 -10px 40px rgba(0,0,0,.97);min-width:290px;display:none;}
-        .mention-dd.open{display:block;}
+        .mention-dd.open{display:block;animation:ddIn .12s ease;}
         .mention-hdr{padding:5px 12px 4px;font-size:8px;color:var(--dim);text-transform:uppercase;letter-spacing:2px;border-bottom:1px solid var(--b);display:flex;align-items:center;gap:5px;}
         .mention-item{padding:7px 12px;display:flex;align-items:center;gap:8px;cursor:pointer;transition:.1s;}
         .mention-item:hover,.mention-item.sel{background:var(--hover);}
@@ -438,8 +456,13 @@ export default function ChatsPage() {
         .mention-name{font-size:11px;color:white;flex:1;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
         .mention-path{font-size:8px;color:var(--dim);}
         .mention-empty{padding:12px;font-size:10px;color:var(--dim);text-align:center;}
-        .cf-turnstile{border-radius:6px;overflow:hidden;}
+
+        /* ── TOAST ── */
         @keyframes toastIn{from{opacity:0;transform:translateX(12px)}to{opacity:1;transform:none}}
+        .nx-toast{font-family:'JetBrains Mono',monospace;}
+
+        /* ── MISC ── */
+        .hidden{display:none !important;}
 
         /* ── RESPONSIVE: TABLET ── */
         @media(max-width:900px){
@@ -490,17 +513,13 @@ export default function ChatsPage() {
         }
       `}</style>
 
-      {/* ── PAGE LOADER ─────────────────────────────────────────────────── */}
+      {/* ── PAGE LOADER ── */}
       <div id="pageLoader">
         <div className="pl-logo">
-          <img
-            src="nexusai.png"
-            alt="N"
+          <img src="/nexusai.png" alt="N"
             onError={(e) => {
               const el = e.currentTarget;
-              if (el.parentElement) {
-                el.parentElement.style.background = 'linear-gradient(135deg,#00e5ff,#8800ff)';
-              }
+              if (el.parentElement) el.parentElement.style.background = 'linear-gradient(135deg,#00e5ff,#8800ff)';
               el.style.display = 'none';
             }}
           />
@@ -510,28 +529,25 @@ export default function ChatsPage() {
         <div className="pl-txt" id="plTxt">Initializing...</div>
       </div>
 
-      {/* ── MENTION DROPDOWN ─────────────────────────────────────────────── */}
+      {/* ── MENTION DROPDOWN ── */}
       <div className="mention-dd" id="mentionDD">
         <div className="mention-hdr">
           <svg viewBox="0 0 24 24" width="10" height="10" stroke="currentColor" fill="none" strokeWidth="2">
-            <circle cx="12" cy="8" r="4" />
-            <path d="M20 21a8 8 0 10-16 0" />
+            <circle cx="12" cy="8" r="4" /><path d="M20 21a8 8 0 10-16 0" />
           </svg>
           <span id="mentionHdrTxt">Scripts &amp; Objects</span>
         </div>
         <div id="mentionList" />
       </div>
 
-      {/* ── APP ──────────────────────────────────────────────────────────── */}
-      <div id="app" className="hidden">
+      {/* ── APP — inject project id as data attribute for JS ── */}
+      <div id="app" className="hidden" data-project-id={id}>
 
         {/* ════ SIDEBAR ════ */}
         <div id="sb">
-
-          {/* Head */}
           <div className="sb-head">
             <div className="sb-logo">
-              <img src="nexusai.png" alt="N"
+              <img src="/nexusai.png" alt="N"
                 onError={(e) => {
                   const el = e.currentTarget;
                   if (el.parentElement) el.parentElement.style.background = 'linear-gradient(135deg,#00e5ff,#8800ff)';
@@ -545,15 +561,13 @@ export default function ChatsPage() {
             </div>
           </div>
 
-          {/* User row */}
           <div className="sb-user">
-            <img
-              className="sb-av" id="sbAv" src="nexusai.png" alt=""
+            <img className="sb-av" id="sbAv" src="/nexusai.png" alt=""
               onError={(e) => { e.currentTarget.style.opacity = '.3'; }}
               onClick={() => openAvatarModal()}
             />
             <div style={{ minWidth: 0, flex: 1 }}>
-              <div className="sb-un"   id="sbUn">-</div>
+              <div className="sb-un" id="sbUn">-</div>
               <div className="sb-role" id="sbRole">Roblox Developer</div>
             </div>
             <button className="sb-gear" onClick={() => openSettings()} aria-label="Settings">
@@ -564,15 +578,10 @@ export default function ChatsPage() {
             </button>
           </div>
 
-          {/* Credits */}
-          <div className="creds" id="credsEl"
-            onClick={() => { window.location.href = '/payment'; }}
-            role="button" aria-label="Credits">
+          <div className="creds" id="credsEl" onClick={() => { window.location.href = '/payment'; }} role="button" aria-label="Credits">
             <div>
-              <div className="cred-l"  id="credLabel">Credits</div>
-              <div style={{ fontSize: '8.5px', color: 'rgba(255,214,0,.5)', marginTop: '1px' }} id="credHint">
-                Click to buy more
-              </div>
+              <div className="cred-l" id="credLabel">Credits</div>
+              <div style={{ fontSize: '8.5px', color: 'rgba(255,214,0,.5)', marginTop: '1px' }} id="credHint">Click to buy more</div>
             </div>
             <div style={{ textAlign: 'right' }}>
               <div className="cred-v" id="credDisp">30</div>
@@ -580,38 +589,21 @@ export default function ChatsPage() {
             </div>
           </div>
 
-          {/* Sidebar buttons */}
           <div className="sb-btn-group">
             <button className="btn-nc" onClick={() => { window.location.href = '/dashboard'; }}>
-              <svg viewBox="0 0 24 24">
-                <path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z" />
-                <polyline points="9 22 9 12 15 12 15 22" />
-              </svg>
+              <svg viewBox="0 0 24 24"><path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z" /><polyline points="9 22 9 12 15 12 15 22" /></svg>
               <span id="dashLbl">Dashboard</span>
             </button>
-
             <button className="btn-nc" onClick={() => newChat()}>
-              <svg viewBox="0 0 24 24">
-                <line x1="12" y1="5" x2="12" y2="19" />
-                <line x1="5" y1="12" x2="19" y2="12" />
-              </svg>
+              <svg viewBox="0 0 24 24"><line x1="12" y1="5" x2="12" y2="19" /><line x1="5" y1="12" x2="19" y2="12" /></svg>
               <span id="newChatLbl">New Chat</span>
             </button>
-
-            <button className="help-btn" onClick={() => { window.location.href = 'agent.html'; }}>
-              <svg viewBox="0 0 24 24">
-                <circle cx="12" cy="12" r="10" />
-                <path d="M9.09 9a3 3 0 0 1 5.83 1c0 2-3 3-3 3" />
-                <line x1="12" y1="17" x2="12.01" y2="17" />
-              </svg>
+            <button className="help-btn" onClick={() => { window.location.href = '/agent'; }}>
+              <svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="10" /><path d="M9.09 9a3 3 0 0 1 5.83 1c0 2-3 3-3 3" /><line x1="12" y1="17" x2="12.01" y2="17" /></svg>
               <span id="helpBtnText">Need Help?</span>
             </button>
-
             <button className="inbox-btn" onClick={() => { window.location.href = '/inbox'; }}>
-              <svg viewBox="0 0 24 24">
-                <polyline points="22 12 16 12 14 15 10 15 8 12 2 12" />
-                <path d="M5.45 5.11L2 12v6a2 2 0 002 2h16a2 2 0 002-2v-6l-3.45-6.89A2 2 0 0016.76 4H7.24a2 2 0 00-1.79 1.11z" />
-              </svg>
+              <svg viewBox="0 0 24 24"><polyline points="22 12 16 12 14 15 10 15 8 12 2 12" /><path d="M5.45 5.11L2 12v6a2 2 0 002 2h16a2 2 0 002-2v-6l-3.45-6.89A2 2 0 0016.76 4H7.24a2 2 0 00-1.79 1.11z" /></svg>
               <span id="inboxBtnText">Inbox</span>
               <span className="inbox-badge" id="inboxBadge">0</span>
             </button>
@@ -631,31 +623,20 @@ export default function ChatsPage() {
             YouTube: <span style={{ color: 'rgba(0,229,255,.6)' }}>NEXUS STUDIO</span>
           </div>
 
-          <div className="collapse-sb" id="collapseSbBtn"
-            onClick={() => toggleSidebar()} role="button" aria-label="Toggle sidebar">
-            <svg id="collapseSbIcon" viewBox="0 0 24 24">
-              <polyline points="15 18 9 12 15 6" />
-            </svg>
+          <div className="collapse-sb" id="collapseSbBtn" onClick={() => toggleSidebar()} role="button" aria-label="Toggle sidebar">
+            <svg id="collapseSbIcon" viewBox="0 0 24 24"><polyline points="15 18 9 12 15 6" /></svg>
           </div>
         </div>
-        {/* end #sb */}
 
         {/* ════ CHAT PANEL ════ */}
         <div id="chat">
-
-          {/* Plugin banner */}
           <div className="plug-banner" id="plugBanner">
-            <svg viewBox="0 0 24 24">
-              <circle cx="12" cy="12" r="10" />
-              <line x1="12" y1="8" x2="12" y2="12" />
-              <line x1="12" y1="16" x2="12.01" y2="16" />
-            </svg>
+            <svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="10" /><line x1="12" y1="8" x2="12" y2="12" /><line x1="12" y1="16" x2="12.01" y2="16" /></svg>
             <span id="plugBannerTxt">Plugin not connected —</span>
-            <a onClick={() => showInstall()}  id="plugInstallLink">How to connect</a>
+            <a onClick={() => showInstall()} id="plugInstallLink">How to connect</a>
             <a onClick={() => retryStudio()} style={{ marginLeft: '8px', color: 'var(--green)' }} id="plugReconnectLink">Reconnect</a>
           </div>
 
-          {/* Chat header */}
           <div className="chat-hdr">
             <div className="chat-title" id="chatTitle">NEXUS AI</div>
             <div className="proj-badge-hdr" id="hdrProjBadge" style={{ display: 'none' }} />
@@ -665,19 +646,13 @@ export default function ChatsPage() {
             </div>
           </div>
 
-          {/* Tabs */}
           <div className="chat-tabs">
             <button className="tab-btn act" id="tabChat" onClick={() => switchTab('chat')}>
-              <svg viewBox="0 0 24 24">
-                <path d="M21 15a2 2 0 01-2 2H7l-4 4V5a2 2 0 012-2h14a2 2 0 012 2z" />
-              </svg>
+              <svg viewBox="0 0 24 24"><path d="M21 15a2 2 0 01-2 2H7l-4 4V5a2 2 0 012-2h14a2 2 0 012 2z" /></svg>
               <span id="tabChatLbl">Chat</span>
             </button>
             <button className="tab-btn" id="tabGui" onClick={() => switchTab('gui')}>
-              <svg viewBox="0 0 24 24">
-                <rect x="3" y="3" width="18" height="18" rx="2" />
-                <path d="M3 9h18M9 21V9" />
-              </svg>
+              <svg viewBox="0 0 24 24"><rect x="3" y="3" width="18" height="18" rx="2" /><path d="M3 9h18M9 21V9" /></svg>
               <span id="tabGuiLbl">UI Editor</span>
             </button>
           </div>
@@ -687,8 +662,8 @@ export default function ChatsPage() {
             <div id="msgs">
               <div className="welcome" id="welcome">
                 <div style={{ width: '56px', height: '56px', borderRadius: '14px', overflow: 'hidden', border: '2px solid rgba(0,229,255,.3)' }}>
-                  <img src="nexusai.png" style={{ width: '100%', height: '100%', objectFit: 'cover' }}
-                    onError={(e) => { if (e.currentTarget.parentElement) e.currentTarget.parentElement.style.background = 'linear-gradient(135deg,#00e5ff,#8800ff)'; }}
+                  <img src="/nexusai.png" style={{ width: '100%', height: '100%', objectFit: 'cover' }}
+                    onError={(e) => { if (e.currentTarget.parentElement) e.currentTarget.parentElement.style.background = 'linear-gradient(135deg,#00e5ff,#8800ff)'; e.currentTarget.style.display = 'none'; }}
                   />
                 </div>
                 <div className="wt">NEXUS AI</div>
@@ -697,70 +672,36 @@ export default function ChatsPage() {
               </div>
             </div>
 
-            {/* Input area */}
             <div className="inp-area" id="inpArea">
               <div className="attach-row" id="attachRow" />
               <div className="inp-box" id="inpBox">
                 <textarea id="inp" placeholder="Ask NEXUS AI..." rows={1} />
                 <div className="inp-bar">
                   <div className="inp-l">
-                    <label htmlFor="fi" className="ib" title="Attach file" role="button" aria-label="Attach file">
-                      <svg viewBox="0 0 24 24">
-                        <path d="M21.44 11.05l-9.19 9.19a6 6 0 01-8.49-8.49l9.19-9.19a4 4 0 015.66 5.66l-9.2 9.19a2 2 0 01-2.83-2.83l8.49-8.48" />
-                      </svg>
+                    <label htmlFor="fi" className="ib" title="Attach file" role="button">
+                      <svg viewBox="0 0 24 24"><path d="M21.44 11.05l-9.19 9.19a6 6 0 01-8.49-8.49l9.19-9.19a4 4 0 015.66 5.66l-9.2 9.19a2 2 0 01-2.83-2.83l8.49-8.48" /></svg>
                     </label>
-                    <input
-                      type="file" id="fi"
-                      accept="image/*,.lua,.txt,.json,.js,.py,.html,.css"
-                      style={{ display: 'none' }}
-                      onChange={(e) => handleFile(e)}
-                      multiple
-                    />
-                    <button className="ib" onClick={() => clearChat()} title="Clear chat" aria-label="Clear chat">
-                      <svg viewBox="0 0 24 24">
-                        <polyline points="3 6 5 6 21 6" />
-                        <path d="M19 6v14a2 2 0 01-2 2H7a2 2 0 01-2-2V6m3 0V4a2 2 0 012-2h4a2 2 0 012 2v2" />
-                      </svg>
+                    <input type="file" id="fi" accept="image/*,.lua,.txt,.json,.js,.py,.html,.css" style={{ display: 'none' }} onChange={(e) => handleFile(e)} multiple />
+                    <button className="ib" onClick={() => clearChat()} title="Clear chat">
+                      <svg viewBox="0 0 24 24"><polyline points="3 6 5 6 21 6" /><path d="M19 6v14a2 2 0 01-2 2H7a2 2 0 01-2-2V6m3 0V4a2 2 0 012-2h4a2 2 0 012 2v2" /></svg>
                     </button>
-
-                    {/* Model selector */}
-                    <div className="inp-model" id="inpModelBtn"
-                      onClick={(e) => toggleMDD(e)} role="button" aria-label="Select model">
-                      <img id="inpMIcon" src="" alt=""
-                        onError={(e) => { e.currentTarget.style.display = 'none'; }}
-                        style={{ width: '13px', height: '13px', borderRadius: '2px', flexShrink: 0 }}
-                      />
+                    <div className="inp-model" id="inpModelBtn" onClick={(e) => toggleMDD(e)} role="button">
+                      <img id="inpMIcon" src="" alt="" onError={(e) => { e.currentTarget.style.display = 'none'; }} style={{ width: '13px', height: '13px', borderRadius: '2px', flexShrink: 0 }} />
                       <span className="inp-model-name" id="inpMName">Gemini 3.5 Flash</span>
                       <span className="inp-model-badge" id="inpMBadge" style={{ color: 'var(--cyan)' }}>FAST</span>
-                      <svg width="8" height="8" viewBox="0 0 24 24" stroke="currentColor" fill="none" strokeWidth="2"
-                        style={{ color: 'var(--dim)', flexShrink: 0 }}>
-                        <polyline points="6 9 12 15 18 9" />
-                      </svg>
+                      <svg width="8" height="8" viewBox="0 0 24 24" stroke="currentColor" fill="none" strokeWidth="2" style={{ color: 'var(--dim)', flexShrink: 0 }}><polyline points="6 9 12 15 18 9" /></svg>
                     </div>
-
-                    {/* Theme picker */}
-                    <button className="theme-picker-btn" id="themePickerBtn"
-                      onClick={(e) => toggleThemeDD(e)} title="Select Theme" aria-label="Select theme">
+                    <button className="theme-picker-btn" id="themePickerBtn" onClick={(e) => toggleThemeDD(e)} title="Select Theme">
                       <div className="theme-swatch" id="themeSwatchBtn" style={{ background: '#00e5ff' }} />
                       <span id="themePickerLabel">nexus_ai</span>
-                      <svg width="8" height="8" viewBox="0 0 24 24" stroke="currentColor" fill="none" strokeWidth="2"
-                        style={{ color: 'var(--dim)' }}>
-                        <polyline points="6 9 12 15 18 9" />
-                      </svg>
+                      <svg width="8" height="8" viewBox="0 0 24 24" stroke="currentColor" fill="none" strokeWidth="2" style={{ color: 'var(--dim)' }}><polyline points="6 9 12 15 18 9" /></svg>
                     </button>
                   </div>
-
-                  <button className="btn-cancel hidden" id="cancelBtn" onClick={() => cancelGen()} aria-label="Cancel">
-                    <svg viewBox="0 0 24 24">
-                      <line x1="18" y1="6" x2="6" y2="18" />
-                      <line x1="6" y1="6" x2="18" y2="18" />
-                    </svg>
+                  <button className="btn-cancel hidden" id="cancelBtn" onClick={() => cancelGen()}>
+                    <svg viewBox="0 0 24 24"><line x1="18" y1="6" x2="6" y2="18" /><line x1="6" y1="6" x2="18" y2="18" /></svg>
                   </button>
-                  <button className="btn-send" id="sendBtn" onClick={() => send()} aria-label="Send">
-                    <svg viewBox="0 0 24 24">
-                      <line x1="22" y1="2" x2="11" y2="13" />
-                      <polygon points="22 2 15 22 11 13 2 9 22 2" />
-                    </svg>
+                  <button className="btn-send" id="sendBtn" onClick={() => send()}>
+                    <svg viewBox="0 0 24 24"><line x1="22" y1="2" x2="11" y2="13" /><polygon points="22 2 15 22 11 13 2 9 22 2" /></svg>
                   </button>
                 </div>
               </div>
@@ -775,78 +716,46 @@ export default function ChatsPage() {
               <span style={{ fontSize: '10px', color: 'var(--dim)' }} id="guiAddLabel">Add:</span>
               {(['Frame', 'TextLabel', 'TextButton', 'TextBox', 'ImageLabel', 'ScrollingFrame'] as const).map((type) => (
                 <button key={type} className="gui-btn" onClick={() => addEl(type)}>
-                  {type === 'Frame'          && <svg viewBox="0 0 24 24"><rect x="3" y="3" width="18" height="18" rx="2" /></svg>}
-                  {type === 'TextLabel'      && <svg viewBox="0 0 24 24"><polyline points="4 7 4 4 20 4 20 7" /><line x1="9" y1="20" x2="15" y2="20" /><line x1="12" y1="4" x2="12" y2="20" /></svg>}
-                  {type === 'TextButton'     && <svg viewBox="0 0 24 24"><rect x="2" y="7" width="20" height="10" rx="3" /></svg>}
-                  {type === 'TextBox'        && <svg viewBox="0 0 24 24"><rect x="3" y="5" width="18" height="14" rx="2" /><line x1="7" y1="12" x2="17" y2="12" /></svg>}
-                  {type === 'ImageLabel'     && <svg viewBox="0 0 24 24"><rect x="3" y="3" width="18" height="18" rx="2" /><circle cx="8.5" cy="8.5" r="1.5" /><polyline points="21 15 16 10 5 21" /></svg>}
+                  {type === 'Frame' && <svg viewBox="0 0 24 24"><rect x="3" y="3" width="18" height="18" rx="2" /></svg>}
+                  {type === 'TextLabel' && <svg viewBox="0 0 24 24"><polyline points="4 7 4 4 20 4 20 7" /><line x1="9" y1="20" x2="15" y2="20" /><line x1="12" y1="4" x2="12" y2="20" /></svg>}
+                  {type === 'TextButton' && <svg viewBox="0 0 24 24"><rect x="2" y="7" width="20" height="10" rx="3" /></svg>}
+                  {type === 'TextBox' && <svg viewBox="0 0 24 24"><rect x="3" y="5" width="18" height="14" rx="2" /><line x1="7" y1="12" x2="17" y2="12" /></svg>}
+                  {type === 'ImageLabel' && <svg viewBox="0 0 24 24"><rect x="3" y="3" width="18" height="18" rx="2" /><circle cx="8.5" cy="8.5" r="1.5" /><polyline points="21 15 16 10 5 21" /></svg>}
                   {type === 'ScrollingFrame' && <svg viewBox="0 0 24 24"><rect x="3" y="3" width="18" height="18" rx="2" /><path d="M3 9h18" /></svg>}
                   {type === 'Frame' ? 'Frame' : type === 'TextLabel' ? 'Label' : type === 'TextButton' ? 'Button' : type === 'TextBox' ? 'Input' : type === 'ImageLabel' ? 'Image' : 'Scroll'}
                 </button>
               ))}
-
               <div style={{ marginLeft: 'auto', display: 'flex', gap: '4px', alignItems: 'center', flexWrap: 'wrap' }}>
-                {/* GUI model selector */}
-                <div className="inp-model" id="guiModelBtn"
-                  onClick={(e) => toggleGuiMDD(e)} style={{ maxWidth: '150px' }}>
-                  <img id="guiMIcon" src="" alt=""
-                    onError={(e) => { e.currentTarget.style.display = 'none'; }}
-                    style={{ width: '13px', height: '13px', borderRadius: '2px', flexShrink: 0 }}
-                  />
+                <div className="inp-model" id="guiModelBtn" onClick={(e) => toggleGuiMDD(e)} style={{ maxWidth: '150px' }}>
+                  <img id="guiMIcon" src="" alt="" onError={(e) => { e.currentTarget.style.display = 'none'; }} style={{ width: '13px', height: '13px', borderRadius: '2px', flexShrink: 0 }} />
                   <span className="inp-model-name" id="guiMName">Gemini 3.5 Flash</span>
                   <span className="inp-model-badge" id="guiMBadge" style={{ color: 'var(--cyan)' }}>FAST</span>
-                  <svg width="8" height="8" viewBox="0 0 24 24" stroke="currentColor" fill="none" strokeWidth="2"
-                    style={{ color: 'var(--dim)', flexShrink: 0 }}>
-                    <polyline points="6 9 12 15 18 9" />
-                  </svg>
+                  <svg width="8" height="8" viewBox="0 0 24 24" stroke="currentColor" fill="none" strokeWidth="2" style={{ color: 'var(--dim)', flexShrink: 0 }}><polyline points="6 9 12 15 18 9" /></svg>
                 </div>
                 <div className="model-dd" id="guiMDD" />
-
-                <select id="guiThemeSelect" className="settings-select"
-                  style={{ fontSize: '9px', padding: '3px 6px', maxWidth: '110px' }}
-                  onChange={(e) => applyGuiTheme(e.currentTarget.value)}>
+                <select id="guiThemeSelect" className="settings-select" style={{ fontSize: '9px', padding: '3px 6px', maxWidth: '110px' }} onChange={(e) => applyGuiTheme(e.currentTarget.value)}>
                   <option value="">Theme...</option>
-                  {['nexus_ai','aurora','candy','dark','default','midnight','studs'].map(t => (
-                    <option key={t} value={t}>{t}</option>
-                  ))}
-                  <option value="custom">custom (no theme)</option>
+                  {['nexus_ai','aurora','candy','dark','default','midnight','studs'].map(t => <option key={t} value={t}>{t}</option>)}
+                  <option value="custom">custom</option>
                 </select>
-
                 <button className="gui-ai-btn" onClick={() => openGuiAIChat()}>
-                  <svg viewBox="0 0 24 24">
-                    <path d="M9 18h6M12 2a7 7 0 0 1 7 7c0 2.38-1.19 4.47-3 5.74V17H8v-2.26C6.19 13.47 5 11.38 5 9a7 7 0 0 1 7-7z" />
-                  </svg>
+                  <svg viewBox="0 0 24 24"><path d="M9 18h6M12 2a7 7 0 0 1 7 7c0 2.38-1.19 4.47-3 5.74V17H8v-2.26C6.19 13.47 5 11.38 5 9a7 7 0 0 1 7-7z" /></svg>
                   <span id="guiAiBuildLbl">AI Build</span>
                 </button>
-
                 <button className="gui-btn" onClick={() => clearCanvas()}>
-                  <svg viewBox="0 0 24 24">
-                    <polyline points="3 6 5 6 21 6" />
-                    <path d="M19 6v14a2 2 0 01-2 2H7a2 2 0 01-2-2V6m3 0V4a2 2 0 012-2h4a2 2 0 012 2v2" />
-                  </svg>
+                  <svg viewBox="0 0 24 24"><polyline points="3 6 5 6 21 6" /><path d="M19 6v14a2 2 0 01-2 2H7a2 2 0 01-2-2V6m3 0V4a2 2 0 012-2h4a2 2 0 012 2v2" /></svg>
                   <span id="guiClearLbl">Clear</span>
                 </button>
-
                 <button className="gui-gen-btn" onClick={() => generateGuiCode()}>
-                  <svg viewBox="0 0 24 24">
-                    <polyline points="16 18 22 12 16 6" />
-                    <polyline points="8 6 2 12 8 18" />
-                  </svg>
+                  <svg viewBox="0 0 24 24"><polyline points="16 18 22 12 16 6" /><polyline points="8 6 2 12 8 18" /></svg>
                   <span id="guiExportLbl">Export</span>
                 </button>
-
-                <button className="gui-gen-btn"
-                  onClick={() => sendGuiToPlace()}
-                  style={{ background: 'linear-gradient(135deg,var(--green),var(--cyan))' }}>
-                  <svg viewBox="0 0 24 24">
-                    <line x1="22" y1="2" x2="11" y2="13" />
-                    <polygon points="22 2 15 22 11 13 2 9 22 2" />
-                  </svg>
+                <button className="gui-gen-btn" onClick={() => sendGuiToPlace()} style={{ background: 'linear-gradient(135deg,var(--green),var(--cyan))' }}>
+                  <svg viewBox="0 0 24 24"><line x1="22" y1="2" x2="11" y2="13" /><polygon points="22 2 15 22 11 13 2 9 22 2" /></svg>
                   <span id="guiToPlaceText">Send to Place</span>
                 </button>
               </div>
             </div>
-
             <div className="gui-main">
               <div className="gui-layers" id="guiLayers">
                 <div className="gui-layer-title" id="guiLayerTitle">Layers</div>
@@ -855,10 +764,7 @@ export default function ChatsPage() {
               <div className="gui-canvas">
                 <div className="gui-canvas-inner" id="guiCanvasInner">
                   <div className="gui-empty-hint" id="guiEmpty">
-                    <svg viewBox="0 0 24 24">
-                      <rect x="3" y="3" width="18" height="18" rx="2" />
-                      <path d="M3 9h18M9 21V9" />
-                    </svg>
+                    <svg viewBox="0 0 24 24"><rect x="3" y="3" width="18" height="18" rx="2" /><path d="M3 9h18M9 21V9" /></svg>
                     <div id="guiEmptyText">Add elements or click AI Build</div>
                   </div>
                 </div>
@@ -872,11 +778,8 @@ export default function ChatsPage() {
               </div>
             </div>
           </div>
-
         </div>
-        {/* end #chat */}
       </div>
-      {/* end #app */}
 
       {/* ════ MODALS ════ */}
 
@@ -884,10 +787,7 @@ export default function ChatsPage() {
       <div className="ov" id="avatarModal">
         <div className="modal" style={{ width: '340px', textAlign: 'center', padding: '26px' }}>
           <div style={{ fontFamily: "'Orbitron',sans-serif", fontSize: '13px', color: 'var(--cyan)', marginBottom: '14px' }} id="avatarModalName">-</div>
-          <img id="avatarModalImg" src="" alt=""
-            style={{ width: '110px', height: '110px', borderRadius: '50%', border: '3px solid var(--cyan)', objectFit: 'cover', margin: '0 auto 12px', display: 'block' }}
-            onError={(e) => { e.currentTarget.src = 'nexusai.png'; }}
-          />
+          <img id="avatarModalImg" src="" alt="" style={{ width: '110px', height: '110px', borderRadius: '50%', border: '3px solid var(--cyan)', objectFit: 'cover', margin: '0 auto 12px', display: 'block' }} onError={(e) => { e.currentTarget.src = '/nexusai.png'; }} />
           <div style={{ fontSize: '11px', color: 'var(--dim)', marginBottom: '3px' }} id="avatarModalRole">Developer</div>
           <div style={{ fontSize: '10px', color: 'var(--dim)' }} id="avatarModalId">-</div>
           <div className="modal-footer" style={{ justifyContent: 'center', marginTop: '14px' }}>
@@ -924,7 +824,6 @@ export default function ChatsPage() {
             <span id="settingsTitle">Settings</span>
           </div>
 
-          {/* Account */}
           <div className="settings-section">
             <div className="settings-title" id="settingsAccountTitle">Account</div>
             <div className="settings-row"><span style={{ color: 'white', fontWeight: 600 }} id="settingsUsername">-</span><span id="settingsBadge" /></div>
@@ -933,7 +832,6 @@ export default function ChatsPage() {
             <div className="settings-row"><span id="settingsRobloxIdLabel">Roblox ID</span><span id="settingsRobloxId" style={{ color: 'var(--dim)', fontSize: '10px' }}>-</span></div>
           </div>
 
-          {/* Daily credits */}
           <div className="settings-section">
             <div className="settings-title" id="dailyCreditsTitle">Daily Credits</div>
             <div className="settings-row"><span id="freePlanLabel">Free Plan</span><span style={{ color: 'var(--green)' }}>+2 CR / day</span></div>
@@ -944,7 +842,6 @@ export default function ChatsPage() {
             </div>
           </div>
 
-          {/* Play test */}
           <div className="settings-section">
             <div className="settings-title" id="playTestTitle">Auto Play Test</div>
             <div className="settings-row">
@@ -952,18 +849,14 @@ export default function ChatsPage() {
                 <div id="playTestLabel">Run play_test after inject</div>
                 <div className="settings-hint" id="playTestHint">Disable if PC crashes during play_test</div>
               </div>
-              <button className="toggle-sw on" id="playTestToggle" onClick={() => togglePlayTest()} aria-label="Toggle play test" />
+              <button className="toggle-sw on" id="playTestToggle" onClick={() => togglePlayTest()} />
             </div>
             <div className="settings-row">
               <span id="playTestDurLabel">Duration (seconds)</span>
-              <input type="number" id="playTestDurInput" className="settings-select"
-                style={{ width: '70px' }} min={5} max={120} defaultValue={15}
-                onChange={(e) => setPlayTestDur(e.currentTarget.value)}
-              />
+              <input type="number" id="playTestDurInput" className="settings-select" style={{ width: '70px' }} min={5} max={120} defaultValue={15} onChange={(e) => setPlayTestDur(e.currentTarget.value)} />
             </div>
           </div>
 
-          {/* Language */}
           <div className="settings-section">
             <div className="settings-title" id="langTitle">Language</div>
             <div className="settings-row">
@@ -975,7 +868,6 @@ export default function ChatsPage() {
             </div>
           </div>
 
-          {/* Report */}
           <div className="settings-section">
             <div className="settings-title" id="reportTitle">Report Issue</div>
             <textarea className="report-ta" id="reportTa" placeholder="Describe the issue..." />
@@ -988,7 +880,6 @@ export default function ChatsPage() {
             </div>
           </div>
 
-          {/* Admin (hidden by default) */}
           <div className="settings-section" id="adminSection" style={{ display: 'none' }}>
             <div className="settings-title">Admin Panel</div>
             <div style={{ marginTop: '6px' }}>
@@ -996,21 +887,18 @@ export default function ChatsPage() {
             </div>
           </div>
 
-          {/* Redeem */}
           <div className="settings-section">
             <div className="settings-title" id="redeemTitle">Redeem Code</div>
             <div className="settings-row" style={{ flexDirection: 'column', alignItems: 'flex-start', gap: '6px' }}>
               <div style={{ fontSize: '10px', color: 'var(--dim)' }} id="redeemHint">Get codes on Discord</div>
               <div style={{ display: 'flex', gap: '8px', width: '100%' }}>
-                <input type="text" id="redeemInput" className="settings-select"
-                  style={{ flex: 1, padding: '6px 10px' }} placeholder="Enter code..." />
+                <input type="text" id="redeemInput" className="settings-select" style={{ flex: 1, padding: '6px 10px' }} placeholder="Enter code..." />
                 <button className="settings-btn" onClick={() => redeemCode()} id="redeemBtn">Redeem</button>
               </div>
               <span id="redeemStatus" style={{ fontSize: '10px', color: 'var(--green)' }} />
             </div>
           </div>
 
-          {/* Download plugin */}
           <div className="settings-section">
             <div className="settings-title" id="downloadTitle">Download Plugin</div>
             <div className="settings-row" style={{ flexDirection: 'column', gap: '5px', alignItems: 'flex-start' }}>
@@ -1022,7 +910,6 @@ export default function ChatsPage() {
             </div>
           </div>
 
-          {/* Logout */}
           <div className="settings-section">
             <div className="settings-title" id="accountTitle">Account</div>
             <div className="settings-row">
@@ -1045,14 +932,12 @@ export default function ChatsPage() {
             <span id="guiCodeTitle">Generated GUI Script</span>
           </div>
           <div className="modal-b">
-            <pre id="guiCodeOutput"
-              style={{ maxHeight: '380px', overflowY: 'auto', whiteSpace: 'pre-wrap', wordBreak: 'break-all', fontSize: '10.5px', color: 'var(--text)', background: 'rgba(0,0,0,.4)', padding: '12px', borderRadius: '6px', border: '1px solid var(--b)' }}
-            />
+            <pre id="guiCodeOutput" style={{ maxHeight: '380px', overflowY: 'auto', whiteSpace: 'pre-wrap', wordBreak: 'break-all', fontSize: '10.5px', color: 'var(--text)', background: 'rgba(0,0,0,.4)', padding: '12px', borderRadius: '6px', border: '1px solid var(--b)' }} />
           </div>
           <div className="modal-footer">
-            <button className="btn-modal primary"   onClick={() => copyGuiCode()}                id="guiCodeCopyBtn">Copy</button>
-            <button className="btn-modal secondary" onClick={() => downloadGuiCode()}             id="guiCodeDlBtn">Download .lua</button>
-            <button className="btn-modal secondary" onClick={() => closeModal('guiCodeModal')}    id="guiCodeCloseBtn">Close</button>
+            <button className="btn-modal primary" onClick={() => copyGuiCode()} id="guiCodeCopyBtn">Copy</button>
+            <button className="btn-modal secondary" onClick={() => downloadGuiCode()} id="guiCodeDlBtn">Download .lua</button>
+            <button className="btn-modal secondary" onClick={() => closeModal('guiCodeModal')} id="guiCodeCloseBtn">Close</button>
           </div>
         </div>
       </div>
@@ -1066,20 +951,14 @@ export default function ChatsPage() {
           </div>
           <div className="modal-b" style={{ marginBottom: '8px' }}>
             <p style={{ marginBottom: '8px', fontSize: '11px' }} id="guiAiDesc">Describe the UI you want:</p>
-            <select id="guiAiThemeSelect" className="settings-select"
-              style={{ width: '100%', marginBottom: '8px', fontSize: '10px' }}>
-              {['nexus_ai','aurora','candy','dark','default','midnight','studs'].map(t => (
-                <option key={t} value={t}>Theme: {t}</option>
-              ))}
+            <select id="guiAiThemeSelect" className="settings-select" style={{ width: '100%', marginBottom: '8px', fontSize: '10px' }}>
+              {['nexus_ai','aurora','candy','dark','default','midnight','studs'].map(t => <option key={t} value={t}>Theme: {t}</option>)}
               <option value="custom">Custom (No Theme)</option>
             </select>
-            <textarea id="guiAIPrompt"
-              style={{ width: '100%', background: 'var(--bg3)', border: '1px solid var(--b)', borderRadius: '6px', padding: '10px', color: 'white', fontFamily: "'JetBrains Mono',monospace", fontSize: '12px', outline: 'none', resize: 'vertical', minHeight: '90px' }}
-              placeholder="e.g. Shop GUI with 3 item cards, scroll list, buy button..."
-            />
+            <textarea id="guiAIPrompt" style={{ width: '100%', background: 'var(--bg3)', border: '1px solid var(--b)', borderRadius: '6px', padding: '10px', color: 'white', fontFamily: "'JetBrains Mono',monospace", fontSize: '12px', outline: 'none', resize: 'vertical', minHeight: '90px' }} placeholder="e.g. Shop GUI with 3 item cards, scroll list, buy button..." />
           </div>
           <div className="modal-footer">
-            <button className="btn-modal primary"   onClick={() => generateGuiFromAI()}          id="guiAiBuildBtn">Build with AI</button>
+            <button className="btn-modal primary" onClick={() => generateGuiFromAI()} id="guiAiBuildBtn">Build with AI</button>
             <button className="btn-modal secondary" onClick={() => closeModal('guiAIChatModal')} id="guiAiCancelBtn">Cancel</button>
           </div>
         </div>
@@ -1127,12 +1006,11 @@ export default function ChatsPage() {
             <textarea className="share-modal-ta" id="shareModalTa" readOnly />
           </div>
           <div className="modal-footer">
-            <button className="btn-modal primary"   onClick={() => copyShareText()}           id="shareModalCopyBtn">Copy Text</button>
-            <button className="btn-modal secondary" onClick={() => closeModal('shareModal')}  id="shareModalCloseBtn">Close</button>
+            <button className="btn-modal primary" onClick={() => copyShareText()} id="shareModalCopyBtn">Copy Text</button>
+            <button className="btn-modal secondary" onClick={() => closeModal('shareModal')} id="shareModalCloseBtn">Close</button>
           </div>
         </div>
       </div>
-
     </>
   );
 }
