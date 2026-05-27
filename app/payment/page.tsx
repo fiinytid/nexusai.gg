@@ -774,7 +774,7 @@ export default function PaymentPage() {
                 <div className="pay-icon-wrap">
                   <img
                     className="pay-icon"
-                    src="/public/ovo.png"
+                    src="/ovo.png"
                     alt="OVO"
                     onError={(e) => {
                       const el = e.target as HTMLImageElement;
@@ -809,7 +809,7 @@ export default function PaymentPage() {
                 <div className="pay-icon-wrap">
                   <img
                     className="pay-icon"
-                    src="/public/dana.png"
+                    src="/dana.png"
                     alt="DANA"
                     onError={(e) => {
                       const el = e.target as HTMLImageElement;

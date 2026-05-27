@@ -429,9 +429,9 @@ export default function HomePage() {
             rel="noopener"
             className="nav-discord"
           >
-            {/* /public/discord.png — in Next.js, files in /public are served at root */}
+            {/* /discord.png — in Next.js, files in / are served at root */}
             <div className="nav-discord-icon">
-              <img src="/public/discord.png" alt="Discord" onError={imgFail} />
+              <img src="/discord.png" alt="Discord" onError={imgFail} />
             </div>
             Discord
           </a>
@@ -576,7 +576,7 @@ export default function HomePage() {
             {
               badge: 'Web',
               /* ── FIXED: leading slash added ── */
-              img: '/public/screen/screen1.png',
+              img: '/screen/screen1.png',
               alt: 'Chat Interface',
               icon: <path d="M21 15a2 2 0 01-2 2H7l-4 4V5a2 2 0 012-2h14a2 2 0 012 2z" />,
               iconColor: 'var(--cyan)',
@@ -586,7 +586,7 @@ export default function HomePage() {
             },
             {
               badge: 'Plugin',
-              img: '/public/screen/screen2.png',
+              img: '/screen/screen2.png',
               alt: 'Studio Plugin',
               icon: <><path d="M20.24 12.24a6 6 0 0 0-8.49-8.49L5 10.5V19h8.5z" /><line x1="16" y1="8" x2="2" y2="22" /></>,
               iconColor: 'var(--green)',
@@ -596,7 +596,7 @@ export default function HomePage() {
             },
             {
               badge: 'Connected',
-              img: '/public/screen/screen3.png',
+              img: '/screen/screen3.png',
               alt: 'Connected State',
               icon: <polyline points="20 6 9 17 4 12" />,
               iconColor: 'var(--yellow)',
@@ -760,7 +760,7 @@ export default function HomePage() {
                     {/* Wrapped in a div so broken img doesn't shift layout */}
                     <div className="model-icon-wrap">
                       <img
-                        src={`/public/${m.icon}`}
+                        src={`/${m.icon}`}
                         alt={m.name}
                         onError={imgFail}
                       />
