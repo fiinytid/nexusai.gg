@@ -26,6 +26,22 @@ function buildIntegrity(session: Record<string, unknown>): string {
   return simpleHash(raw);
 }
 
+// FIX: Safe base64 decode untuk karakter unicode (nama/email non-ASCII)
+function safeBase64Decode(b64: string): string {
+  try {
+    // Coba TextDecoder (lebih aman untuk UTF-8)
+    const binary = atob(b64);
+    const bytes = new Uint8Array(binary.length);
+    for (let i = 0; i < binary.length; i++) {
+      bytes[i] = binary.charCodeAt(i);
+    }
+    return new TextDecoder('utf-8').decode(bytes);
+  } catch {
+    // Fallback: decodeURIComponent + escape (cara lama)
+    return decodeURIComponent(escape(atob(b64)));
+  }
+}
+
 function getRateData() {
   try { return JSON.parse(localStorage.getItem(RL_KEY) || '{"attempts":[],"locked":false}'); }
   catch { return { attempts: [], locked: false }; }
@@ -67,18 +83,16 @@ function saveState(token: string, type: string) {
 export default function LoginPage() {
   const pageLoadTime = useRef(Date.now());
   const interacted = useRef(false);
-  const lockoutInterval = useRef<NodeJS.Timeout | null>(null);
+  const lockoutInterval = useRef<ReturnType<typeof setInterval> | null>(null);
   const googleClientId = useRef('');
   const robloxClientId = useRef('');
 
   useEffect(() => {
-    // Interaction detection
     const setInteracted = () => { interacted.current = true; };
     document.addEventListener('mousemove', setInteracted, { once: true, passive: true });
     document.addEventListener('touchstart', setInteracted, { once: true, passive: true });
     document.addEventListener('keydown', setInteracted, { once: true, passive: true });
 
-    // Particles
     const container = document.getElementById('particles');
     if (container) {
       for (let i = 0; i < 20; i++) {
@@ -93,7 +107,6 @@ export default function LoginPage() {
       }
     }
 
-    // Load config
     loadConfig().then(() => {
       if (isRateLimited()) startLockoutCountdown();
       handleParams();
@@ -296,7 +309,6 @@ export default function LoginPage() {
   }
 
   function handleParams() {
-    // Auth check
     try {
       const raw = localStorage.getItem(SESSION_KEY);
       if (raw) {
@@ -314,7 +326,8 @@ export default function LoginPage() {
     if (gup) {
       window.history.replaceState({}, '', '/login');
       try {
-        const gUser = JSON.parse(atob(decodeURIComponent(gup)));
+        // FIX: Gunakan safeBase64Decode untuk mendukung karakter unicode
+        const gUser = JSON.parse(safeBase64Decode(decodeURIComponent(gup)));
         if (!gUser?.id) throw new Error('Invalid Google data');
         gUser.id = String(gUser.id).replace(/[^a-zA-Z0-9_\-]/g, '').slice(0, 128);
         gUser.email = String(gUser.email || '').slice(0, 256);
@@ -334,14 +347,29 @@ export default function LoginPage() {
     }
 
     const gep = params.get('google_error');
-    if (gep) { window.history.replaceState({}, '', '/login'); showErr('googleErr', `Google sign-in failed: ${decodeURIComponent(gep)}`); showPanel('google'); return; }
+    if (gep) {
+      window.history.replaceState({}, '', '/login');
+      // FIX: Tampilkan pesan error yang lebih ramah
+      const errorMessages: Record<string, string> = {
+        redirect_uri_mismatch: 'Konfigurasi server bermasalah. Hubungi admin.',
+        token_failed: 'Login Google gagal. Coba lagi.',
+        rate_limited: 'Terlalu banyak percobaan. Tunggu beberapa menit.',
+        server_error: 'Server error. Coba lagi nanti.',
+        server_config: 'Server belum dikonfigurasi. Hubungi admin.',
+      };
+      const msg = errorMessages[decodeURIComponent(gep)] || `Google sign-in failed: ${decodeURIComponent(gep)}`;
+      showErr('googleErr', msg);
+      showPanel('google');
+      return;
+    }
 
     const rup = params.get('roblox_user');
     if (rup) {
       window.history.replaceState({}, '', '/login');
       (async () => {
         try {
-          const rUser = JSON.parse(atob(decodeURIComponent(rup)));
+          // FIX: Gunakan safeBase64Decode juga untuk roblox user
+          const rUser = JSON.parse(safeBase64Decode(decodeURIComponent(rup)));
           if (!rUser?.id) throw new Error('Invalid Roblox data');
           rUser.id = String(rUser.id).replace(/[^0-9]/g, '').slice(0, 20);
           rUser.username = String(rUser.username || '').replace(/[^a-zA-Z0-9_]/g, '').slice(0, 50);
@@ -468,7 +496,6 @@ export default function LoginPage() {
 
       <div className="particles" id="particles" />
 
-      {/* Loading Overlay */}
       <div className="loading-overlay" id="loadingOverlay">
         <div className="loading-logo">NEXUS AI</div>
         <div className="loading-spinner" />
@@ -476,7 +503,6 @@ export default function LoginPage() {
         <div className="loading-text" id="loadingText">Completing login...</div>
       </div>
 
-      {/* Honeypot */}
       <div className="hp-field" aria-hidden="true">
         <input type="text" name="username" id="hp_username" tabIndex={-1} autoComplete="off" />
         <input type="email" name="email" id="hp_email" tabIndex={-1} autoComplete="off" />
@@ -485,7 +511,6 @@ export default function LoginPage() {
 
       <div className="page">
         <div className="login-wrap">
-          {/* LEFT PANEL */}
           <div className="left-panel">
             <div className="brand-logo">NEXUS AI</div>
             <div className="brand-tag">Roblox Dev Intelligence</div>
@@ -503,14 +528,12 @@ export default function LoginPage() {
             </div>
           </div>
 
-          {/* RIGHT PANEL */}
           <div className="right-panel">
             <div className="right-header">
               <div className="right-title" id="rightTitle">Sign in to NEXUS AI</div>
               <div className="right-sub" id="rightSub">Connect your accounts to get started</div>
             </div>
 
-            {/* Step Indicator */}
             <div className="step-indicator">
               <div className="step-item">
                 <div className="step-num active" id="step1Dot">1</div>
@@ -523,7 +546,6 @@ export default function LoginPage() {
               </div>
             </div>
 
-            {/* PANEL 1: GOOGLE */}
             <div id="panelGoogle">
               <div className="lockout-card" id="lockoutCard">
                 <strong>Too many attempts.</strong> Please wait before trying again.<br />
@@ -568,7 +590,6 @@ export default function LoginPage() {
               </div>
             </div>
 
-            {/* PANEL 2: ROBLOX */}
             <div id="panelRoblox" style={{ display: 'none', flexDirection: 'column' }}>
               <div className="section-label">Connect your Roblox account to complete sign-in.</div>
               <div className="google-bar" id="googleBar">
