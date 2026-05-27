@@ -4,22 +4,21 @@
 
 import { NextResponse } from 'next/server';
 
-import adminHandler   from '../../../api/admin.js';
-import aiHandler      from '../../../api/ai.js';
-import authHandler    from '../../../api/auth.js';
-import controlHandler from '../../../api/control.js';
-import discordHandler from '../../../api/discord.js';
-import gcbHandler     from '../../../api/google-callback.js';
-import inboxHandler   from '../../../api/inbox.js';
-import mainHandler    from '../../../api/main.js';
-import paymentHandler from '../../../api/payment.js';
-import redeemHandler  from '../../../api/redeem.js';
-import reportHandler  from '../../../api/report.js';
+import adminHandler   from '../../../lib/admin.js';
+import aiHandler      from '../../../lib/ai.js';
+import authHandler    from '../../../lib/auth.js';
+import controlHandler from '../../../lib/control.js';
+import discordHandler from '../../../lib/discord.js';
+import gcbHandler     from '../../../lib/google-callback.js';
+import inboxHandler   from '../../../lib/inbox.js';
+import mainHandler    from '../../../lib/main.js';
+import paymentHandler from '../../../lib/payment.js';
+import redeemHandler  from '../../../lib/redeem.js';
+import reportHandler  from '../../../lib/report.js';
 
-// sync.js pakai CJS (module.exports) — pakai createRequire
 import { createRequire } from 'module';
 const require = createRequire(import.meta.url);
-const syncHandler = require('../../../api/sync.js');
+const syncHandler = require('../../../lib/sync.js');
 
 // ─── ROUTE TABLE ──────────────────────────────────────────────────────────────
 const ROUTES = {
