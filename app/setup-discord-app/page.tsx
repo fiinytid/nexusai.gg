@@ -363,7 +363,7 @@ export default function DiscordManager() {
     fontSize:'11px', outline:'none', transition:'border-color .15s',
     appearance:'none' as 'none',
   };
-  const taSt: React.CSSProperties = { ...iSt, minHeight:'72px', resize:'vertical' as 'resize', lineHeight:'1.6' };
+  const taSt: React.CSSProperties = { ...iSt, minHeight:'72px', resize:'vertical' as 'vertical', lineHeight:'1.6' };
   const labelSt: React.CSSProperties = { display:'block', fontSize:'9px', color:'var(--dim)', textTransform:'uppercase' as 'uppercase', letterSpacing:'1px', marginBottom:'5px' };
   const fgSt: React.CSSProperties = { marginBottom:'12px' };
 
