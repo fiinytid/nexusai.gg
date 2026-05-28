@@ -1,6 +1,5 @@
 // app/api/[...slug]/route.js
 // Catch-all router — 1 Vercel function untuk semua endpoint
-// Handler ada di api/ (root), tidak dihitung sbg function terpisah
 
 import { NextResponse } from 'next/server';
 
@@ -36,6 +35,19 @@ const ROUTES = {
   'sync':            syncHandler,
 };
 
+// ─── HELPER: relative → absolute URL ─────────────────────────────────────────
+function toAbsoluteUrl(redirectUrl, requestUrl) {
+  try {
+    // Sudah absolute (http/https), langsung pakai
+    if (/^https?:\/\//i.test(redirectUrl)) return redirectUrl;
+    // Relative path → gabungkan dengan origin request
+    const base = new URL(requestUrl);
+    return new URL(redirectUrl, base.origin).toString();
+  } catch (_) {
+    return redirectUrl;
+  }
+}
+
 // ─── ADAPTER: NextRequest (Web API) → req/res (Pages Router style) ───────────
 async function runHandler(fn, request, slug) {
   // Parse body
@@ -57,7 +69,6 @@ async function runHandler(fn, request, slug) {
   // Parse query params
   const url   = new URL(request.url);
   const query = Object.fromEntries(url.searchParams);
-  // slug[1+] jadi sub-path query (misal /api/control?user=x)
   if (slug.length > 1) query._subpath = slug.slice(1).join('/');
 
   // Mock req
@@ -86,7 +97,8 @@ async function runHandler(fn, request, slug) {
     redirect(code, url) {
       if (typeof code === 'string') { url = code; code = 302; }
       _status   = code;
-      _redirect = url;
+      // ✅ FIX: pastikan URL selalu absolute
+      _redirect = toAbsoluteUrl(url, request.url);
       return res;
     },
     headersSent: false,
@@ -124,7 +136,6 @@ async function handle(request, context) {
       );
     }
 
-    // Support ESM default export dan CJS module.exports
     const fn = typeof handler === 'function'
       ? handler
       : typeof handler?.default === 'function'
@@ -150,6 +161,5 @@ export const PATCH   = handle;
 export const DELETE  = handle;
 export const OPTIONS = handle;
 
-// Node.js runtime wajib — handler pakai fs, crypto, dll
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
