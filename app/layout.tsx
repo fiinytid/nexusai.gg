@@ -1,5 +1,6 @@
 import type { Metadata, Viewport } from "next";
 import "./globals.css";
+import { ClerkProvider } from "@clerk/nextjs"; // 1. Import ClerkProvider
 import { Analytics } from "@vercel/analytics/react";
 import { SpeedInsights } from "@vercel/speed-insights/next";
 
@@ -58,7 +59,7 @@ export const metadata: Metadata = {
   /* ── Icons ──────────────────────────────────────────────────────────────── */
   icons: {
     icon: [
-      { url: "/favicon.ico",             sizes: "any" },
+      { url: "/favicon.ico",              sizes: "any" },
       { url: "/icon-16.png",  type: "image/png", sizes: "16x16" },
       { url: "/icon-32.png",  type: "image/png", sizes: "32x32" },
       { url: "/icon-192.png", type: "image/png", sizes: "192x192" },
@@ -102,40 +103,42 @@ export default function RootLayout({
   children,
 }: Readonly<{ children: React.ReactNode }>) {
   return (
-    <html lang="en" suppressHydrationWarning>
-      <head>
-        {/* Preconnect to Google Fonts CDN */}
-        <link rel="preconnect" href="https://fonts.googleapis.com" />
-        <link rel="preconnect" href="https://fonts.gstatic.com" crossOrigin="anonymous" />
+    <ClerkProvider> {/* 2. Bungkus seluruh aplikasi dengan ClerkProvider */}
+      <html lang="en" suppressHydrationWarning>
+        <head>
+          {/* Preconnect to Google Fonts CDN */}
+          <link rel="preconnect" href="https://fonts.googleapis.com" />
+          <link rel="preconnect" href="https://fonts.gstatic.com" crossOrigin="anonymous" />
 
-        {/* Structured data — SoftwareApplication */}
-        <script
-          type="application/ld+json"
-          dangerouslySetInnerHTML={{
-            __html: JSON.stringify({
-              "@context": "https://schema.org",
-              "@type": "SoftwareApplication",
-              name: "NEXUS AI",
-              applicationCategory: "DeveloperApplication",
-              operatingSystem: "Web",
-              description:
-                "AI-powered assistant for Roblox developers. Lua code generation, Studio injection, DataStore design and more.",
-              url: BASE_URL,
-              author: { "@type": "Organization", name: "NEXUS STUDIO" },
-              offers: { "@type": "Offer", price: "0", priceCurrency: "USD" },
-            }),
-          }}
-        />
-      </head>
+          {/* Structured data — SoftwareApplication */}
+          <script
+            type="application/ld+json"
+            dangerouslySetInnerHTML={{
+              __html: JSON.stringify({
+                "@context": "https://schema.org",
+                "@type": "SoftwareApplication",
+                name: "NEXUS AI",
+                applicationCategory: "DeveloperApplication",
+                operatingSystem: "Web",
+                description:
+                  "AI-powered assistant for Roblox developers. Lua code generation, Studio injection, DataStore design and more.",
+                url: BASE_URL,
+                author: { "@type": "Organization", name: "NEXUS STUDIO" },
+                offers: { "@type": "Offer", price: "0", priceCurrency: "USD" },
+              }),
+            }}
+          />
+        </head>
 
-      <body suppressHydrationWarning>
-        {/* Page content */}
-        {children}
+        <body suppressHydrationWarning>
+          {/* Page content */}
+          {children}
 
-        {/* Vercel observability */}
-        <Analytics />
-        <SpeedInsights />
-      </body>
-    </html>
+          {/* Vercel observability */}
+          <Analytics />
+          <SpeedInsights />
+        </body>
+      </html>
+    </ClerkProvider>
   );
 }
