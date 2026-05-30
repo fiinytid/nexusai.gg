@@ -327,23 +327,60 @@ body::before{
 #inp{width:100%;background:transparent;border:none;outline:none;color:white;font-family:'JetBrains Mono',monospace;font-size:13px;padding:11px 14px;resize:none;min-height:44px;max-height:130px;line-height:1.55;display:block}
 #inp::placeholder{color:var(--dim)}
 
-/* FIXED: flex-wrap so buttons don't overflow on small widths */
+/* FIXED: inp-bar — consistent height so all items perfectly center-align */
 .inp-bar{
-  display:flex;align-items:center;padding:5px 9px;border-top:1px solid var(--b);
+  display:flex;
+  align-items:center;
+  height:44px;
+  padding:0 9px;
+  border-top:1px solid var(--b);
   gap:4px;
-  /* FIXED: wrap allows graceful degradation when zoomed */
   flex-wrap:nowrap;
   overflow:hidden;
 }
-/* FIXED: min-width:0 + overflow:hidden on left group */
+/* FIXED: stretch to full height so children vertically self-center */
 .inp-l{
-  display:flex;align-items:center;gap:3px;
+  display:flex;
+  align-items:center;
+  gap:4px;
   flex:1;min-width:0;
   overflow:hidden;
+  height:100%;
 }
-.ib{width:27px;height:27px;border-radius:5px;border:1px solid var(--b);background:transparent;color:var(--dim);cursor:pointer;display:flex;align-items:center;justify-content:center;transition:.12s;flex-shrink:0}
+/* FIXED: label.ib must match button.ib exactly — use same box model */
+.ib{
+  width:27px;height:27px;
+  border-radius:5px;border:1px solid var(--b);
+  background:transparent;color:var(--dim);
+  cursor:pointer;
+  /* FIXED: explicit flex so label renders same as button */
+  display:inline-flex;align-items:center;justify-content:center;
+  transition:.12s;flex-shrink:0;
+  /* FIXED: reset any browser default margin/padding on label */
+  padding:0;margin:0;
+  /* FIXED: prevent text selection highlight on label click */
+  user-select:none;
+  -webkit-user-select:none;
+  /* FIXED: consistent vertical alignment */
+  vertical-align:middle;
+  line-height:1;
+  /* FIXED: appearance reset for button elements */
+  appearance:none;-webkit-appearance:none;
+  outline:none;
+  box-sizing:border-box;
+  font-family:'JetBrains Mono',monospace;
+}
 .ib:hover{color:var(--cyan);border-color:var(--cyan2)}
-.ib svg{width:14px;height:14px;stroke:currentColor;fill:none;stroke-width:1.5}
+.ib svg{width:14px;height:14px;stroke:currentColor;fill:none;stroke-width:1.5;flex-shrink:0;pointer-events:none}
+/* FIXED: hidden file input must take zero space */
+input[type="file"].hidden-fi{
+  position:absolute;
+  width:0!important;height:0!important;
+  opacity:0;overflow:hidden;
+  pointer-events:none;
+  clip:rect(0,0,0,0);
+  white-space:nowrap;
+}
 
 /* FIXED: clamp prevents model selector from being too wide or too narrow */
 .inp-model{
@@ -653,7 +690,7 @@ body::before{
   .inp-area{padding:6px 8px}
   #inp{font-size:12px;padding:8px 10px;min-height:38px}
   /* FIXED: wrap input bar on mobile */
-  .inp-bar{flex-wrap:wrap;gap:4px;padding:4px 7px}
+  .inp-bar{flex-wrap:wrap;gap:4px;padding:0 7px;height:auto;min-height:44px}
   .inp-l{order:1;flex:1;min-width:0}
   .btn-send,.btn-cancel{order:2;flex-shrink:0}
   .inp-model{max-width:130px}
@@ -1036,19 +1073,38 @@ export default function ChatsPage() {
                 <textarea id="inp" placeholder="Ask NEXUS AI..." rows={1} />
                 <div className="inp-bar">
                   <div className="inp-l">
-                    <label htmlFor="fi" className="ib" title="Attach file" role="button" aria-label="Attach file">
-                      <svg viewBox="0 0 24 24">
-                        <path d="M21.44 11.05l-9.19 9.19a6 6 0 01-8.49-8.49l9.19-9.19a4 4 0 015.66 5.66l-9.2 9.19a2 2 0 01-2.83-2.83l8.49-8.48" />
-                      </svg>
-                    </label>
-                    <input
-                      type="file"
-                      id="fi"
-                      accept="image/*,.lua,.txt,.json,.js,.py,.html,.css"
-                      style={{ display: 'none' }}
-                      onChange={(e) => win('handleFile')?.(e)}
-                      multiple
-                    />
+                    {/* FIXED: wrapper div so hidden input doesn't affect flex layout at all */}
+                    <div style={{ position: 'relative', flexShrink: 0, display: 'inline-flex' }}>
+                      <label
+                        htmlFor="fi"
+                        className="ib"
+                        title="Attach file"
+                        role="button"
+                        aria-label="Attach file"
+                        tabIndex={0}
+                      >
+                        <svg viewBox="0 0 24 24">
+                          <path d="M21.44 11.05l-9.19 9.19a6 6 0 01-8.49-8.49l9.19-9.19a4 4 0 015.66 5.66l-9.2 9.19a2 2 0 01-2.83-2.83l8.49-8.48" />
+                        </svg>
+                      </label>
+                      {/* FIXED: absolutely positioned, zero-size, completely out of flow */}
+                      <input
+                        type="file"
+                        id="fi"
+                        accept="image/*,.lua,.txt,.json,.js,.py,.html,.css"
+                        style={{
+                          position: 'absolute',
+                          width: 0,
+                          height: 0,
+                          opacity: 0,
+                          overflow: 'hidden',
+                          pointerEvents: 'none',
+                        }}
+                        onChange={(e) => win('handleFile')?.(e)}
+                        multiple
+                        tabIndex={-1}
+                      />
+                    </div>
 
                     <button className="ib" onClick={call('clearChat')} title="Clear chat" aria-label="Clear chat">
                       <svg viewBox="0 0 24 24">
