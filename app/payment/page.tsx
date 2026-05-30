@@ -13,8 +13,10 @@ interface SessionUser {
 interface SessionData {
   credits?: number | string;
   plan?: string;
+  roles?: string[];
 }
 interface NexusSession {
+  loginTime?: number;
   user?: SessionUser;
   data?: SessionData;
 }
@@ -51,7 +53,12 @@ function formatIdr(n: number): string {
 }
 
 function genTxId(): string {
-  return "NX-" + Date.now().toString(36).toUpperCase() + "-" + Math.random().toString(36).slice(2, 6).toUpperCase();
+  return (
+    "NX-" +
+    Date.now().toString(36).toUpperCase() +
+    "-" +
+    Math.random().toString(36).slice(2, 6).toUpperCase()
+  );
 }
 
 // ─── Toast ───────────────────────────────────────────────────────────────────
@@ -64,18 +71,19 @@ function Toast({ toast }: { toast: ToastState }) {
         bottom: 24,
         right: 24,
         zIndex: 9999,
-        background: "var(--bg3)",
+        background: "rgba(8,8,42,.96)",
         border: "1px solid rgba(0,229,255,.15)",
-        borderRadius: 12,
+        borderRadius: 14,
         padding: "12px 18px",
         fontSize: 12,
         lineHeight: 1.5,
         display: "flex",
         alignItems: "center",
         gap: 10,
-        maxWidth: 280,
-        backdropFilter: "blur(20px)",
-        transform: toast.visible ? "translateY(0)" : "translateY(16px)",
+        maxWidth: 300,
+        backdropFilter: "blur(24px)",
+        boxShadow: "0 8px 32px rgba(0,0,0,.6)",
+        transform: toast.visible ? "translateY(0) scale(1)" : "translateY(20px) scale(.96)",
         opacity: toast.visible ? 1 : 0,
         transition: "0.3s cubic-bezier(.34,1.56,.64,1)",
         pointerEvents: "none",
@@ -83,12 +91,17 @@ function Toast({ toast }: { toast: ToastState }) {
     >
       <div
         style={{
-          width: 8, height: 8, borderRadius: "50%", flexShrink: 0,
+          width: 8,
+          height: 8,
+          borderRadius: "50%",
+          flexShrink: 0,
           background: toast.color,
-          boxShadow: `0 0 8px ${toast.color}`,
+          boxShadow: `0 0 10px ${toast.color}`,
         }}
       />
-      <span style={{ color: toast.color }}>{toast.msg}</span>
+      <span style={{ color: toast.color, fontFamily: "JetBrains Mono, monospace" }}>
+        {toast.msg}
+      </span>
     </div>
   );
 }
@@ -108,17 +121,33 @@ function StepsBar({ current }: { current: View }) {
             <div key={n} style={{ display: "flex", alignItems: "center" }}>
               <div
                 style={{
-                  width: 36, height: 36, borderRadius: "50%",
-                  border: `1.5px solid ${done ? "var(--green)" : active ? "var(--cyan)" : "var(--dim)"}`,
-                  display: "flex", alignItems: "center", justifyContent: "center",
-                  fontSize: done ? 14 : 11,
-                  fontFamily: "Orbitron, sans-serif", fontWeight: 700,
+                  width: 38,
+                  height: 38,
+                  borderRadius: "50%",
+                  border: `1.5px solid ${
+                    done ? "var(--green)" : active ? "var(--cyan)" : "rgba(58,74,122,.5)"
+                  }`,
+                  display: "flex",
+                  alignItems: "center",
+                  justifyContent: "center",
+                  fontSize: done ? 15 : 11,
+                  fontFamily: "Orbitron, sans-serif",
+                  fontWeight: 700,
                   color: done ? "var(--bg)" : active ? "var(--cyan)" : "var(--dim)",
-                  background: done ? "var(--green)" : active ? "rgba(0,229,255,.08)" : "transparent",
-                  boxShadow: active ? "0 0 0 4px rgba(0,229,255,.12), 0 0 20px rgba(0,229,255,.2)" : done ? "0 0 12px rgba(0,255,163,.3)" : "none",
-                  transform: active ? "scale(1.1)" : "scale(1)",
+                  background: done
+                    ? "var(--green)"
+                    : active
+                    ? "rgba(0,229,255,.08)"
+                    : "rgba(0,0,0,.3)",
+                  boxShadow: active
+                    ? "0 0 0 5px rgba(0,229,255,.1), 0 0 24px rgba(0,229,255,.2)"
+                    : done
+                    ? "0 0 14px rgba(0,255,163,.3)"
+                    : "none",
+                  transform: active ? "scale(1.12)" : "scale(1)",
                   transition: "0.4s cubic-bezier(.34,1.56,.64,1)",
                   flexShrink: 0,
+                  zIndex: 1,
                 }}
               >
                 {done ? "✓" : n}
@@ -126,10 +155,13 @@ function StepsBar({ current }: { current: View }) {
               {n < 3 && (
                 <div
                   style={{
-                    width: 80, height: 2,
-                    background: n < current ? "var(--green)" : "rgba(0,229,255,.08)",
-                    transition: "background 0.5s ease",
-                    position: "relative",
+                    width: 90,
+                    height: 2,
+                    background:
+                      n < current
+                        ? "linear-gradient(90deg,var(--green),rgba(0,255,163,.3))"
+                        : "rgba(0,229,255,.06)",
+                    transition: "background 0.6s ease",
                   }}
                 />
               )}
@@ -139,83 +171,233 @@ function StepsBar({ current }: { current: View }) {
       </div>
       <div
         style={{
-          display: "flex", justifyContent: "space-between",
-          padding: "8px 4px 0",
-          fontSize: 10, fontFamily: "JetBrains Mono, monospace", letterSpacing: "0.5px",
+          display: "flex",
+          justifyContent: "space-between",
+          padding: "10px 2px 0",
+          fontSize: 9.5,
+          fontFamily: "JetBrains Mono, monospace",
+          letterSpacing: "0.5px",
         }}
       >
         {steps.map((label, i) => {
           const n = i + 1;
-          const color = n < current ? "var(--green)" : n === current ? "var(--cyan)" : "var(--dim)";
-          return <span key={n} style={{ color }}>{label}</span>;
+          const color =
+            n < current ? "var(--green)" : n === current ? "var(--cyan)" : "var(--dim)";
+          return (
+            <span key={n} style={{ color }}>
+              {label}
+            </span>
+          );
         })}
       </div>
     </div>
   );
 }
 
+// ─── Loading Screen ───────────────────────────────────────────────────────────
+
+function AuthLoader() {
+  return (
+    <>
+      <style>{`
+        @keyframes spin { to { transform: rotate(360deg); } }
+        @keyframes fadeInLoader { from{opacity:0} to{opacity:1} }
+      `}</style>
+      <div
+        style={{
+          position: "fixed",
+          inset: 0,
+          background: "#020210",
+          display: "flex",
+          flexDirection: "column",
+          alignItems: "center",
+          justifyContent: "center",
+          gap: 20,
+          zIndex: 9999,
+          animation: "fadeInLoader .2s ease",
+        }}
+      >
+        {/* Logo */}
+        <div
+          style={{
+            fontFamily: "Orbitron, sans-serif",
+            fontSize: 22,
+            fontWeight: 900,
+            background: "linear-gradient(135deg, #00e5ff, #7c3aed)",
+            WebkitBackgroundClip: "text",
+            WebkitTextFillColor: "transparent",
+            letterSpacing: 4,
+          }}
+        >
+          NEXUS AI
+        </div>
+        {/* Spinner */}
+        <div
+          style={{
+            width: 40,
+            height: 40,
+            borderRadius: "50%",
+            border: "2px solid rgba(0,229,255,.08)",
+            borderTopColor: "#00e5ff",
+            animation: "spin .85s linear infinite",
+          }}
+        />
+        {/* Label */}
+        <p
+          style={{
+            fontFamily: "JetBrains Mono, monospace",
+            fontSize: 9.5,
+            color: "#334068",
+            letterSpacing: 2.5,
+            textTransform: "uppercase",
+          }}
+        >
+          Verifying session...
+        </p>
+      </div>
+    </>
+  );
+}
+
 // ─── Main Page ────────────────────────────────────────────────────────────────
 
 export default function PaymentPage() {
-  // Session
+  // ── Auth state ──
+  const [authChecked, setAuthChecked] = useState(false);
   const [session, setSession] = useState<NexusSession | null>(null);
+
+  // ── User info ──
   const [displayName, setDisplayName] = useState("User");
   const [username, setUsername] = useState("user");
-  const [avatarUrl, setAvatarUrl] = useState("/favicon.ico");
+  const [avatarUrl, setAvatarUrl] = useState("/nexusai.png");
   const [credits, setCredits] = useState<string>("—");
   const [plan, setPlan] = useState("FREE");
 
-  // Payment config
+  // ── Payment config ──
   const [ovoNumber, setOvoNumber] = useState("");
   const [danaNumber, setDanaNumber] = useState("");
   const [ownerName, setOwnerName] = useState("NEXUS STUDIO");
 
-  // UI State
+  // ── UI State ──
   const [view, setView] = useState<View>(1);
-  const [toast, setToastState] = useState<ToastState>({ visible: false, msg: "", color: "var(--cyan)" });
+  const [toast, setToastState] = useState<ToastState>({
+    visible: false,
+    msg: "",
+    color: "var(--cyan)",
+  });
   const toastTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
-  // Selection
+  // ── Selection ──
   const [sel, setSel] = useState<Selection>({
-    pack: null, cr: 0, price: 0, usd: 0, priceStr: "", label: "", method: null,
+    pack: null,
+    cr: 0,
+    price: 0,
+    usd: 0,
+    priceStr: "",
+    label: "",
+    method: null,
   });
 
-  // Step 3 state
+  // ── Step 3 state ──
   const [confirmAmount, setConfirmAmount] = useState("");
   const [amountStatus, setAmountStatus] = useState<"idle" | "valid" | "close" | "invalid">("idle");
   const [txId, setTxId] = useState("—");
   const [submitting, setSubmitting] = useState(false);
 
-  // ── Load session ──
+  /* ═══════════════════════════════════════════════════════════
+     ✅ AUTH GUARD — runs first, before anything else renders
+  ═══════════════════════════════════════════════════════════ */
   useEffect(() => {
     try {
       const raw = localStorage.getItem("nexus_session");
-      if (raw) {
-        const s: NexusSession = JSON.parse(raw);
-        setSession(s);
-        const u = s.user || {};
-        setDisplayName(u.displayName || u.username || "User");
-        setUsername(u.username || "user");
-        setAvatarUrl(u.avatar || "/favicon.ico");
-        const cr = s.data?.credits !== undefined ? parseFloat(String(s.data.credits)).toFixed(2) : "—";
-        setCredits(cr);
-        setPlan((s.data?.plan || "FREE").toUpperCase());
+
+      // No session → redirect to login
+      if (!raw) {
+        window.location.replace("/");
+        return;
       }
-    } catch { /* ignore */ }
+
+      let sess: NexusSession;
+      try {
+        sess = JSON.parse(raw);
+      } catch {
+        localStorage.removeItem("nexus_session");
+        window.location.replace("/");
+        return;
+      }
+
+      // Malformed session (no user.username)
+      if (!sess?.user?.username) {
+        localStorage.removeItem("nexus_session");
+        window.location.replace("/");
+        return;
+      }
+
+      // Session expired — 7-day TTL
+      if (Date.now() - (sess.loginTime || 0) > 86_400_000 * 7) {
+        localStorage.removeItem("nexus_session");
+        window.location.replace("/");
+        return;
+      }
+
+      // ── Valid session — hydrate state ──
+      setSession(sess);
+      const u = sess.user || {};
+      const d = sess.data || {};
+
+      const name = u.displayName || u.username || "User";
+      setDisplayName(name);
+      setUsername(u.username || "user");
+
+      // Avatar: prefer stored, fall back to Roblox CDN
+      if (u.avatar) {
+        setAvatarUrl(u.avatar);
+      } else if (u.robloxId) {
+        setAvatarUrl(
+          `https://www.roblox.com/headshot-thumbnail/image?userId=${u.robloxId}&width=150&height=150&format=png`
+        );
+      }
+
+      // Credits
+      const roles = d.roles || [];
+      const planRaw = (d.plan || "free").toLowerCase();
+      const isOwner =
+        planRaw === "owner" ||
+        planRaw === "unlimited" ||
+        roles.includes("owner");
+
+      if (isOwner) {
+        setCredits("∞");
+        setPlan("OWNER");
+      } else {
+        const cr =
+          d.credits !== undefined
+            ? parseFloat(String(d.credits)).toFixed(0)
+            : "—";
+        setCredits(cr);
+        setPlan(planRaw === "pro" ? "PRO" : planRaw === "admin" ? "ADMIN" : "FREE");
+      }
+
+      setAuthChecked(true);
+    } catch {
+      localStorage.removeItem("nexus_session");
+      window.location.replace("/");
+    }
   }, []);
 
   // ── Load payment config ──
   useEffect(() => {
+    if (!authChecked) return;
     fetch("/api/payment")
-      .then((r) => r.ok ? r.json() : null)
+      .then((r) => (r.ok ? r.json() : null))
       .then((d: PaymentConfig | null) => {
         if (!d) return;
         if (d.ovo?.number) setOvoNumber(d.ovo.number);
         if (d.dana?.number) setDanaNumber(d.dana.number);
         if (d.owner) setOwnerName(d.owner);
       })
-      .catch(() => { /* silent */ });
-  }, []);
+      .catch(() => {/* silent */});
+  }, [authChecked]);
 
   // ── Toast helper ──
   const showToast = useCallback((msg: string, color = "var(--cyan)") => {
@@ -234,35 +416,38 @@ export default function PaymentPage() {
 
   const handleBack = () => {
     if (view > 1) goToView((view - 1) as View);
-    else window.location.href = "/chats";
+    else window.location.href = "/dashboard";
   };
 
   // ── Pack / Plan selection ──
-  const clearPacks = () =>
-    setSel((prev) => ({ ...prev, pack: null, cr: 0, price: 0, usd: 0, priceStr: "", label: "" }));
-
   const selectProPlan = () => {
-    setSel({ pack: "pro-plan", cr: 200, price: 150000, usd: 9.38, priceStr: "Rp 150,000", label: "Pro Plan (Monthly) · 200 CR", method: sel.method });
+    setSel({
+      pack: "pro-plan",
+      cr: 200,
+      price: 150000,
+      usd: 9.38,
+      priceStr: "Rp 150,000",
+      label: "Pro Plan (Monthly) · 200 CR",
+      method: sel.method,
+    });
     showToast("Pro Plan selected!", "var(--cyan)");
   };
 
-  const selectPack = (cr: string, price: number, usd: number, label: string) => {
-    setSel({ pack: cr, cr: parseInt(cr, 10), price, usd, priceStr: formatIdr(price), label, method: sel.method });
+  const selectPack = (id: string, cr: number, price: number, usd: number, label: string) => {
+    setSel({ pack: id, cr, price, usd, priceStr: formatIdr(price), label, method: sel.method });
   };
 
-  // ── Payment method ──
   const selectMethod = (m: PayMethod) => {
     setSel((prev) => ({ ...prev, method: m }));
   };
 
-  // ── Step 2 → Step 3 ──
   const goToPayment = () => {
     if (!sel.pack) { showToast("Please select a package first.", "var(--pink)"); return; }
     goToView(2);
   };
 
   const showPayInst = () => {
-    if (!sel.method) { showToast("Please select a payment method first.", "var(--pink)"); return; }
+    if (!sel.method) { showToast("Please select a payment method.", "var(--pink)"); return; }
     setConfirmAmount("");
     setAmountStatus("idle");
     goToView(3);
@@ -272,24 +457,25 @@ export default function PaymentPage() {
   const validateAmount = (val: string) => {
     setConfirmAmount(val);
     const amt = parseInt(val, 10);
-    if (!val || !amt || amt <= 0) { setAmountStatus("idle"); return; }
-    if (amt === sel.price) { setAmountStatus("valid"); }
-    else if (Math.abs(amt - sel.price) < 1000) { setAmountStatus("close"); }
-    else { setAmountStatus("invalid"); }
+    if (!val || isNaN(amt) || amt <= 0) { setAmountStatus("idle"); return; }
+    if (amt === sel.price) setAmountStatus("valid");
+    else if (Math.abs(amt - sel.price) < 1000) setAmountStatus("close");
+    else setAmountStatus("invalid");
   };
 
   // ── Copy number ──
   const copyNumber = () => {
     const num = sel.method === "ovo" ? ovoNumber : danaNumber;
-    if (!num) { showToast("Number not available.", "var(--pink)"); return; }
-    navigator.clipboard?.writeText(num)
-      .then(() => showToast("Number copied to clipboard!", "var(--green)"))
+    if (!num) { showToast("Number not configured yet.", "var(--pink)"); return; }
+    navigator.clipboard
+      ?.writeText(num)
+      .then(() => showToast("Number copied!", "var(--green)"))
       .catch(() => showToast(num, "var(--cyan)"));
   };
 
   // ── Confirm payment ──
   const confirmPayment = async () => {
-    if (!session?.user) { showToast("Session not found. Please log in again.", "var(--pink)"); return; }
+    if (!session?.user) { showToast("Session expired. Please log in again.", "var(--pink)"); return; }
     const packIdMap: Record<string, string> = {
       "50": "small", "80": "popular", "150": "pro", "500": "mega", "pro-plan": "pro-plan",
     };
@@ -321,7 +507,10 @@ export default function PaymentPage() {
         showToast("Submission failed: " + (data.error || "Please try again."), "var(--pink)");
       }
     } catch (e) {
-      showToast("Network error: " + (e instanceof Error ? e.message : "Unknown"), "var(--pink)");
+      showToast(
+        "Network error: " + (e instanceof Error ? e.message : "Unknown"),
+        "var(--pink)"
+      );
     } finally {
       setSubmitting(false);
     }
@@ -332,167 +521,218 @@ export default function PaymentPage() {
   const noteVal = `NEXUS-${username}-${sel.cr}CR`;
   const methodLabel = sel.method === "ovo" ? "OVO" : sel.method === "dana" ? "DANA" : "—";
 
+  const getPlanStyle = () => {
+    switch (plan) {
+      case "PRO": return { color: "var(--cyan)", border: "rgba(0,229,255,.28)", bg: "rgba(0,229,255,.07)" };
+      case "OWNER": return { color: "var(--yellow)", border: "rgba(255,214,0,.28)", bg: "rgba(255,214,0,.07)" };
+      case "ADMIN": return { color: "var(--purple)", border: "rgba(124,58,237,.28)", bg: "rgba(124,58,237,.07)" };
+      default: return { color: "var(--green)", border: "rgba(0,255,163,.2)", bg: "rgba(0,255,163,.06)" };
+    }
+  };
+
+  const planStyle = getPlanStyle();
+
+  /* ─────────────────────────────────────────────────────
+     Show loader until auth is resolved
+  ───────────────────────────────────────────────────── */
+  if (!authChecked) return <AuthLoader />;
+
   return (
     <>
       <style>{`
         @import url('https://fonts.googleapis.com/css2?family=Orbitron:wght@400;600;700;900&family=Space+Grotesk:wght@300;400;500;600;700&family=JetBrains+Mono:wght@300;400;500&display=swap');
         *, *::before, *::after { margin:0; padding:0; box-sizing:border-box; }
-        html { scroll-behavior: smooth; }
+        html { scroll-behavior:smooth; }
         :root {
           --bg:      #020210;
           --bg2:     #05051a;
           --bg3:     #08082a;
           --bg4:     #0c0c30;
           --cyan:    #00e5ff;
-          --cyan2:   rgba(0,229,255,.3);
-          --cyan3:   rgba(0,229,255,.08);
+          --cyan2:   rgba(0,229,255,.28);
+          --cyan3:   rgba(0,229,255,.07);
           --purple:  #7c3aed;
-          --purple2: rgba(124,58,237,.4);
+          --purple2: rgba(124,58,237,.35);
           --pink:    #f43f5e;
           --green:   #00ffa3;
           --yellow:  #fbbf24;
           --orange:  #f97316;
           --text:    #a8b8e0;
           --dim:     #334068;
+          --dim2:    #5a6a9a;
           --r:       12px;
           --r2:      8px;
         }
         body {
-          min-height: 100vh;
-          font-family: 'Space Grotesk', sans-serif;
-          background: var(--bg);
-          color: var(--text);
-          font-size: 14px;
-          overflow-x: hidden;
+          min-height:100vh;
+          font-family:'Space Grotesk',sans-serif;
+          background:var(--bg); color:var(--text);
+          font-size:14px; overflow-x:hidden;
         }
+        /* Animated grid background */
         body::before {
-          content:'';
-          position:fixed; inset:0;
+          content:''; position:fixed; inset:0; z-index:0;
           background:
-            linear-gradient(rgba(0,229,255,.018) 1px, transparent 1px),
-            linear-gradient(90deg, rgba(0,229,255,.018) 1px, transparent 1px);
-          background-size: 50px 50px;
-          animation: gridShift 20s linear infinite;
-          pointer-events:none; z-index:0;
+            linear-gradient(rgba(0,229,255,.014) 1px, transparent 1px),
+            linear-gradient(90deg, rgba(0,229,255,.014) 1px, transparent 1px);
+          background-size:50px 50px;
+          animation:gridShift 25s linear infinite;
+          pointer-events:none;
         }
-        @keyframes gridShift { to { background-position: 50px 50px; } }
+        @keyframes gridShift { to { background-position:50px 50px; } }
+        /* Purple ambient glow */
         body::after {
-          content:'';
-          position:fixed;
-          top:-30%; left:50%; transform:translateX(-50%);
-          width:900px; height:600px;
-          background: radial-gradient(ellipse, rgba(124,58,237,.12) 0%, transparent 60%);
+          content:''; position:fixed;
+          top:-20%; left:50%; transform:translateX(-50%);
+          width:1000px; height:600px;
+          background:radial-gradient(ellipse,rgba(124,58,237,.1) 0%,transparent 60%);
           pointer-events:none; z-index:0;
         }
-
+        /* Subtle scanlines */
         .scanlines {
           position:fixed; inset:0; z-index:1;
-          background: repeating-linear-gradient(
+          background:repeating-linear-gradient(
             0deg, transparent, transparent 2px,
-            rgba(0,0,0,.03) 2px, rgba(0,0,0,.03) 4px
+            rgba(0,0,0,.025) 2px, rgba(0,0,0,.025) 4px
           );
           pointer-events:none;
         }
+        @keyframes spin { to { transform:rotate(360deg); } }
 
-        /* NAV */
+        /* ── NAV ── */
         .nav {
           position:sticky; top:0; z-index:200;
           display:flex; align-items:center; justify-content:space-between;
-          padding:12px 24px;
-          background: rgba(2,2,16,.88);
-          border-bottom: 1px solid rgba(0,229,255,.1);
-          backdrop-filter: blur(20px);
+          padding:0 24px; height:56px;
+          background:rgba(2,2,16,.92);
+          border-bottom:1px solid rgba(0,229,255,.09);
+          backdrop-filter:blur(24px);
+        }
+        .nav::after {
+          content:''; position:absolute; bottom:0; left:0; right:0; height:1px;
+          background:linear-gradient(90deg,transparent,rgba(0,229,255,.25),transparent);
         }
         .nav-logo {
           font-family:'Orbitron',sans-serif;
           font-size:15px; font-weight:900;
-          background: linear-gradient(135deg, var(--cyan), var(--purple));
+          background:linear-gradient(135deg,var(--cyan),var(--purple));
           -webkit-background-clip:text; -webkit-text-fill-color:transparent;
           text-decoration:none; letter-spacing:2px;
-          animation: logoPulse 4s ease-in-out infinite;
+          display:flex; align-items:center; gap:10px;
         }
-        @keyframes logoPulse {
-          0%,100%{filter:drop-shadow(0 0 4px rgba(0,229,255,.4))}
-          50%{filter:drop-shadow(0 0 12px rgba(0,229,255,.7))}
+        .nav-logo-icon {
+          width:28px; height:28px; border-radius:7px;
+          overflow:hidden; border:1px solid rgba(0,229,255,.18);
+          flex-shrink:0;
+        }
+        .nav-logo-icon img { width:100%; height:100%; object-fit:cover; display:block; }
+        .nav-center { display:flex; align-items:center; gap:6px; }
+        .nav-status-dot {
+          width:6px; height:6px; border-radius:50%;
+          background:var(--green); box-shadow:0 0 8px var(--green);
+          animation:blink 2.2s ease-in-out infinite;
+        }
+        @keyframes blink { 0%,100%{opacity:1} 50%{opacity:.25} }
+        .nav-status-text {
+          font-size:10px; color:var(--green);
+          font-family:'JetBrains Mono',monospace; letter-spacing:1px;
         }
         .nav-back {
           display:flex; align-items:center; gap:6px;
-          color:var(--dim); font-size:11px;
+          color:var(--dim2); font-size:11px;
           font-family:'JetBrains Mono',monospace;
           cursor:pointer; border:1px solid rgba(0,229,255,.1);
-          background:transparent; padding:6px 14px; border-radius:20px;
-          transition:.2s; letter-spacing:.5px;
+          background:transparent; padding:7px 16px; border-radius:22px;
+          transition:.18s; letter-spacing:.5px;
         }
         .nav-back:hover { color:var(--cyan); border-color:var(--cyan2); background:var(--cyan3); }
-        .nav-status {
-          display:flex; align-items:center; gap:6px;
-          font-size:10px; color:var(--dim); font-family:'JetBrains Mono',monospace;
-        }
-        .status-dot {
-          width:6px; height:6px; border-radius:50%;
-          background:var(--green);
-          box-shadow:0 0 8px var(--green);
-          animation: blink 2s ease-in-out infinite;
-        }
-        @keyframes blink { 0%,100%{opacity:1} 50%{opacity:.3} }
+        .nav-back svg { width:11px; height:11px; stroke:currentColor; fill:none; stroke-width:2.5; }
 
-        /* MAIN */
+        /* ── MAIN CONTAINER ── */
         .main {
-          max-width:720px; margin:0 auto;
-          padding:36px 20px 100px;
+          max-width:740px; margin:0 auto;
+          padding:40px 20px 100px;
           position:relative; z-index:2;
         }
 
-        /* HERO */
-        .hero { text-align:center; margin-bottom:40px; animation: heroIn .6s cubic-bezier(.16,1,.3,1) both; }
-        @keyframes heroIn { from{opacity:0;transform:translateY(-20px)} to{opacity:1;transform:none} }
+        /* ── HERO ── */
+        .hero {
+          text-align:center; margin-bottom:40px;
+          animation:heroIn .55s cubic-bezier(.16,1,.3,1) both;
+        }
+        @keyframes heroIn { from{opacity:0;transform:translateY(-18px)} to{opacity:1;transform:none} }
         .hero-icon-wrap {
           display:inline-flex; align-items:center; justify-content:center;
-          width:72px; height:72px; border-radius:50%;
-          background:linear-gradient(135deg,rgba(0,229,255,.15),rgba(124,58,237,.15));
-          border:1px solid rgba(0,229,255,.25); margin-bottom:18px;
-          box-shadow:0 0 30px rgba(0,229,255,.12),0 0 60px rgba(124,58,237,.08);
-          animation: iconFloat 3s ease-in-out infinite;
+          width:76px; height:76px; border-radius:50%;
+          background:linear-gradient(135deg,rgba(0,229,255,.12),rgba(124,58,237,.12));
+          border:1px solid rgba(0,229,255,.22);
+          margin-bottom:20px;
+          box-shadow:0 0 36px rgba(0,229,255,.1), 0 0 72px rgba(124,58,237,.06);
+          animation:iconFloat 3.2s ease-in-out infinite;
         }
-        @keyframes iconFloat { 0%,100%{transform:translateY(0)} 50%{transform:translateY(-6px)} }
+        @keyframes iconFloat { 0%,100%{transform:translateY(0)} 50%{transform:translateY(-7px)} }
         .hero-title {
-          font-family:'Orbitron',sans-serif; font-size:28px; font-weight:900;
+          font-family:'Orbitron',sans-serif; font-size:30px; font-weight:900;
           background:linear-gradient(135deg,#fff 0%,var(--cyan) 50%,var(--purple) 100%);
           -webkit-background-clip:text; -webkit-text-fill-color:transparent;
           margin-bottom:8px; letter-spacing:1px;
         }
-        .hero-sub { font-size:13px; color:var(--dim); font-family:'JetBrains Mono',monospace; letter-spacing:.5px; }
-        .hero-sub span { color:var(--cyan); opacity:.7; }
+        .hero-sub {
+          font-size:12px; color:var(--dim);
+          font-family:'JetBrains Mono',monospace; letter-spacing:.5px;
+        }
+        .hero-sub span { color:var(--cyan); opacity:.65; }
 
-        /* USER CARD */
+        /* ── USER CARD ── */
         .user-card {
           display:flex; align-items:center; gap:14px;
-          background:var(--bg2); border:1px solid rgba(0,229,255,.1);
+          background:var(--bg2); border:1px solid rgba(0,229,255,.09);
           border-radius:var(--r); padding:14px 18px; margin-bottom:32px;
-          animation: fadeUp .5s .15s cubic-bezier(.16,1,.3,1) both;
+          animation:fadeUp .5s .1s cubic-bezier(.16,1,.3,1) both;
           position:relative; overflow:hidden;
         }
         .user-card::before {
-          content:''; position:absolute; top:0; left:0; right:0; height:1px;
-          background:linear-gradient(90deg,transparent,var(--cyan2),transparent);
+          content:''; position:absolute; top:0; left:0; right:0; height:1.5px;
+          background:linear-gradient(90deg,transparent,rgba(0,229,255,.35),transparent);
         }
-        @keyframes fadeUp { from{opacity:0;transform:translateY(12px)} to{opacity:1;transform:none} }
-        .user-av { width:44px; height:44px; border-radius:50%; border:2px solid var(--cyan2); object-fit:cover; flex-shrink:0; box-shadow:0 0 12px rgba(0,229,255,.2); }
+        @keyframes fadeUp { from{opacity:0;transform:translateY(14px)} to{opacity:1;transform:none} }
+        .user-av {
+          width:46px; height:46px; border-radius:50%;
+          border:2px solid rgba(0,229,255,.25);
+          object-fit:cover; flex-shrink:0;
+          box-shadow:0 0 16px rgba(0,229,255,.15);
+        }
+        .user-info { flex:1; min-width:0; }
+        .user-name { font-size:13px; color:white; font-weight:600; margin-bottom:3px; }
+        .user-credits {
+          font-size:11px; color:var(--dim2);
+          font-family:'JetBrains Mono',monospace;
+        }
+        .user-credits span { color:var(--yellow); font-weight:700; }
+        .plan-pill {
+          padding:4px 14px; border-radius:20px;
+          font-size:9.5px; font-family:'JetBrains Mono',monospace;
+          font-weight:700; letter-spacing:1px; flex-shrink:0;
+        }
 
-        /* SEC TITLE */
+        /* ── SECTION TITLE ── */
         .sec-title {
-          font-family:'Orbitron',sans-serif; font-size:9px; color:var(--dim);
-          letter-spacing:3px; text-transform:uppercase;
+          font-family:'Orbitron',sans-serif; font-size:9px;
+          color:var(--dim); letter-spacing:3px; text-transform:uppercase;
           margin-bottom:16px; padding-bottom:10px;
-          border-bottom:1px solid rgba(0,229,255,.06);
+          border-bottom:1px solid rgba(0,229,255,.05);
           display:flex; align-items:center; gap:10px;
         }
-        .sec-title::before { content:''; width:18px; height:1.5px; background:linear-gradient(90deg,var(--cyan),transparent); }
+        .sec-title::before {
+          content:''; width:18px; height:1.5px;
+          background:linear-gradient(90deg,var(--cyan),transparent);
+          flex-shrink:0;
+        }
 
-        /* PLAN CARDS */
+        /* ── PLAN CARDS ── */
         .plans { display:grid; grid-template-columns:1fr 1fr; gap:14px; margin-bottom:32px; }
         .plan-card {
-          background:var(--bg2); border:1px solid rgba(0,229,255,.08);
+          background:var(--bg2); border:1px solid rgba(0,229,255,.07);
           border-radius:var(--r); padding:22px 18px;
           cursor:pointer; transition:.25s cubic-bezier(.34,1.56,.64,1);
           position:relative; overflow:hidden;
@@ -501,74 +741,144 @@ export default function PaymentPage() {
           content:''; position:absolute; top:0; left:0; right:0;
           height:2px; background:transparent; transition:.3s;
         }
-        .plan-card:hover { border-color:rgba(0,229,255,.2); transform:translateY(-3px); }
-        .plan-card.selected { border-color:var(--cyan); box-shadow:0 0 30px rgba(0,229,255,.12); }
+        .plan-card:hover { border-color:rgba(0,229,255,.18); transform:translateY(-3px); }
+        .plan-card.selected { border-color:var(--cyan); box-shadow:0 0 32px rgba(0,229,255,.1); }
         .plan-card.selected::before { background:linear-gradient(90deg,var(--cyan),var(--purple)); }
+        .plan-tier { font-size:9px; font-weight:700; letter-spacing:2.5px; margin-bottom:10px; }
+        .plan-price {
+          font-family:'Orbitron',sans-serif; font-size:26px; font-weight:900;
+          color:white; margin-bottom:2px; line-height:1;
+        }
+        .plan-freq {
+          font-size:10px; color:var(--dim);
+          font-family:'JetBrains Mono',monospace; margin-bottom:4px;
+        }
+        .plan-usd { font-size:10px; opacity:.55; margin-bottom:14px; }
+        .plan-features { list-style:none; }
+        .plan-feature-item {
+          font-size:11px; padding:4px 0;
+          display:flex; align-items:center; gap:8px; line-height:1.5;
+        }
+        .feature-bullet { font-size:10px; flex-shrink:0; }
         .pro-hot {
           position:absolute; top:12px; right:12px;
           background:linear-gradient(135deg,var(--cyan),var(--purple));
-          color:white; font-size:8px; font-family:'Orbitron',sans-serif;
-          padding:3px 10px; border-radius:20px; font-weight:700; letter-spacing:1px;
-          animation: hotPulse 2s ease-in-out infinite;
+          color:white; font-size:7.5px; font-family:'Orbitron',sans-serif;
+          padding:3px 10px; border-radius:20px; font-weight:700; letter-spacing:1.5px;
+          animation:hotPulse 2.2s ease-in-out infinite;
         }
-        @keyframes hotPulse { 0%,100%{box-shadow:0 0 8px rgba(0,229,255,.3)} 50%{box-shadow:0 0 20px rgba(0,229,255,.6)} }
+        @keyframes hotPulse {
+          0%,100%{box-shadow:0 0 8px rgba(0,229,255,.3)}
+          50%{box-shadow:0 0 22px rgba(0,229,255,.55)}
+        }
         .plan-btn {
           width:100%; padding:10px; margin-top:16px;
           border:none; border-radius:var(--r2);
           font-family:'Orbitron',sans-serif; font-size:9px; font-weight:700;
           cursor:pointer; letter-spacing:1.5px; transition:.2s;
         }
-        .plan-btn.free-btn { background:rgba(0,255,163,.06); color:var(--green); border:1px solid rgba(0,255,163,.2); }
-        .plan-btn.pro-btn { background:linear-gradient(135deg,var(--cyan),var(--purple)); color:white; box-shadow:0 4px 16px rgba(0,229,255,.2); }
-        .plan-btn:disabled { opacity:.4; cursor:not-allowed; }
+        .plan-btn-free {
+          background:rgba(0,255,163,.05); color:var(--green);
+          border:1px solid rgba(0,255,163,.2);
+        }
+        .plan-btn-pro {
+          background:linear-gradient(135deg,var(--cyan),var(--purple));
+          color:white; box-shadow:0 4px 18px rgba(0,229,255,.2);
+        }
+        .plan-btn-pro:hover { box-shadow:0 6px 28px rgba(0,229,255,.35); transform:translateY(-1px); }
+        .plan-btn:disabled { opacity:.38; cursor:not-allowed; }
 
-        /* PACKS */
+        /* ── CREDIT PACKS ── */
         .packs { display:grid; grid-template-columns:repeat(2,1fr); gap:12px; margin-bottom:32px; }
         .pack-card {
-          background:var(--bg2); border:1px solid rgba(0,229,255,.08);
-          border-radius:var(--r); padding:20px 14px;
+          background:var(--bg2); border:1px solid rgba(0,229,255,.07);
+          border-radius:var(--r); padding:22px 16px;
           cursor:pointer; transition:.25s cubic-bezier(.34,1.56,.64,1);
           text-align:center; position:relative; overflow:hidden;
         }
         .pack-card:hover { border-color:rgba(251,191,36,.2); transform:translateY(-3px); }
-        .pack-card.selected { border-color:var(--yellow); box-shadow:0 0 24px rgba(251,191,36,.15); background:rgba(251,191,36,.04); }
+        .pack-card.selected {
+          border-color:var(--yellow);
+          box-shadow:0 0 26px rgba(251,191,36,.12);
+          background:rgba(251,191,36,.03);
+        }
         .pack-popular-tag {
           position:absolute; top:-1px; left:50%; transform:translateX(-50%);
           background:linear-gradient(135deg,var(--yellow),var(--orange));
           color:#000; font-size:7px; font-weight:800;
-          padding:3px 12px; border-radius:0 0 8px 8px;
-          font-family:'Orbitron',sans-serif; letter-spacing:1.5px;
+          padding:3px 14px; border-radius:0 0 8px 8px;
+          font-family:'Orbitron',sans-serif; letter-spacing:2px;
         }
+        .pack-cr {
+          font-family:'Orbitron',sans-serif; font-size:32px; font-weight:900;
+          color:var(--yellow); line-height:1; margin-bottom:4px;
+        }
+        .pack-sub { font-size:9px; color:var(--dim); letter-spacing:1.5px; margin-bottom:12px; }
+        .pack-price { font-size:15px; color:white; font-weight:700; margin-bottom:4px; }
+        .pack-usd { font-size:10px; color:var(--text); opacity:.55; font-family:'JetBrains Mono',monospace; }
+        .pack-val { margin-top:8px; font-size:9px; color:var(--green); font-family:'JetBrains Mono',monospace; }
 
-        /* PAY METHODS */
+        /* ── PAYMENT METHODS ── */
         .pay-methods { display:grid; grid-template-columns:1fr 1fr; gap:12px; margin-bottom:28px; }
         .pay-card {
-          background:var(--bg2); border:1px solid rgba(0,229,255,.08);
-          border-radius:var(--r); padding:16px;
-          cursor:pointer; transition:.2s;
+          background:var(--bg2); border:1px solid rgba(0,229,255,.07);
+          border-radius:var(--r); padding:16px 18px;
+          cursor:pointer; transition:.22s;
           display:flex; align-items:center; gap:12px; position:relative;
         }
         .pay-card:hover { border-color:rgba(0,229,255,.2); transform:translateY(-2px); }
-        .pay-card.selected { border-color:var(--cyan); box-shadow:0 0 20px rgba(0,229,255,.1); background:rgba(0,229,255,.04); }
-        .pay-icon-wrap { width:48px; height:48px; border-radius:var(--r2); background:white; display:flex; align-items:center; justify-content:center; overflow:hidden; flex-shrink:0; }
-        .pay-icon { width:44px; height:44px; object-fit:contain; }
-        .pay-fallback { width:48px; height:48px; border-radius:var(--r2); display:flex; align-items:center; justify-content:center; font-family:'Orbitron',sans-serif; font-weight:900; font-size:12px; flex-shrink:0; }
+        .pay-card.selected {
+          border-color:var(--cyan);
+          box-shadow:0 0 22px rgba(0,229,255,.1);
+          background:rgba(0,229,255,.04);
+        }
+        .pay-icon-wrap {
+          width:50px; height:50px; border-radius:10px;
+          background:white; display:flex; align-items:center;
+          justify-content:center; overflow:hidden; flex-shrink:0;
+          box-shadow:0 2px 8px rgba(0,0,0,.3);
+        }
+        .pay-icon { width:46px; height:46px; object-fit:contain; }
+        .pay-label { font-size:14px; font-weight:700; color:white; margin-bottom:3px; }
+        .pay-sub { font-size:10px; color:var(--dim); }
+        .pay-radio {
+          width:20px; height:20px; border-radius:50%; flex-shrink:0;
+          display:flex; align-items:center; justify-content:center; transition:.18s;
+          margin-left:auto;
+        }
+        .pay-radio-dot { width:7px; height:7px; border-radius:50%; background:var(--bg); }
 
-        /* ORDER BOX */
+        /* ── ORDER BOX ── */
         .order-box {
-          background:var(--bg2); border:1px solid rgba(0,229,255,.1);
+          background:var(--bg2); border:1px solid rgba(0,229,255,.09);
           border-radius:var(--r); padding:18px 20px; margin-bottom:22px;
           position:relative; overflow:hidden;
         }
         .order-box::before {
           content:''; position:absolute; top:0; left:0; right:0; height:1px;
-          background:linear-gradient(90deg,transparent,var(--cyan2),transparent);
+          background:linear-gradient(90deg,transparent,rgba(0,229,255,.3),transparent);
+        }
+        .order-row {
+          display:flex; justify-content:space-between; align-items:center;
+          padding:8px 0; border-top:1px solid rgba(0,229,255,.04);
+        }
+        .order-row:first-child { border-top:none; }
+        .order-label { font-size:12px; color:var(--dim); }
+        .order-val { font-size:12px; color:var(--text); }
+        .order-total-label { font-size:13.5px; color:white; font-weight:700; }
+        .order-total-val {
+          font-family:'Orbitron',sans-serif; font-size:20px;
+          color:var(--yellow); font-weight:700;
+        }
+        .order-total-usd {
+          font-size:10px; color:var(--dim);
+          font-family:'JetBrains Mono',monospace; text-align:right; margin-top:2px;
         }
 
-        /* PAYMENT INSTRUCTION */
+        /* ── PAYMENT INSTRUCTION ── */
         .pay-instruction {
-          background:linear-gradient(135deg,rgba(0,229,255,.03),rgba(124,58,237,.03));
-          border:1px solid rgba(0,229,255,.15);
+          background:linear-gradient(135deg,rgba(0,229,255,.025),rgba(124,58,237,.025));
+          border:1px solid rgba(0,229,255,.14);
           border-radius:var(--r); padding:22px; margin-bottom:22px;
           position:relative;
         }
@@ -576,121 +886,233 @@ export default function PaymentPage() {
           content:''; position:absolute; top:0; left:0; right:0; height:1.5px;
           background:linear-gradient(90deg,var(--cyan),var(--purple));
         }
+        .inst-method-hdr {
+          display:flex; align-items:center; gap:10px; margin-bottom:18px; flex-wrap:wrap;
+        }
+        .inst-method-badge {
+          padding:4px 14px; border-radius:20px;
+          font-family:'Orbitron',sans-serif; font-size:10px; font-weight:700;
+          background:linear-gradient(135deg,var(--cyan),var(--purple));
+          color:white; letter-spacing:1px;
+        }
+        .inst-method-title { font-size:12px; color:white; font-weight:600; }
+        .inst-owner { font-size:11px; color:var(--dim); margin-left:auto; }
         .inst-number-box {
           background:var(--bg3); border:1px solid rgba(0,229,255,.1);
-          border-radius:var(--r2); padding:14px 16px; margin-bottom:20px;
+          border-radius:var(--r2); padding:16px 18px; margin-bottom:20px;
           cursor:pointer; transition:.2s; position:relative; overflow:hidden;
           display:flex; align-items:center; justify-content:space-between;
         }
         .inst-number-box:hover { border-color:var(--cyan2); background:var(--bg4); }
+        .inst-number-box::after {
+          content:''; position:absolute; inset:0;
+          background:linear-gradient(90deg,transparent,rgba(0,229,255,.04),transparent);
+          opacity:0; transition:.2s;
+        }
+        .inst-number-box:hover::after { opacity:1; }
+        .inst-num-label {
+          font-size:9px; color:var(--dim);
+          font-family:'JetBrains Mono',monospace; letter-spacing:1.5px; margin-bottom:7px;
+        }
+        .inst-num {
+          font-size:22px; font-weight:700; color:white;
+          letter-spacing:3px; font-family:'JetBrains Mono',monospace;
+        }
+        .inst-copy-hint {
+          display:flex; align-items:center; gap:5px;
+          font-size:9px; color:var(--dim);
+          font-family:'JetBrains Mono',monospace; letter-spacing:.5px;
+        }
+        .step-list { list-style:none; margin-bottom:18px; }
+        .step-item {
+          font-size:12px; color:var(--text); padding:6px 0;
+          display:flex; align-items:flex-start; gap:10px; line-height:1.6;
+        }
+        .step-num {
+          display:flex; align-items:center; justify-content:center;
+          width:20px; height:20px; border-radius:50%; flex-shrink:0;
+          background:rgba(0,229,255,.08); border:1px solid rgba(0,229,255,.18);
+          font-size:9px; color:var(--cyan); font-weight:700; margin-top:2px;
+        }
+        .code-tag {
+          display:inline-block;
+          background:var(--bg3); border:1px solid rgba(0,229,255,.1);
+          padding:2px 8px; border-radius:4px;
+          font-family:'JetBrains Mono',monospace; font-size:11px;
+          color:var(--yellow);
+        }
 
-        /* AMOUNT INPUT */
+        /* ── AMOUNT INPUT ── */
+        .amount-wrap { position:relative; }
+        .amount-prefix {
+          position:absolute; left:13px; top:50%; transform:translateY(-50%);
+          font-size:12px; color:var(--dim);
+          font-family:'JetBrains Mono',monospace; pointer-events:none;
+        }
         .amount-input {
           width:100%; background:var(--bg3); border:1px solid rgba(0,229,255,.1);
-          border-radius:var(--r2); padding:10px 12px 10px 40px;
-          color:white; font-family:'JetBrains Mono',monospace; font-size:15px;
-          outline:none; transition:border-color .2s;
+          border-radius:var(--r2); padding:12px 14px 12px 42px;
+          color:white; font-family:'JetBrains Mono',monospace; font-size:16px;
+          outline:none; transition:border-color .2s, background .2s;
           -moz-appearance:textfield;
         }
         .amount-input::-webkit-outer-spin-button,
         .amount-input::-webkit-inner-spin-button { -webkit-appearance:none; }
         .amount-input:focus { border-color:var(--cyan2); }
         .amount-input.valid { border-color:var(--green); background:rgba(0,255,163,.04); }
-        .amount-input.invalid { border-color:var(--pink); background:rgba(244,63,94,.04); }
         .amount-input.close { border-color:var(--yellow); background:rgba(251,191,36,.04); }
+        .amount-input.invalid { border-color:var(--pink); background:rgba(244,63,94,.04); }
+        .amount-feedback { font-size:11px; margin-top:8px; min-height:18px; display:flex; align-items:center; gap:6px; }
+        .amount-verify-box {
+          background:rgba(0,229,255,.025); border:1px solid rgba(0,229,255,.1);
+          border-radius:var(--r2); padding:14px;
+        }
+        .amount-verify-label { font-size:11px; color:var(--dim); margin-bottom:10px; display:block; }
+        .warning-box {
+          background:rgba(251,191,36,.04); border:1px solid rgba(251,191,36,.18);
+          border-radius:var(--r2); padding:13px 14px;
+          font-size:11px; color:var(--yellow); line-height:1.75;
+          display:flex; gap:9px; align-items:flex-start; margin-top:16px;
+        }
 
-        /* BUTTONS */
+        /* ── BUTTONS ── */
         .btn-primary {
           width:100%; padding:15px;
           background:linear-gradient(135deg,var(--cyan),var(--purple));
           border:none; border-radius:var(--r);
           color:white; font-family:'Orbitron',sans-serif; font-size:11px; font-weight:700;
-          cursor:pointer; transition:.2s; letter-spacing:1.5px; position:relative; overflow:hidden;
+          cursor:pointer; transition:.2s; letter-spacing:1.5px;
+          display:flex; align-items:center; justify-content:center; gap:8px;
         }
-        .btn-primary:hover:not(:disabled) { transform:translateY(-2px); box-shadow:0 8px 28px rgba(0,229,255,.25); }
-        .btn-primary:active:not(:disabled) { transform:translateY(0); }
-        .btn-primary:disabled { opacity:.3; cursor:not-allowed; }
+        .btn-primary:hover:not(:disabled) {
+          transform:translateY(-2px);
+          box-shadow:0 8px 32px rgba(0,229,255,.25);
+        }
+        .btn-primary:disabled { opacity:.28; cursor:not-allowed; transform:none; }
         .btn-secondary {
-          background:transparent; border:1px solid rgba(0,229,255,.12);
-          color:var(--dim); font-family:'JetBrains Mono',monospace;
-          font-size:11px; padding:12px; border-radius:var(--r);
-          cursor:pointer; transition:.2s; letter-spacing:.5px;
-          width:100%;
+          background:transparent; border:1px solid rgba(0,229,255,.1);
+          color:var(--dim2); font-family:'JetBrains Mono',monospace;
+          font-size:11px; padding:13px; border-radius:var(--r);
+          cursor:pointer; transition:.18s; letter-spacing:.5px; width:100%;
         }
         .btn-secondary:hover { color:var(--cyan); border-color:var(--cyan2); background:var(--cyan3); }
+        .btn-row { display:flex; gap:10px; }
 
-        /* CONFIRMED */
-        @keyframes successPop { from{transform:scale(.5);opacity:0} to{transform:scale(1);opacity:1} }
+        /* ── CONFIRMED ── */
+        .confirmed-check {
+          display:inline-flex; align-items:center; justify-content:center;
+          width:90px; height:90px; border-radius:50%;
+          background:rgba(0,255,163,.07); border:2px solid rgba(0,255,163,.28);
+          margin-bottom:24px;
+          box-shadow:0 0 48px rgba(0,255,163,.12);
+          animation:successPop .55s cubic-bezier(.34,1.56,.64,1) both;
+        }
+        @keyframes successPop { from{transform:scale(.4);opacity:0} to{transform:scale(1);opacity:1} }
+        .confirmed-title {
+          font-family:'Orbitron',sans-serif; font-size:21px;
+          color:var(--green); margin-bottom:14px; letter-spacing:1px;
+        }
+        .confirmed-desc {
+          color:var(--dim2); font-size:12.5px; line-height:1.9; margin-bottom:12px;
+        }
+        .tx-badge {
+          display:inline-block; background:var(--bg2);
+          border:1px solid rgba(0,229,255,.1); border-radius:var(--r2);
+          padding:6px 20px; font-size:11px; color:var(--dim2);
+          font-family:'JetBrains Mono',monospace; margin-bottom:28px;
+        }
+        .tx-badge span { color:var(--yellow); }
+        .contact-block {
+          color:var(--text); font-size:12px; margin-bottom:36px; line-height:2;
+        }
+        .contact-block a { color:var(--cyan); text-decoration:none; }
+        .contact-block a:hover { text-decoration:underline; }
 
-        @media(max-width:500px) {
+        /* ── RESPONSIVE ── */
+        @media(max-width:520px) {
           .main { padding:24px 14px 80px; }
-          .hero-title { font-size:22px; }
+          .hero-title { font-size:24px; }
           .plans,.packs,.pay-methods { grid-template-columns:1fr 1fr; }
-          .plan-price { font-size:20px; }
+          .nav { padding:0 14px; }
         }
       `}</style>
 
       <div className="scanlines" />
 
-      {/* NAV */}
+      {/* ── NAV ── */}
       <nav className="nav">
-        <a href="/chats" className="nav-logo">NEXUS AI</a>
-        <div className="nav-status">
-          <div className="status-dot" />
-          <span>LIVE</span>
+        <a href="/dashboard" className="nav-logo">
+          <div className="nav-logo-icon">
+            <img
+              src="/nexusai.png"
+              alt="NEXUS"
+              onError={(e) => {
+                (e.target as HTMLImageElement).style.display = "none";
+              }}
+            />
+          </div>
+          NEXUS AI
+        </a>
+
+        <div className="nav-center">
+          <div className="nav-status-dot" />
+          <span className="nav-status-text">LIVE</span>
         </div>
-        <button className="nav-back" onClick={handleBack}>← Back</button>
+
+        <button className="nav-back" onClick={handleBack}>
+          <svg viewBox="0 0 24 24">
+            <polyline points="15 18 9 12 15 6" />
+          </svg>
+          Back
+        </button>
       </nav>
 
       <div className="main">
-        {/* HERO */}
+        {/* ── HERO ── */}
         <div className="hero">
-          <div className="hero-icon-wrap"><span style={{ fontSize: 34 }}>⭐</span></div>
+          <div className="hero-icon-wrap">
+            <span style={{ fontSize: 36 }}>⚡</span>
+          </div>
           <div className="hero-title">Get Credits</div>
           <div className="hero-sub">
-            Choose a package that suits your needs <span>// NEXUS STORE</span>
+            Power up your AI experience <span>// NEXUS STORE</span>
           </div>
         </div>
 
-        {/* STEPS */}
+        {/* ── STEPS ── */}
         {view !== 4 && <StepsBar current={view} />}
 
-        {/* USER CARD */}
+        {/* ── USER CARD ── */}
         <div className="user-card">
           <img
             className="user-av"
             src={avatarUrl}
             alt="avatar"
-            onError={(e) => { (e.target as HTMLImageElement).src = "/favicon.ico"; }}
+            onError={(e) => {
+              (e.target as HTMLImageElement).src = "/nexusai.png";
+            }}
           />
-          <div>
-            <div style={{ fontSize: 13, color: "white", fontWeight: 600 }}>@{username}</div>
-            <div style={{ fontSize: 11, color: "var(--dim)", marginTop: 3 }}>
-              Balance:{" "}
-              <span style={{ color: "var(--yellow)", fontWeight: 700, fontFamily: "JetBrains Mono, monospace" }}>
-                {credits}
-              </span>{" "}
-              CR
+          <div className="user-info">
+            <div className="user-name">@{username}</div>
+            <div className="user-credits">
+              Balance: <span>{credits}</span> CR
             </div>
           </div>
           <div
+            className="plan-pill"
             style={{
-              marginLeft: "auto",
-              background: plan !== "FREE" ? "rgba(0,229,255,.08)" : "rgba(0,255,163,.08)",
-              border: `1px solid ${plan !== "FREE" ? "rgba(0,229,255,.3)" : "rgba(0,255,163,.2)"}`,
-              borderRadius: 20,
-              padding: "3px 12px",
-              fontSize: 10,
-              color: plan !== "FREE" ? "var(--cyan)" : "var(--green)",
-              fontFamily: "JetBrains Mono, monospace",
-              letterSpacing: 1,
+              color: planStyle.color,
+              background: planStyle.bg,
+              border: `1px solid ${planStyle.border}`,
             }}
           >
             {plan}
           </div>
         </div>
 
-        {/* ═══════ VIEW 1: SELECT PACKAGE ═══════ */}
+        {/* ══════════════════════════════════════════
+            VIEW 1 — SELECT PACKAGE
+        ══════════════════════════════════════════ */}
         {view === 1 && (
           <div style={{ animation: "fadeUp .35s cubic-bezier(.16,1,.3,1) both" }}>
             <div className="sec-title">Subscription Plans</div>
@@ -698,20 +1120,33 @@ export default function PaymentPage() {
               {/* FREE */}
               <div
                 className="plan-card"
-                onClick={() => showToast("You are already on the Free plan!", "var(--green)")}
+                onClick={() => showToast("You're already on the Free plan!", "var(--green)")}
               >
-                <div style={{ fontSize: 9, fontWeight: 700, letterSpacing: 2, marginBottom: 10, color: "var(--green)" }}>FREE</div>
-                <div style={{ fontFamily: "Orbitron, sans-serif", fontSize: 24, fontWeight: 900, color: "white", marginBottom: 2 }}>$0</div>
-                <div style={{ fontSize: 10, color: "var(--dim)", fontFamily: "JetBrains Mono, monospace", marginBottom: 4 }}>/month — Forever free</div>
-                <div style={{ fontSize: 10, color: "var(--cyan)", opacity: 0.6, marginBottom: 14 }}>IDR 0</div>
-                <ul style={{ listStyle: "none" }}>
-                  {[["✦", "30 CR on signup"], ["✦", "+2 CR daily"], ["✦", "Gemini Flash Lite"], ["—", "Premium models", true], ["—", "Priority support", true]].map(([icon, text, dim]) => (
-                    <li key={String(text)} style={{ fontSize: 11, color: dim ? "var(--dim)" : "var(--text)", padding: "4px 0", display: "flex", alignItems: "center", gap: 8 }}>
-                      <span style={{ fontSize: 10 }}>{icon}</span>{text}
+                <div className="plan-tier" style={{ color: "var(--green)" }}>FREE</div>
+                <div className="plan-price">$0</div>
+                <div className="plan-freq">/month — Forever free</div>
+                <div className="plan-usd" style={{ color: "var(--green)" }}>IDR 0</div>
+                <ul className="plan-features">
+                  {[
+                    { bullet: "✦", text: "30 CR on signup", dim: false },
+                    { bullet: "✦", text: "+2 CR daily", dim: false },
+                    { bullet: "✦", text: "Gemini Flash Lite", dim: false },
+                    { bullet: "—", text: "Premium models", dim: true },
+                    { bullet: "—", text: "Priority support", dim: true },
+                  ].map(({ bullet, text, dim }) => (
+                    <li
+                      key={text}
+                      className="plan-feature-item"
+                      style={{ color: dim ? "var(--dim)" : "var(--text)" }}
+                    >
+                      <span className="feature-bullet">{bullet}</span>
+                      {text}
                     </li>
                   ))}
                 </ul>
-                <button className="plan-btn free-btn" disabled>Currently Active</button>
+                <button className="plan-btn plan-btn-free" disabled>
+                  Currently Active
+                </button>
               </div>
 
               {/* PRO */}
@@ -720,250 +1155,285 @@ export default function PaymentPage() {
                 onClick={selectProPlan}
               >
                 <span className="pro-hot">HOT 🔥</span>
-                <div style={{ fontSize: 9, fontWeight: 700, letterSpacing: 2, marginBottom: 10, color: "var(--cyan)" }}>PRO</div>
-                <div style={{ fontFamily: "Orbitron, sans-serif", fontSize: 24, fontWeight: 900, color: "white", marginBottom: 2 }}>Rp 150K</div>
-                <div style={{ fontSize: 10, color: "var(--dim)", fontFamily: "JetBrains Mono, monospace", marginBottom: 4 }}>/month · Via OVO / DANA</div>
-                <div style={{ fontSize: 10, color: "var(--cyan)", opacity: 0.6, marginBottom: 14 }}>≈ $9.38 USD</div>
-                <ul style={{ listStyle: "none" }}>
-                  {["200 CR instantly", "+25 CR daily (auto)", "All AI models", "Priority support", "Exclusive features", "Custom AI personality"].map((text) => (
-                    <li key={text} style={{ fontSize: 11, color: "var(--text)", padding: "4px 0", display: "flex", alignItems: "center", gap: 8 }}>
-                      <span style={{ fontSize: 10 }}>✦</span>{text}
+                <div className="plan-tier" style={{ color: "var(--cyan)" }}>PRO</div>
+                <div className="plan-price">Rp 150K</div>
+                <div className="plan-freq">/month · OVO / DANA</div>
+                <div className="plan-usd" style={{ color: "var(--cyan)" }}>≈ $9.38 USD</div>
+                <ul className="plan-features">
+                  {[
+                    "200 CR instantly",
+                    "+25 CR daily",
+                    "All AI models",
+                    "Priority support",
+                    "Exclusive features",
+                    "Custom AI personality",
+                  ].map((text) => (
+                    <li key={text} className="plan-feature-item" style={{ color: "var(--text)" }}>
+                      <span className="feature-bullet">✦</span>
+                      {text}
                     </li>
                   ))}
                 </ul>
-                <button className="plan-btn pro-btn">Subscribe Pro</button>
+                <button className="plan-btn plan-btn-pro">
+                  {sel.pack === "pro-plan" ? "✓ Selected" : "Subscribe Pro"}
+                </button>
               </div>
             </div>
 
             <div className="sec-title">One-Time Credit Packs</div>
             <div className="packs">
-              {([
-                { id: "50",  cr: 50,  price: 38000,   usd: 2.38,  label: "50 CR — Starter",  sub: "STARTER",  val: "Rp 760 / credit",  popular: false },
-                { id: "80",  cr: 80,  price: 50000,   usd: 3.13,  label: "80 CR — Popular",  sub: "POPULAR",  val: "Rp 625 / credit",  popular: true  },
-                { id: "150", cr: 150, price: 120000,  usd: 7.50,  label: "150 CR — Pro",     sub: "PRO",      val: "Rp 800 / credit",  popular: false },
-                { id: "500", cr: 500, price: 1500000, usd: 93.75, label: "500 CR — Mega",    sub: "MEGA",     val: "Rp 3,000 / credit",popular: false },
-              ] as const).map((p) => (
+              {(
+                [
+                  { id: "50",  cr: 50,  price: 38000,   usd: 2.38,  sub: "STARTER", val: "Rp 760 / CR",  popular: false },
+                  { id: "80",  cr: 80,  price: 50000,   usd: 3.13,  sub: "POPULAR", val: "Rp 625 / CR",  popular: true  },
+                  { id: "150", cr: 150, price: 120000,  usd: 7.50,  sub: "PRO",     val: "Rp 800 / CR",  popular: false },
+                  { id: "500", cr: 500, price: 1500000, usd: 93.75, sub: "MEGA",    val: "Rp 3K / CR",   popular: false },
+                ] as const
+              ).map((p) => (
                 <div
                   key={p.id}
                   className={`pack-card${sel.pack === p.id ? " selected" : ""}`}
-                  onClick={() => selectPack(p.id, p.price, p.usd, p.label)}
+                  onClick={() =>
+                    selectPack(p.id, p.cr, p.price, p.usd, `${p.cr} CR — ${p.sub}`)
+                  }
                 >
                   {p.popular && <div className="pack-popular-tag">POPULAR</div>}
-                  <div style={{ fontFamily: "Orbitron, sans-serif", fontSize: 28, fontWeight: 900, color: "var(--yellow)", marginBottom: 2, lineHeight: 1 }}>{p.cr}</div>
-                  <div style={{ fontSize: 10, color: "var(--dim)", marginBottom: 10, letterSpacing: 1 }}>CREDITS · {p.sub}</div>
-                  <div style={{ fontSize: 14, color: "white", fontWeight: 700, marginBottom: 3 }}>{formatIdr(p.price)}</div>
-                  <div style={{ fontSize: 10, color: "var(--text)", opacity: 0.6, fontFamily: "JetBrains Mono, monospace" }}>≈ ${p.usd.toFixed(2)} USD</div>
-                  <div style={{ marginTop: 8, fontSize: 9, color: "var(--green)", fontFamily: "JetBrains Mono, monospace" }}>{p.val}</div>
+                  <div className="pack-cr">{p.cr}</div>
+                  <div className="pack-sub">CREDITS · {p.sub}</div>
+                  <div className="pack-price">{formatIdr(p.price)}</div>
+                  <div className="pack-usd">≈ ${p.usd.toFixed(2)} USD</div>
+                  <div className="pack-val">{p.val}</div>
                 </div>
               ))}
             </div>
 
             <button className="btn-primary" disabled={!sel.pack} onClick={goToPayment}>
-              Continue to Payment →
+              <span>Continue to Payment</span>
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
+                <polyline points="9 18 15 12 9 6" />
+              </svg>
             </button>
           </div>
         )}
 
-        {/* ═══════ VIEW 2: PAYMENT METHOD ═══════ */}
+        {/* ══════════════════════════════════════════
+            VIEW 2 — PAYMENT METHOD
+        ══════════════════════════════════════════ */}
         {view === 2 && (
           <div style={{ animation: "fadeUp .35s cubic-bezier(.16,1,.3,1) both" }}>
             <div className="sec-title">Select Payment Method</div>
             <div className="pay-methods">
-              {/* OVO */}
-              <div className={`pay-card${sel.method === "ovo" ? " selected" : ""}`} onClick={() => selectMethod("ovo")}>
-                <div className="pay-icon-wrap">
-                  <img
-                    className="pay-icon"
-                    src="/ovo.png"
-                    alt="OVO"
-                    onError={(e) => {
-                      const el = e.target as HTMLImageElement;
-                      el.style.display = "none";
-                      el.parentElement!.style.background = "linear-gradient(135deg,#4C2D91,#7E5AC8)";
-                      el.parentElement!.style.color = "white";
-                      el.parentElement!.innerText = "OVO";
-                      el.parentElement!.style.fontFamily = "Orbitron,sans-serif";
-                      el.parentElement!.style.fontWeight = "900";
-                      el.parentElement!.style.fontSize = "12px";
-                    }}
-                  />
-                </div>
-                <div>
-                  <div style={{ fontSize: 13, fontWeight: 700, color: "white" }}>OVO</div>
-                  <div style={{ fontSize: 10, color: "var(--dim)", marginTop: 2 }}>Transfer via OVO</div>
-                </div>
-                <div style={{
-                  marginLeft: "auto", width: 20, height: 20, borderRadius: "50%",
-                  border: `1.5px solid ${sel.method === "ovo" ? "var(--cyan)" : "var(--dim)"}`,
-                  flexShrink: 0, display: "flex", alignItems: "center", justifyContent: "center",
-                  background: sel.method === "ovo" ? "var(--cyan)" : "transparent",
-                  boxShadow: sel.method === "ovo" ? "0 0 8px rgba(0,229,255,.4)" : "none",
-                  transition: ".2s",
-                }}>
-                  {sel.method === "ovo" && <div style={{ width: 6, height: 6, borderRadius: "50%", background: "#000" }} />}
-                </div>
-              </div>
-
-              {/* DANA */}
-              <div className={`pay-card${sel.method === "dana" ? " selected" : ""}`} onClick={() => selectMethod("dana")}>
-                <div className="pay-icon-wrap">
-                  <img
-                    className="pay-icon"
-                    src="/dana.png"
-                    alt="DANA"
-                    onError={(e) => {
-                      const el = e.target as HTMLImageElement;
-                      el.style.display = "none";
-                      el.parentElement!.style.background = "linear-gradient(135deg,#118EEA,#47B4F5)";
-                      el.parentElement!.style.color = "white";
-                      el.parentElement!.innerText = "DANA";
-                      el.parentElement!.style.fontFamily = "Orbitron,sans-serif";
-                      el.parentElement!.style.fontWeight = "900";
-                      el.parentElement!.style.fontSize = "10px";
-                    }}
-                  />
-                </div>
-                <div>
-                  <div style={{ fontSize: 13, fontWeight: 700, color: "white" }}>DANA</div>
-                  <div style={{ fontSize: 10, color: "var(--dim)", marginTop: 2 }}>Transfer via DANA</div>
-                </div>
-                <div style={{
-                  marginLeft: "auto", width: 20, height: 20, borderRadius: "50%",
-                  border: `1.5px solid ${sel.method === "dana" ? "var(--cyan)" : "var(--dim)"}`,
-                  flexShrink: 0, display: "flex", alignItems: "center", justifyContent: "center",
-                  background: sel.method === "dana" ? "var(--cyan)" : "transparent",
-                  boxShadow: sel.method === "dana" ? "0 0 8px rgba(0,229,255,.4)" : "none",
-                  transition: ".2s",
-                }}>
-                  {sel.method === "dana" && <div style={{ width: 6, height: 6, borderRadius: "50%", background: "#000" }} />}
-                </div>
-              </div>
+              {(["ovo", "dana"] as PayMethod[]).filter(Boolean).map((m) => {
+                const isOvo = m === "ovo";
+                const selected = sel.method === m;
+                return (
+                  <div
+                    key={m!}
+                    className={`pay-card${selected ? " selected" : ""}`}
+                    onClick={() => selectMethod(m)}
+                  >
+                    <div className="pay-icon-wrap">
+                      <img
+                        className="pay-icon"
+                        src={`/${m}.png`}
+                        alt={isOvo ? "OVO" : "DANA"}
+                        onError={(e) => {
+                          const el = e.target as HTMLImageElement;
+                          el.style.display = "none";
+                          const parent = el.parentElement!;
+                          parent.style.background = isOvo
+                            ? "linear-gradient(135deg,#4C2D91,#7E5AC8)"
+                            : "linear-gradient(135deg,#118EEA,#47B4F5)";
+                          parent.style.color = "white";
+                          parent.style.fontFamily = "Orbitron,sans-serif";
+                          parent.style.fontWeight = "900";
+                          parent.style.fontSize = "11px";
+                          parent.innerText = isOvo ? "OVO" : "DANA";
+                        }}
+                      />
+                    </div>
+                    <div>
+                      <div className="pay-label">{isOvo ? "OVO" : "DANA"}</div>
+                      <div className="pay-sub">Transfer via {isOvo ? "OVO" : "DANA"}</div>
+                    </div>
+                    <div
+                      className="pay-radio"
+                      style={{
+                        border: `1.5px solid ${selected ? "var(--cyan)" : "var(--dim)"}`,
+                        background: selected ? "var(--cyan)" : "transparent",
+                        boxShadow: selected ? "0 0 10px rgba(0,229,255,.4)" : "none",
+                      }}
+                    >
+                      {selected && <div className="pay-radio-dot" />}
+                    </div>
+                  </div>
+                );
+              })}
             </div>
 
-            {/* ORDER SUMMARY */}
+            {/* Order summary */}
             <div className="order-box">
               <div className="sec-title" style={{ marginBottom: 12 }}>Order Summary</div>
               {[
-                { label: "Package", val: sel.label || "—", style: {} },
-                { label: "Credits", val: sel.cr ? `${sel.cr} CR` : "—", style: { color: "var(--yellow)", fontFamily: "JetBrains Mono, monospace", fontWeight: 700 } },
-                { label: "Method", val: sel.method ? (sel.method === "ovo" ? "OVO" : "DANA") : "—", style: {} },
-              ].map((r) => (
-                <div key={r.label} style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "7px 0", borderTop: "1px solid rgba(0,229,255,.04)" }}>
-                  <span style={{ fontSize: 12, color: "var(--dim)" }}>{r.label}</span>
-                  <span style={{ fontSize: 12, color: "var(--text)", ...r.style }}>{r.val}</span>
+                { label: "Package", val: sel.label || "—", valStyle: {} },
+                { label: "Credits", val: sel.cr ? `${sel.cr} CR` : "—", valStyle: { color: "var(--yellow)", fontFamily: "JetBrains Mono,monospace", fontWeight: 700 } },
+                { label: "Method", val: sel.method ? (sel.method === "ovo" ? "OVO" : "DANA") : "—", valStyle: {} },
+              ].map((row) => (
+                <div key={row.label} className="order-row">
+                  <span className="order-label">{row.label}</span>
+                  <span className="order-val" style={row.valStyle}>{row.val}</span>
                 </div>
               ))}
-              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "14px 0 7px", borderTop: "1px solid rgba(0,229,255,.1)", marginTop: 8 }}>
-                <span style={{ fontSize: 13, color: "white", fontWeight: 700 }}>Total</span>
+              <div className="order-row" style={{ borderTop: "1px solid rgba(0,229,255,.1)", marginTop: 8, paddingTop: 14 }}>
+                <span className="order-total-label">Total</span>
                 <div style={{ textAlign: "right" }}>
-                  <div style={{ fontFamily: "Orbitron, sans-serif", fontSize: 18, color: "var(--yellow)", fontWeight: 700 }}>{sel.priceStr || "—"}</div>
-                  <div style={{ fontSize: 10, color: "var(--dim)", fontFamily: "JetBrains Mono, monospace", marginTop: 2 }}>{sel.usd ? `≈ $${sel.usd.toFixed(2)} USD` : "—"}</div>
+                  <div className="order-total-val">{sel.priceStr || "—"}</div>
+                  {sel.usd > 0 && (
+                    <div className="order-total-usd">≈ ${sel.usd.toFixed(2)} USD</div>
+                  )}
                 </div>
               </div>
             </div>
 
-            <div style={{ display: "flex", gap: 10 }}>
-              <button className="btn-secondary" style={{ flex: 1 }} onClick={() => goToView(1)}>← Back</button>
+            <div className="btn-row">
+              <button className="btn-secondary" style={{ flex: 1 }} onClick={() => goToView(1)}>
+                ← Back
+              </button>
               <button className="btn-primary" style={{ flex: 2 }} disabled={!sel.method} onClick={showPayInst}>
-                View Instructions →
+                <span>View Instructions</span>
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
+                  <polyline points="9 18 15 12 9 6" />
+                </svg>
               </button>
             </div>
           </div>
         )}
 
-        {/* ═══════ VIEW 3: PAYMENT INSTRUCTION ═══════ */}
+        {/* ══════════════════════════════════════════
+            VIEW 3 — TRANSFER INSTRUCTIONS
+        ══════════════════════════════════════════ */}
         {view === 3 && (
           <div style={{ animation: "fadeUp .35s cubic-bezier(.16,1,.3,1) both" }}>
             <div className="sec-title">Transfer Instructions</div>
 
             <div className="pay-instruction">
               {/* Header */}
-              <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 16 }}>
-                <div style={{
-                  padding: "4px 14px", borderRadius: 20,
-                  fontFamily: "Orbitron, sans-serif", fontSize: 10, fontWeight: 700,
-                  background: "linear-gradient(135deg, var(--cyan), var(--purple))",
-                  color: "white", letterSpacing: 1,
-                }}>{methodLabel}</div>
-                <div style={{ fontSize: 11, color: "white", fontWeight: 600 }}>Transfer to {methodLabel}</div>
-                <div style={{ fontSize: 11, color: "var(--dim)", marginLeft: "auto" }}>{ownerName}</div>
+              <div className="inst-method-hdr">
+                <div className="inst-method-badge">{methodLabel}</div>
+                <div className="inst-method-title">Transfer to {methodLabel}</div>
+                <div className="inst-owner">{ownerName}</div>
               </div>
 
-              {/* Number box */}
+              {/* Account number */}
               <div className="inst-number-box" onClick={copyNumber}>
                 <div>
-                  <div style={{ fontSize: 9, color: "var(--dim)", fontFamily: "JetBrains Mono, monospace", letterSpacing: 1, marginBottom: 6 }}>ACCOUNT NUMBER</div>
-                  <div style={{ fontSize: 20, fontWeight: 700, color: "white", letterSpacing: 3, fontFamily: "JetBrains Mono, monospace" }}>
+                  <div className="inst-num-label">ACCOUNT NUMBER</div>
+                  <div className="inst-num">
                     {methodNum || "(not configured)"}
                   </div>
                 </div>
-                <div style={{ display: "flex", alignItems: "center", gap: 5, fontSize: 9, color: "var(--dim)", fontFamily: "JetBrains Mono, monospace", letterSpacing: "0.5px" }}>
-                  📋 TAP TO COPY
+                <div className="inst-copy-hint">
+                  <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                    <rect x="9" y="9" width="13" height="13" rx="2" />
+                    <path d="M5 15H4a2 2 0 01-2-2V4a2 2 0 012-2h9a2 2 0 012 2v1" />
+                  </svg>
+                  TAP TO COPY
                 </div>
               </div>
 
-              {/* Steps */}
-              <ul style={{ listStyle: "none", marginBottom: 18 }}>
+              {/* Step list */}
+              <ul className="step-list">
                 {[
-                  <>Open your <span style={{ color: "var(--cyan)", fontWeight: 600 }}>{methodLabel}</span> application</>,
-                  <>Select <strong style={{ color: "white" }}>Transfer</strong> and enter the account number above</>,
-                  <>Enter the exact amount: <span style={{ display: "inline-block", background: "var(--bg3)", border: "1px solid rgba(0,229,255,.1)", padding: "2px 8px", borderRadius: 4, fontFamily: "JetBrains Mono, monospace", fontSize: 11, color: "var(--yellow)" }}>{sel.priceStr}</span></>,
-                  <>In the <strong style={{ color: "white" }}>notes / memo</strong> field, write exactly: <span style={{ display: "inline-block", background: "var(--bg3)", border: "1px solid rgba(0,229,255,.1)", padding: "2px 8px", borderRadius: 4, fontFamily: "JetBrains Mono, monospace", fontSize: 11, color: "var(--yellow)" }}>{noteVal}</span></>,
+                  <>Open your <strong style={{ color: "white" }}>{methodLabel}</strong> app</>,
+                  <>Tap <strong style={{ color: "white" }}>Transfer</strong> and enter the number above</>,
+                  <>Enter the exact amount: <span className="code-tag">{sel.priceStr}</span></>,
+                  <>
+                    In <strong style={{ color: "white" }}>notes / memo</strong>, write exactly:{" "}
+                    <span className="code-tag">{noteVal}</span>
+                  </>,
                   <>Complete and confirm the transfer</>,
-                  <>Take a <strong style={{ color: "white" }}>screenshot</strong> of your payment receipt</>,
-                  <>Enter the transfer amount below to verify and submit</>,
+                  <>Take a <strong style={{ color: "white" }}>screenshot</strong> of the receipt</>,
+                  <>Enter the transfer amount below to verify</>,
                 ].map((step, i) => (
-                  <li key={i} style={{ fontSize: 12, color: "var(--text)", padding: "5px 0", display: "flex", alignItems: "flex-start", gap: 10, lineHeight: 1.5 }}>
-                    <div style={{
-                      display: "flex", alignItems: "center", justifyContent: "center",
-                      width: 20, height: 20, borderRadius: "50%", flexShrink: 0,
-                      background: "rgba(0,229,255,.1)", border: "1px solid rgba(0,229,255,.2)",
-                      fontSize: 9, color: "var(--cyan)", fontWeight: 700, marginTop: 1,
-                    }}>{i + 1}</div>
+                  <li key={i} className="step-item">
+                    <div className="step-num">{i + 1}</div>
                     <span>{step}</span>
                   </li>
                 ))}
               </ul>
 
-              {/* Amount verify */}
-              <div style={{ background: "rgba(0,229,255,.03)", border: "1px solid rgba(0,229,255,.1)", borderRadius: "var(--r2)", padding: 14 }}>
-                <label style={{ fontSize: 11, color: "var(--dim)", marginBottom: 8, display: "block" }}>
-                  Enter the exact transfer amount (IDR) to verify:
-                </label>
-                <div style={{ position: "relative" }}>
-                  <span style={{ position: "absolute", left: 12, top: "50%", transform: "translateY(-50%)", fontSize: 12, color: "var(--dim)", fontFamily: "JetBrains Mono, monospace", pointerEvents: "none" }}>Rp</span>
+              {/* Amount verification */}
+              <div className="amount-verify-box">
+                <span className="amount-verify-label">
+                  Enter the exact amount you transferred (IDR) to verify:
+                </span>
+                <div className="amount-wrap">
+                  <span className="amount-prefix">Rp</span>
                   <input
                     type="number"
-                    className={`amount-input${amountStatus === "valid" ? " valid" : amountStatus === "invalid" || amountStatus === "close" ? " invalid" : ""}`}
+                    className={`amount-input${
+                      amountStatus === "valid"
+                        ? " valid"
+                        : amountStatus === "close"
+                        ? " close"
+                        : amountStatus === "invalid"
+                        ? " invalid"
+                        : ""
+                    }`}
                     placeholder={`e.g. ${sel.price}`}
                     value={confirmAmount}
                     onChange={(e) => validateAmount(e.target.value)}
                   />
                 </div>
-                <div style={{ fontSize: 11, marginTop: 8, display: "flex", alignItems: "center", gap: 6, minHeight: 18 }}>
-                  {amountStatus === "valid" && <span style={{ color: "var(--green)" }}>✅ Amount matches! You can now confirm.</span>}
-                  {amountStatus === "close" && <span style={{ color: "var(--yellow)" }}>⚠️ Close but not exact. Expected: {formatIdr(sel.price)}</span>}
-                  {amountStatus === "invalid" && <span style={{ color: "var(--pink)" }}>❌ Does not match. Expected: {formatIdr(sel.price)}</span>}
+                <div className="amount-feedback">
+                  {amountStatus === "valid" && (
+                    <span style={{ color: "var(--green)" }}>✅ Amount matches — you can now confirm!</span>
+                  )}
+                  {amountStatus === "close" && (
+                    <span style={{ color: "var(--yellow)" }}>
+                      ⚠️ Close but not exact. Expected: {formatIdr(sel.price)}
+                    </span>
+                  )}
+                  {amountStatus === "invalid" && (
+                    <span style={{ color: "var(--pink)" }}>
+                      ❌ Doesn&apos;t match. Expected: {formatIdr(sel.price)}
+                    </span>
+                  )}
                 </div>
               </div>
 
-              <div style={{ marginTop: 16, padding: "12px 14px", background: "rgba(251,191,36,.04)", border: "1px solid rgba(251,191,36,.18)", borderRadius: "var(--r2)", fontSize: 11, color: "var(--yellow)", lineHeight: 1.7, display: "flex", gap: 8, alignItems: "flex-start" }}>
-                <span>⚠️</span>
-                <span>Credits will be added within <strong>1–24 hours</strong> after payment verification. Keep your payment screenshot as proof.</span>
+              <div className="warning-box">
+                <span style={{ flexShrink: 0 }}>⚠️</span>
+                <span>
+                  Credits are added within <strong style={{ color: "white" }}>1–24 hours</strong> after
+                  manual verification. Keep your payment screenshot as proof. If you don&apos;t receive
+                  credits after 24 hours, email{" "}
+                  <strong style={{ color: "var(--cyan)" }}>arifiinytid@gmail.com</strong> with the
+                  screenshot and your username.
+                </span>
               </div>
             </div>
 
             {/* Summary */}
             <div className="order-box">
-              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "7px 0" }}>
-                <span style={{ fontSize: 12, color: "var(--dim)" }}>Package</span>
-                <span style={{ fontSize: 12, color: "var(--text)" }}>{sel.label}</span>
+              <div className="order-row">
+                <span className="order-label">Package</span>
+                <span className="order-val">{sel.label}</span>
               </div>
-              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "14px 0 7px", borderTop: "1px solid rgba(0,229,255,.1)", marginTop: 8 }}>
-                <span style={{ fontSize: 13, color: "white", fontWeight: 700 }}>Total to Pay</span>
+              <div
+                className="order-row"
+                style={{
+                  borderTop: "1px solid rgba(0,229,255,.1)",
+                  marginTop: 8,
+                  paddingTop: 14,
+                }}
+              >
+                <span className="order-total-label">Total to Pay</span>
                 <div style={{ textAlign: "right" }}>
-                  <div style={{ fontFamily: "Orbitron, sans-serif", fontSize: 18, color: "var(--yellow)", fontWeight: 700 }}>{sel.priceStr}</div>
-                  <div style={{ fontSize: 10, color: "var(--dim)", fontFamily: "JetBrains Mono, monospace", marginTop: 2 }}>≈ ${sel.usd.toFixed(2)} USD</div>
+                  <div className="order-total-val">{sel.priceStr}</div>
+                  {sel.usd > 0 && (
+                    <div className="order-total-usd">≈ ${sel.usd.toFixed(2)} USD</div>
+                  )}
                 </div>
               </div>
             </div>
@@ -974,52 +1444,71 @@ export default function PaymentPage() {
                 disabled={amountStatus !== "valid" || submitting}
                 onClick={confirmPayment}
               >
-                {submitting ? "⏳ Submitting…" : "✅ I Have Transferred — Confirm Payment"}
+                {submitting ? (
+                  <>
+                    <div
+                      style={{
+                        width: 14, height: 14, borderRadius: "50%",
+                        border: "2px solid rgba(255,255,255,.2)",
+                        borderTopColor: "white",
+                        animation: "spin .7s linear infinite",
+                      }}
+                    />
+                    Submitting...
+                  </>
+                ) : (
+                  "✅ I Have Transferred — Confirm Payment"
+                )}
               </button>
-              <button className="btn-secondary" onClick={() => goToView(2)}>← Back</button>
+              <button className="btn-secondary" onClick={() => goToView(2)}>
+                ← Back
+              </button>
             </div>
           </div>
         )}
 
-        {/* ═══════ VIEW 4: CONFIRMED ═══════ */}
+        {/* ══════════════════════════════════════════
+            VIEW 4 — CONFIRMED
+        ══════════════════════════════════════════ */}
         {view === 4 && (
-          <div style={{ textAlign: "center", padding: "56px 0", animation: "fadeUp .4s cubic-bezier(.16,1,.3,1) both" }}>
-            <div style={{
-              display: "inline-flex", alignItems: "center", justifyContent: "center",
-              width: 88, height: 88, borderRadius: "50%",
-              background: "rgba(0,255,163,.08)", border: "2px solid rgba(0,255,163,.3)",
-              marginBottom: 24,
-              animation: "successPop .5s cubic-bezier(.34,1.56,.64,1) both",
-              boxShadow: "0 0 40px rgba(0,255,163,.15)",
-            }}>
-              <span style={{ fontSize: 44 }}>✅</span>
+          <div
+            style={{
+              textAlign: "center",
+              padding: "56px 0",
+              animation: "fadeUp .45s cubic-bezier(.16,1,.3,1) both",
+            }}
+          >
+            <div className="confirmed-check">
+              <span style={{ fontSize: 46 }}>✅</span>
             </div>
-            <div style={{ fontFamily: "Orbitron, sans-serif", fontSize: 20, color: "var(--green)", marginBottom: 14, letterSpacing: 1 }}>
-              Payment Submitted!
-            </div>
-            <p style={{ color: "var(--dim)", fontSize: 12, lineHeight: 1.9, marginBottom: 10 }}>
-              Your payment has been received and is pending verification.<br />
-              Credits will be added to your account within <strong style={{ color: "white" }}>1–24 hours</strong>.
+            <div className="confirmed-title">Payment Submitted!</div>
+            <p className="confirmed-desc">
+              Your payment has been received and is pending verification.
+              <br />
+              Credits will be added to your account within{" "}
+              <strong style={{ color: "white" }}>1–24 hours</strong>.
             </p>
-            <div style={{
-              display: "inline-block", background: "var(--bg2)",
-              border: "1px solid rgba(0,229,255,.1)", borderRadius: "var(--r2)",
-              padding: "6px 18px", fontSize: 11, color: "var(--dim)",
-              fontFamily: "JetBrains Mono, monospace", marginBottom: 28,
-            }}>
-              Transaction ID: <span style={{ color: "var(--yellow)" }}>{txId}</span>
+            <div className="tx-badge">
+              Transaction ID: <span>{txId}</span>
             </div>
-            <p style={{ color: "var(--text)", fontSize: 12, marginBottom: 36, lineHeight: 1.9 }}>
-              For inquiries, contact us at:<br />
-              <strong style={{ color: "var(--cyan)" }}>arifiinytid@gmail.com</strong><br />
-              Discord: <strong style={{ color: "var(--cyan)" }}>discord.gg/HuGtbRvD</strong>
-            </p>
+            <div className="contact-block">
+              Questions? Contact us at:
+              <br />
+              <a href="mailto:arifiinytid@gmail.com">arifiinytid@gmail.com</a>
+              <br />
+              Discord:{" "}
+              <a href="https://discord.gg/HuGtbRvD" target="_blank" rel="noopener noreferrer">
+                discord.gg/HuGtbRvD
+              </a>
+            </div>
             <button
               className="btn-primary"
               style={{ maxWidth: 340, margin: "0 auto" }}
-              onClick={() => { window.location.href = "/chats"; }}
+              onClick={() => {
+                window.location.href = "/dashboard";
+              }}
             >
-              ← Back to NEXUS AI
+              ← Back to Dashboard
             </button>
           </div>
         )}
