@@ -657,6 +657,128 @@ function toggleMDD(e){e.stopPropagation();var dd=document.getElementById('mDD');
 function toggleGuiMDD(e){e.stopPropagation();var dd=document.getElementById('guiMDD');if(!dd)return;dd.innerHTML=buildMDDHtml(true);var btn=document.getElementById('guiModelBtn');if(btn){var r=btn.getBoundingClientRect();dd.style.top=r.bottom+'px';dd.style.left=r.left+'px';}dd.classList.toggle('open');}
 function selModel(id,forGui){var m=MODEL_LIST.find(function(x){return x.id===id;});if(!m||m.grp)return;if(forGui)S.guiModel=m;else S.model=m;updateModelUI();var dd=document.getElementById(forGui?'guiMDD':'mDD');if(dd)dd.classList.remove('open');saveS();}
 
+// ── SUGGESTION CHIPS ─────────────────────────────────────────────────────────
+function _injectSuggChipStyles(){
+  if(document.getElementById('nx-chip-styles'))return;
+  var s=document.createElement('style');
+  s.id='nx-chip-styles';
+  s.textContent=
+    '.suggestion-chips{display:flex;flex-direction:column;gap:5px;margin-top:10px;margin-bottom:2px;}'+
+    '.suggestion-chip{'+
+      'display:flex;align-items:center;gap:8px;'+
+      'padding:7px 12px 7px 10px;'+
+      'background:rgba(0,229,255,.05);'+
+      'border:1px solid rgba(0,229,255,.16);'+
+      'border-radius:8px;'+
+      'color:var(--fg,#b8cfff);'+
+      'font-size:11.5px;'+
+      'cursor:pointer;'+
+      'text-align:left;'+
+      'transition:background .14s,border-color .14s,color .14s,transform .1s;'+
+      'font-family:inherit;'+
+      'width:fit-content;'+
+      'max-width:100%;'+
+      'line-height:1.4;'+
+    '}'+
+    '.suggestion-chip::before{'+
+      'content:"";'+
+      'display:inline-flex;'+
+      'width:0;height:0;'+
+      'border-top:4.5px solid transparent;'+
+      'border-bottom:4.5px solid transparent;'+
+      'border-left:7px solid var(--cyan,#00e5ff);'+
+      'flex-shrink:0;'+
+      'opacity:.55;'+
+      'transition:opacity .14s,transform .14s;'+
+    '}'+
+    '.suggestion-chip:hover{'+
+      'background:rgba(0,229,255,.12);'+
+      'border-color:rgba(0,229,255,.38);'+
+      'color:var(--cyan,#00e5ff);'+
+    '}'+
+    '.suggestion-chip:hover::before{opacity:1;transform:translateX(2px);}'+
+    '.suggestion-chip:active{transform:scale(.97);}'+
+    '.suggestion-chip.sending{opacity:.5;pointer-events:none;}'+
+    // Label kecil di atas chips
+    '.suggestion-chips-label{'+
+      'font-size:9.5px;'+
+      'color:var(--dim,#4a5568);'+
+      'letter-spacing:.05em;'+
+      'margin-bottom:4px;'+
+      'text-transform:uppercase;'+
+    '}';
+  document.head.appendChild(s);
+}
+ 
+// Proses bubble AI: konversi <ul> list jadi clickable suggestion chips
+function _processSuggestionChips(bubble){
+  if(!bubble)return;
+  var uls=bubble.querySelectorAll('ul');
+  if(!uls.length)return;
+ 
+  uls.forEach(function(ul){
+    // Skip jika sudah diproses
+    if(ul.getAttribute('data-chips-done'))return;
+ 
+    var liEls=ul.querySelectorAll('li');
+    var count=liEls.length;
+ 
+    // Hanya proses list pendek (2-12 item) - kemungkinan adalah suggestions
+    if(count<2||count>12)return;
+ 
+    // Pastikan semua item cukup pendek (bukan paragraf)
+    var allShort=Array.from(liEls).every(function(li){
+      return li.textContent.trim().length<=100&&li.querySelectorAll('ul,ol,p,pre').length===0;
+    });
+    if(!allShort)return;
+ 
+    // Buat wrapper chips
+    var wrap=document.createElement('div');
+    wrap.className='suggestion-chips';
+ 
+    Array.from(liEls).forEach(function(li){
+      var text=li.textContent.trim();
+      if(!text)return;
+ 
+      var btn=document.createElement('button');
+      btn.className='suggestion-chip';
+      btn.textContent=text;
+      btn.title=curLang==='id'?'Klik untuk tanya ini':'Click to ask this';
+ 
+      btn.onclick=function(){
+        if(S.gen)return; // Jangan kirim jika AI sedang generating
+        // Tandai sebagai sedang dikirim
+        btn.classList.add('sending');
+ 
+        var inp=document.getElementById('inp');
+        if(inp){
+          inp.value=text;
+          inp.style.height='auto';
+          inp.style.height=Math.min(inp.scrollHeight,130)+'px';
+          inp.focus();
+        }
+        // Sedikit delay agar animasi terlihat
+        setTimeout(function(){send();},80);
+      };
+ 
+      wrap.appendChild(btn);
+    });
+ 
+    // Hanya ganti jika berhasil buat minimal 2 chip
+    if(wrap.children.length>=2){
+      // Tambahkan label di atas jika belum ada
+      var prevEl=ul.previousElementSibling;
+      var hasLabel=prevEl&&(prevEl.tagName==='P'||prevEl.tagName==='DIV')&&
+                   prevEl.textContent.length<120;
+ 
+      // Sisipkan chips setelah ul, sembunyikan ul asli
+      ul.parentNode.insertBefore(wrap,ul.nextSibling);
+      ul.style.display='none';
+      ul.setAttribute('data-chips-done','1');
+    }
+  });
+}
+
 // ── RENDER MESSAGES ───────────────────────────────────────────────────────────
 function safeMarked(md){try{if(typeof marked==='undefined')return esc(md);var raw=marked.parse(String(md||''));return sanitizeHtml(raw);}catch(e){return esc(md);}}
 function renderMsgs(msgs){var c=document.getElementById('msgs');if(!c)return;var w=document.getElementById('welcome');if(!msgs||!msgs.length){if(w)w.style.display='flex';c.querySelectorAll('.msg,.steps-wrap').forEach(function(el){el.remove();});return;}if(w)w.style.display='none';c.querySelectorAll('.msg,.steps-wrap').forEach(function(el){el.remove();});msgs.forEach(function(m){appendMsg(m,true);});c.scrollTop=c.scrollHeight;}
@@ -694,6 +816,7 @@ function appendMsg(m,skipScroll){
   });
   if(m.studioSummary&&m.studioSummary.length){var sumDiv=document.createElement('div');sumDiv.className='studio-summary-box';sumDiv.innerHTML='<div class="studio-summary-title"><svg width="10" height="10" viewBox="0 0 24 24" stroke="currentColor" fill="none" stroke-width="2.5"><polyline points="20 6 9 17 4 12"/></svg>'+(curLang==='id'?'Dibangun di Studio':'Built in Studio')+'</div>'+m.studioSummary.map(function(it){return'<div class="studio-summary-item"><span class="studio-summary-dot"></span>'+esc(it)+'</div>';}).join('');bubble.appendChild(sumDiv);}
   mbWrap.appendChild(bubble);
+  if(!isUser)_processSuggestionChips(bubble);
   if(!isUser){var acts=document.createElement('div');acts.className='msg-acts';acts.innerHTML='<button class="mab" onclick="copyMsgText(this)"><svg viewBox="0 0 24 24"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 01-2-2V4a2 2 0 012-2h9a2 2 0 012 2v1"/></svg></button><button class="mab" onclick="retryMsg(this)"><svg viewBox="0 0 24 24"><polyline points="1 4 1 10 7 10"/><path d="M3.51 15a9 9 0 102.13-9.36L1 10"/></svg></button><button class="mab '+(m._liked?'liked':'')+'" onclick="likeMsg(this,true)"><svg viewBox="0 0 24 24"><path d="M14 9V5a3 3 0 00-3-3l-4 9v11h11.28a2 2 0 002-1.7l1.38-9a2 2 0 00-2-2.3zM7 22H4a2 2 0 01-2-2v-7a2 2 0 012-2h3"/></svg></button><button class="mab '+(m._disliked?'disliked':'')+'" onclick="likeMsg(this,false)"><svg viewBox="0 0 24 24"><path d="M10 15v4a3 3 0 003 3l4-9V2H5.72a2 2 0 00-2 1.7l-1.38 9a2 2 0 002 2.3zm7-13h2.67A2.31 2.31 0 0122 4v7a2.31 2.31 0 01-2.33 2H17"/></svg></button><button class="mab" onclick="openShareModal()"><svg viewBox="0 0 24 24"><circle cx="18" cy="5" r="3"/><circle cx="6" cy="12" r="3"/><circle cx="18" cy="19" r="3"/><line x1="8.59" y1="13.51" x2="15.42" y2="17.49"/><line x1="15.41" y1="6.51" x2="8.59" y2="10.49"/></svg></button>';mbWrap.appendChild(acts);}
   wrap.appendChild(mbWrap);c.appendChild(wrap);
   if(!skipScroll)c.scrollTop=c.scrollHeight;
@@ -2001,6 +2124,7 @@ function initThemePicker(){
 async function initApp(){
   if(!SESSION)return;
   var t=T();
+  _injectSuggChipStyles();
   updateLoader(8,t.loaderInit);
   S.currentProjectId=getProjectIdFromUrl();
   updateLoader(22,t.loaderLoadData);
