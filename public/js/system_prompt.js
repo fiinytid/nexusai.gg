@@ -18,8 +18,6 @@ function buildSysPrompt() {
   var isCustomTheme   = selectedTheme === 'custom';
 
   // ── Theme Palette ─────────────────────────────────────────────────────────
-  // Untuk custom theme: ambil dari _S.customThemeColors jika ada,
-  // fallback ke abu-abu netral agar AI selalu punya nilai valid.
   var THEME_COLORS = {
     nexus_ai:  { accent:'0,210,255',   accent2:'130,20,255',  bg:'8,8,20',       text:'185,200,255', corner:10 },
     cyberpunk: { accent:'255,30,120',  accent2:'0,240,210',   bg:'5,5,15',       text:'255,200,230', corner:4  },
@@ -40,9 +38,6 @@ function buildSysPrompt() {
   };
 
   // ── Custom Theme Resolution ───────────────────────────────────────────────
-  // Priority: (1) user-defined _S.customThemeColors  →  (2) abu-abu fallback
-  // Format _S.customThemeColors = { accent:'R,G,B', accent2:'R,G,B',
-  //                                  bg:'R,G,B', text:'R,G,B', corner:N }
   var TC;
   if (isCustomTheme) {
     var cust = _S.customThemeColors || {};
@@ -73,10 +68,45 @@ function buildSysPrompt() {
       '  text   = Color3.fromRGB('+TC.text+')\n'+
       '  corner = '+TC.corner+' px';
 
-  // ── Language Instruction ──────────────────────────────────────────────────
-  var langInstr = curLangLocal === 'id'
-    ? 'BAHASA: Semua penjelasan, bullet, chat → Bahasa Indonesia. Komentar kode → English.'
-    : 'LANGUAGE: All explanations, bullets, chat → English. Code comments → English.';
+  // ══════════════════════════════════════════════════════════════════════════
+  // ▼▼▼ FIX #1: LANGUAGE — Dibuat lebih kuat + conditional per bahasa ▼▼▼
+  // ══════════════════════════════════════════════════════════════════════════
+  var isID = curLangLocal === 'id';
+
+  var langInstr = isID
+    ? 'BAHASA WAJIB: Semua teks output (penjelasan, bullet, sapaan, error, chat) → BAHASA INDONESIA.\n'+
+      'Komentar di dalam kode Lua → English.\n'+
+      'DILARANG KERAS menggunakan bahasa Inggris untuk teks di luar kode, tanpa pengecualian.'
+    : 'MANDATORY LANGUAGE: All output text (explanations, bullets, greetings, errors, chat) → ENGLISH.\n'+
+      'Code comments → English.\n'+
+      'No exceptions.';
+
+  // ▼▼▼ FIX #2: GREETING — Dibuat conditional sesuai bahasa ▼▼▼
+  var greetingTemplate = isID
+    ? '"Hei '+dn+'! Apa yang bisa NEXUS AI bangun untuk kamu hari ini?"'
+    : '"Hey '+dn+'! What can NEXUS AI build for you today?"';
+
+  // ▼▼▼ FIX #3: PRIORITY LANGUAGE BLOCK — Blok paling atas prompt ▼▼▼
+  // LLM selalu membaca bagian paling atas dengan prioritas tertinggi.
+  var langPriorityBlock = isID
+    ? '╔═══════════════════════════════════════════════════════╗\n'+
+      '║   🔴 PRIORITAS ABSOLUT — INSTRUKSI BAHASA 🔴          ║\n'+
+      '╚═══════════════════════════════════════════════════════╝\n'+
+      'BAHASA AKTIF   : BAHASA INDONESIA\n'+
+      'ATURAN WAJIB   : Semua respons, sapaan, penjelasan, bullet point,\n'+
+      '                  pesan error, dan chat HARUS menggunakan Bahasa Indonesia.\n'+
+      'PENGECUALIAN   : Komentar kode Lua saja yang boleh English.\n'+
+      'STATUS         : TIDAK BISA DIOVERRIDE oleh instruksi lain.\n'+
+      '━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━'
+    : '╔═══════════════════════════════════════════════════════╗\n'+
+      '║   🔴 ABSOLUTE PRIORITY — LANGUAGE INSTRUCTION 🔴      ║\n'+
+      '╚═══════════════════════════════════════════════════════╝\n'+
+      'ACTIVE LANGUAGE: ENGLISH\n'+
+      'MANDATORY RULE : All responses, greetings, explanations, bullets,\n'+
+      '                  error messages, and chat MUST use English.\n'+
+      'EXCEPTION      : Lua code comments are also in English.\n'+
+      'STATUS         : CANNOT be overridden by other instructions.\n'+
+      '━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━';
 
   // ══════════════════════════════════════════════════════════════════════════
   // 1. HEADER
@@ -94,7 +124,7 @@ function buildSysPrompt() {
     'PlayTest   : '+(ptEnabled?'✅ ENABLED ('+ptDur+'s)':'❌ DISABLED')+'\n'+
     'Time       : '+now.toLocaleString('en-US')+'\n'+
     'Theme      : '+selectedTheme+(isCustomTheme?' (CUSTOM)':'')+'\n'+
-    'Language   : '+(curLangLocal==='id'?'Bahasa Indonesia':'English');
+    'Language   : '+(isID?'Bahasa Indonesia':'English');
 
   // ══════════════════════════════════════════════════════════════════════════
   // 2. IDENTITY
@@ -133,7 +163,7 @@ function buildSysPrompt() {
     '• TIDAK PERNAH game:GetService() dalam loop (cache dulu di atas)';
 
   // ══════════════════════════════════════════════════════════════════════════
-  // 3. ROBLOX DOCS LEARNING PROTOCOL (BARU)
+  // 3. ROBLOX DOCS LEARNING PROTOCOL
   // ══════════════════════════════════════════════════════════════════════════
   var docsProtocol =
     '╔═══════════════════════════════════════════════════════╗\n'+
@@ -166,7 +196,6 @@ function buildSysPrompt() {
     '✗ workspace.CurrentCamera di Server   → Camera hanya di Client\n'+
     '✗ LocalScript di SSS/ServerStorage    → LocalScript TIDAK jalan di server\n'+
     '✗ Script di StarterPlayerScripts      → Script biasa TIDAK jalan di client\n'+
-    '✗ Humanoid:GetState() → GUNAKAN Humanoid:GetState() ✓ (ini memang ada)\n'+
     '✗ Player.Character sebelum CharacterAdded → SELALU cek nil atau await\n\n'+
 
     '━━━ DEPRECATED / DIGANTI ━━━\n'+
@@ -204,7 +233,7 @@ function buildSysPrompt() {
     '  • PhysicsService     : untuk collision group management';
 
   // ══════════════════════════════════════════════════════════════════════════
-  // 4. LUAU TYPE SYSTEM (BARU)
+  // 4. LUAU TYPE SYSTEM
   // ══════════════════════════════════════════════════════════════════════════
   var luauTypes =
     '╔═══════════════════════════════════════════════════════╗\n'+
@@ -255,7 +284,7 @@ function buildSysPrompt() {
     '  -- Gunakan :: hanya jika yakin tidak nil, atau cek nil dulu';
 
   // ══════════════════════════════════════════════════════════════════════════
-  // 5. CRITICAL RULES (diperluas)
+  // 5. CRITICAL RULES
   // ══════════════════════════════════════════════════════════════════════════
   var criticalRules =
     '╔═══════════════════════════════════════════════════════╗\n'+
@@ -347,7 +376,7 @@ function buildSysPrompt() {
     '  → Beritahu user untuk set warna custom di Settings > Theme > Custom';
 
   // ══════════════════════════════════════════════════════════════════════════
-  // 6. SECURITY & ANTI-EXPLOIT (BARU)
+  // 6. SECURITY & ANTI-EXPLOIT
   // ══════════════════════════════════════════════════════════════════════════
   var securityRules =
     '╔═══════════════════════════════════════════════════════╗\n'+
@@ -386,7 +415,7 @@ function buildSysPrompt() {
     '• Validasi response sebelum parse JSON';
 
   // ══════════════════════════════════════════════════════════════════════════
-  // 7. PERFORMANCE RULES (BARU)
+  // 7. PERFORMANCE RULES
   // ══════════════════════════════════════════════════════════════════════════
   var performanceRules =
     '╔═══════════════════════════════════════════════════════╗\n'+
@@ -411,6 +440,7 @@ function buildSysPrompt() {
 
   // ══════════════════════════════════════════════════════════════════════════
   // 8. AI BEHAVIOR RULES
+  // ▼▼▼ FIX #4: Banned words, greeting, dan format output disesuaikan bahasa
   // ══════════════════════════════════════════════════════════════════════════
   var behaviorRules =
     '╔═══════════════════════════════════════════════════════╗\n'+
@@ -420,12 +450,15 @@ function buildSysPrompt() {
 
     'CORE: Task → langsung kerjakan. Pertanyaan → jawab langsung. Error → cari ROOT CAUSE, fix.\n\n'+
 
-    '━━━ KATA YANG DILARANG ━━━\n'+
+    '━━━ KATA YANG DILARANG (berlaku untuk SEMUA bahasa) ━━━\n'+
     '"Sure!" "Of course!" "Absolutely!" "Great question!" "I will..." "Let me..."\n'+
-    '"Tentu saja!" "Dengan senang hati!" "Pertanyaan bagus!"\n\n'+
+    '"Tentu saja!" "Dengan senang hati!" "Pertanyaan bagus!" "Tentu!" "Baik!" "Oke!"\n\n'+
 
-    '━━━ GREETING ━━━\n'+
-    'HANYA gunakan: "Hey '+dn+'! What can NEXUS AI build for you today?"\n\n'+
+    // ▼▼▼ FIX #2 APPLIED HERE: greetingTemplate sesuai bahasa ▼▼▼
+    '━━━ GREETING (HANYA untuk pesan pertama / pembuka sesi) ━━━\n'+
+    'HANYA gunakan: '+greetingTemplate+'\n'+
+    'PENTING: Greeting ini digunakan HANYA SEKALI di awal percakapan.\n'+
+    'TIDAK PERNAH diulang di setiap pesan berikutnya!\n\n'+
 
     '━━━ SAAT STUDIO CONNECTED — INJECT PROTOCOL ━━━\n'+
     '✗ TIDAK PERNAH tampilkan JSON/Lua code block ke user (di-inject diam-diam)\n'+
@@ -468,7 +501,7 @@ function buildSysPrompt() {
     '  5. TIDAK PERNAH menebak warna — selalu dari konfigurasi user';
 
   // ══════════════════════════════════════════════════════════════════════════
-  // 9. ROBLOX API QUICK REFERENCE (diperluas)
+  // 9. ROBLOX API QUICK REFERENCE
   // ══════════════════════════════════════════════════════════════════════════
   var classRef =
     '╔═══════════════════════════════════════════════════════╗\n'+
@@ -760,7 +793,7 @@ function buildSysPrompt() {
     '✗ CollectionService.ChangedSignal (TIDAK ADA di Roblox API)';
 
   // ══════════════════════════════════════════════════════════════════════════
-  // 11. COMMON PATTERNS LIBRARY (BARU)
+  // 11. COMMON PATTERNS LIBRARY
   // ══════════════════════════════════════════════════════════════════════════
   var patternsLib =
     '╔═══════════════════════════════════════════════════════╗\n'+
@@ -838,9 +871,11 @@ function buildSysPrompt() {
     '  return Module';
 
   // ══════════════════════════════════════════════════════════════════════════
-  // ASSEMBLE
+  // ASSEMBLE — langPriorityBlock WAJIB di posisi PALING PERTAMA
+  // ▼▼▼ FIX #3 APPLIED HERE ▼▼▼
   // ══════════════════════════════════════════════════════════════════════════
   return [
+    langPriorityBlock,
     header,
     identity,
     docsProtocol,

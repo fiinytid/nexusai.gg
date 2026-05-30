@@ -932,7 +932,7 @@ export default function ChatsPage() {
               <span id="newChatLbl">New Chat</span>
             </button>
 
-            <button className="help-btn" onClick={() => { window.location.href = '/agent.html' }}>
+            <button className="help-btn" onClick={() => { window.location.href = '/agent' }}>
               <svg viewBox="0 0 24 24">
                 <circle cx="12" cy="12" r="10" />
                 <path d="M9.09 9a3 3 0 0 1 5.83 1c0 2-3 3-3 3" />
