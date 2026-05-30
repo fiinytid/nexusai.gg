@@ -69,7 +69,6 @@ body{
   font-family:"JetBrains Mono",monospace;
   background:var(--bg);color:var(--text);
   min-height:100vh;overflow-x:hidden;
-  /* FIXED: allow body to scroll normally */
   overflow-y:auto;
 }
 body::before{
@@ -83,8 +82,6 @@ body::before{
   background-size:auto,auto,auto,44px 44px,44px 44px;
   pointer-events:none;z-index:0;
 }
-
-/* ── ANIMATIONS ── */
 @keyframes spin{to{transform:rotate(360deg)}}
 @keyframes fadeIn{from{opacity:0;transform:translateY(8px)}to{opacity:1;transform:none}}
 @keyframes slideUp{from{opacity:0;transform:translateY(16px)}to{opacity:1;transform:none}}
@@ -93,72 +90,33 @@ body::before{
 @keyframes shimmer{0%{background-position:-200% 0}100%{background-position:200% 0}}
 @keyframes glow-border{0%,100%{border-color:rgba(0,229,255,.15)}50%{border-color:rgba(0,229,255,.4)}}
 @keyframes float{0%,100%{transform:translateY(0)}50%{transform:translateY(-4px)}}
-
-/* ── SCROLLBAR ── */
 ::-webkit-scrollbar{width:4px;height:4px}
 ::-webkit-scrollbar-thumb{background:var(--b);border-radius:4px}
 ::-webkit-scrollbar-track{background:transparent}
-
-/* ── LOADER ── */
-#dash-loader{
-  position:fixed;inset:0;background:var(--bg);z-index:9999;
-  display:flex;flex-direction:column;align-items:center;justify-content:center;
-  gap:20px;transition:opacity .45s ease;
-}
+#dash-loader{position:fixed;inset:0;background:var(--bg);z-index:9999;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:20px;transition:opacity .45s ease;}
 #dash-loader.hide{opacity:0;pointer-events:none;}
 .loader-logo{font-family:"Orbitron",sans-serif;font-size:26px;font-weight:900;background:linear-gradient(135deg,var(--cyan),var(--purple));-webkit-background-clip:text;-webkit-text-fill-color:transparent;letter-spacing:4px;}
 .loader-ring{width:48px;height:48px;border-radius:50%;border:2px solid rgba(0,229,255,.08);border-top-color:var(--cyan);animation:spin .9s linear infinite;}
 .loader-sub{font-size:9px;color:var(--dim);letter-spacing:2.5px;text-transform:uppercase;}
 .loader-progress{width:160px;height:2px;background:rgba(0,229,255,.08);border-radius:2px;overflow:hidden;}
 .loader-progress-bar{height:100%;width:0%;background:linear-gradient(90deg,var(--cyan),var(--purple));border-radius:2px;transition:width .3s ease;}
-
-/* ── OFFLINE BANNER ── */
-#offlineBanner{
-  position:fixed;top:0;left:0;right:0;z-index:9998;
-  background:rgba(255,140,0,.12);border-bottom:1px solid rgba(255,140,0,.3);
-  padding:7px 20px;display:none;align-items:center;justify-content:center;
-  gap:8px;font-size:10px;color:var(--orange);
-}
+#offlineBanner{position:fixed;top:0;left:0;right:0;z-index:9998;background:rgba(255,140,0,.12);border-bottom:1px solid rgba(255,140,0,.3);padding:7px 20px;display:none;align-items:center;justify-content:center;gap:8px;font-size:10px;color:var(--orange);}
 #offlineBanner.show{display:flex;}
 #offlineBanner svg{width:13px;height:13px;stroke:currentColor;fill:none;stroke-width:2;flex-shrink:0;}
 .retry-btn-offline{padding:3px 10px;border-radius:5px;border:1px solid rgba(255,140,0,.4);background:rgba(255,140,0,.1);color:var(--orange);font-size:9px;cursor:pointer;font-family:"JetBrains Mono",monospace;transition:.15s;margin-left:8px;}
 .retry-btn-offline:hover{background:rgba(255,140,0,.2);}
-
-/* ── SYNC BAR ── */
 #syncBar{position:fixed;bottom:0;left:0;right:0;z-index:300;height:2px;background:transparent;transition:.3s;}
 #syncBar.syncing{background:linear-gradient(90deg,transparent,var(--cyan),var(--purple),transparent);background-size:200% 100%;animation:shimmer 1.5s linear infinite;}
 #syncBar.error{background:var(--pink);}
 #syncBar.ok{background:var(--green);animation:none;}
-
-/* ── NAV ── */
-.dnav{
-  position:sticky;top:0;z-index:200;
-  display:flex;align-items:center;justify-content:space-between;
-  padding:0 32px;height:58px;
-  background:rgba(3,3,18,.95);border-bottom:1px solid var(--b);
-  backdrop-filter:blur(28px);
-}
-.dnav-logo{
-  font-family:"Orbitron",sans-serif;font-size:14px;font-weight:900;
-  background:linear-gradient(135deg,var(--cyan),var(--purple));
-  -webkit-background-clip:text;-webkit-text-fill-color:transparent;
-  text-decoration:none;letter-spacing:2.5px;
-  display:flex;align-items:center;gap:10px;
-  cursor:pointer;
-}
+.dnav{position:sticky;top:0;z-index:200;display:flex;align-items:center;justify-content:space-between;padding:0 32px;height:58px;background:rgba(3,3,18,.95);border-bottom:1px solid var(--b);backdrop-filter:blur(28px);}
+.dnav-logo{font-family:"Orbitron",sans-serif;font-size:14px;font-weight:900;background:linear-gradient(135deg,var(--cyan),var(--purple));-webkit-background-clip:text;-webkit-text-fill-color:transparent;text-decoration:none;letter-spacing:2.5px;display:flex;align-items:center;gap:10px;cursor:pointer;}
 .dnav-logo-icon{width:30px;height:30px;border-radius:8px;overflow:hidden;border:1px solid var(--b);flex-shrink:0;box-shadow:0 0 12px rgba(0,229,255,.15);}
 .dnav-logo-icon img{width:100%;height:100%;object-fit:cover;display:block;}
 .dnav-right{display:flex;align-items:center;gap:10px;}
-.nav-credits-link{
-  display:flex;align-items:center;gap:6px;padding:6px 14px;border-radius:22px;
-  background:rgba(255,214,0,.05);border:1px solid rgba(255,214,0,.2);
-  font-size:11px;color:var(--yellow);font-weight:600;cursor:pointer;
-  transition:.2s;text-decoration:none;
-}
+.nav-credits-link{display:flex;align-items:center;gap:6px;padding:6px 14px;border-radius:22px;background:rgba(255,214,0,.05);border:1px solid rgba(255,214,0,.2);font-size:11px;color:var(--yellow);font-weight:600;cursor:pointer;transition:.2s;text-decoration:none;}
 .nav-credits-link:hover{border-color:rgba(255,214,0,.45);background:rgba(255,214,0,.1);transform:translateY(-1px);}
 .nav-credits-link svg{width:12px;height:12px;stroke:currentColor;fill:none;stroke-width:2.2;}
-
-/* ── USER PILL ── */
 .user-pill-wrap{position:relative;}
 .user-pill{display:flex;align-items:center;gap:8px;cursor:pointer;padding:4px 12px 4px 4px;border-radius:24px;border:1px solid var(--b);background:var(--bg2);transition:.2s;user-select:none;}
 .user-pill:hover{border-color:var(--bb);background:var(--bg3);}
@@ -167,14 +125,7 @@ body::before{
 .user-name-nav{font-size:11px;color:var(--text);font-weight:500;}
 .user-caret{width:11px;height:11px;stroke:var(--dim);fill:none;stroke-width:2.2;transition:.2s;flex-shrink:0;}
 .user-pill.open .user-caret{transform:rotate(180deg);stroke:var(--cyan);}
-
-/* ── DROPDOWN ── */
-.user-dd{
-  position:absolute;top:calc(100% + 8px);right:0;width:256px;
-  background:var(--bg2);border:1px solid var(--b);border-radius:14px;
-  box-shadow:0 24px 64px rgba(0,0,0,.95),0 0 0 1px rgba(0,229,255,.05);
-  z-index:9999;display:none;overflow:hidden;animation:fadeIn .16s ease;
-}
+.user-dd{position:absolute;top:calc(100% + 8px);right:0;width:256px;background:var(--bg2);border:1px solid var(--b);border-radius:14px;box-shadow:0 24px 64px rgba(0,0,0,.95),0 0 0 1px rgba(0,229,255,.05);z-index:9999;display:none;overflow:hidden;animation:fadeIn .16s ease;}
 .user-dd.open{display:block;}
 .ud-hdr{padding:16px;border-bottom:1px solid var(--b);display:flex;align-items:center;gap:12px;background:rgba(0,229,255,.02);}
 .ud-av{width:44px;height:44px;border-radius:50%;border:2px solid rgba(0,229,255,.3);object-fit:cover;flex-shrink:0;}
@@ -189,11 +140,7 @@ body::before{
 .ud-item.danger{color:rgba(255,45,107,.7);}
 .ud-item.danger:hover{background:rgba(255,45,107,.07);color:var(--pink);}
 .ud-divider{height:1px;background:var(--b);}
-
-/* ── MAIN ── */
 .dash-main{max-width:1080px;margin:0 auto;padding:44px 24px 80px;position:relative;z-index:1;}
-
-/* ── PAGE HEADER ── */
 .page-header{display:flex;align-items:center;justify-content:space-between;gap:20px;margin-bottom:36px;flex-wrap:wrap;}
 .header-left{display:flex;align-items:center;gap:18px;}
 .header-av-wrap{width:64px;height:64px;border-radius:16px;background:var(--bg2);border:1px solid var(--b);overflow:hidden;flex-shrink:0;box-shadow:0 0 32px rgba(0,229,255,.1),var(--shadow);}
@@ -206,8 +153,6 @@ body::before{
 .plan-badge.owner{border-color:rgba(255,214,0,.28);background:rgba(255,214,0,.05);color:var(--yellow);}
 .plan-badge svg{width:11px;height:11px;stroke:currentColor;fill:none;stroke-width:2;}
 .plan-badge:hover{filter:brightness(1.2);transform:translateY(-1px);box-shadow:0 4px 16px rgba(0,0,0,.3);}
-
-/* ── STATS ── */
 .stats-row{display:grid;grid-template-columns:repeat(3,1fr);gap:14px;margin-bottom:32px;}
 .stat-card{background:var(--bg2);border:1px solid var(--b);border-radius:var(--r);padding:20px;display:flex;align-items:center;gap:14px;transition:.22s;cursor:default;position:relative;overflow:hidden;}
 .stat-card::before{content:"";position:absolute;inset:0;background:linear-gradient(135deg,rgba(0,229,255,.02),transparent);opacity:0;transition:.22s;}
@@ -220,8 +165,6 @@ body::before{
 .stat-icon.green{background:rgba(0,255,170,.07);border:1px solid rgba(0,255,170,.11);color:var(--green);}
 .stat-val{font-family:"Orbitron",sans-serif;font-size:22px;font-weight:700;color:#fff;line-height:1;margin-bottom:4px;}
 .stat-lbl{font-size:9.5px;color:var(--dim2);letter-spacing:.3px;}
-
-/* ── CREATE CARD ── */
 .create-card{position:relative;overflow:hidden;background:var(--bg2);border:1px solid var(--b);border-radius:14px;padding:26px 28px 24px;margin-bottom:36px;box-shadow:var(--shadow);}
 .create-card::before{content:"";position:absolute;top:0;left:0;right:0;height:2px;background:linear-gradient(90deg,transparent 3%,var(--cyan) 35%,var(--purple) 65%,transparent 97%);}
 .create-card-top{display:flex;align-items:center;justify-content:space-between;margin-bottom:18px;gap:10px;flex-wrap:wrap;}
@@ -257,8 +200,6 @@ body::before{
 .must-notice svg{width:14px;height:14px;stroke:var(--cyan);fill:none;stroke-width:2;flex-shrink:0;margin-top:1px;opacity:.8;}
 .must-notice p{font-size:10.5px;color:var(--dim2);line-height:1.75;}
 .must-notice strong{color:var(--cyan);}
-
-/* ── SEARCH ── */
 .search-row{display:flex;align-items:center;gap:10px;margin-bottom:18px;}
 .search-wrap{flex:1;position:relative;}
 .search-wrap svg{position:absolute;left:12px;top:50%;transform:translateY(-50%);width:13px;height:13px;stroke:var(--dim);fill:none;stroke-width:2;pointer-events:none;}
@@ -267,17 +208,11 @@ body::before{
 .search-input::placeholder{color:var(--dim);}
 .sort-select{background:var(--bg2);border:1px solid var(--b);border-radius:9px;padding:9px 12px;color:var(--text);font-family:"JetBrains Mono",monospace;font-size:10px;outline:none;cursor:pointer;transition:.2s;}
 .sort-select:focus{border-color:rgba(0,229,255,.3);}
-
-/* ── SECTION HEADER ── */
 .section-header{display:flex;align-items:center;gap:12px;margin-bottom:16px;}
 .section-header h2{font-family:"Orbitron",sans-serif;font-size:9px;color:var(--dim2);text-transform:uppercase;letter-spacing:2.5px;white-space:nowrap;}
 .section-line{flex:1;height:1px;background:var(--b);}
 .section-count{font-size:9px;color:var(--dim2);padding:2px 10px;background:rgba(0,0,0,.35);border:1px solid var(--b);border-radius:10px;flex-shrink:0;}
-
-/* ── PROJECTS GRID ── */
 .projects-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(295px,1fr));gap:16px;}
-
-/* ── PROJECT CARD ── */
 .project-card{background:var(--bg2);border:1px solid var(--b);border-radius:14px;padding:20px 20px 52px;transition:.22s;cursor:pointer;position:relative;overflow:hidden;display:flex;flex-direction:column;animation:slideUp .3s ease both;}
 .project-card::after{content:"";position:absolute;inset:0;background:linear-gradient(135deg,rgba(0,229,255,.04),transparent 55%);opacity:0;transition:.22s;pointer-events:none;}
 .project-card:hover{transform:translateY(-3px);border-color:rgba(0,229,255,.28);box-shadow:0 12px 36px rgba(0,0,0,.4),0 0 0 1px rgba(0,229,255,.05);}
@@ -302,8 +237,6 @@ body::before{
 .project-open-btn{position:absolute;bottom:0;left:0;right:0;padding:11px 20px;background:linear-gradient(90deg,rgba(0,229,255,.12),rgba(136,0,255,.12));border-top:1px solid rgba(0,229,255,.16);font-family:"Orbitron",sans-serif;font-size:9px;font-weight:700;color:var(--cyan);letter-spacing:1px;text-align:center;opacity:0;transition:.22s;pointer-events:none;display:flex;align-items:center;justify-content:center;gap:6px;}
 .project-open-btn svg{width:10px;height:10px;stroke:currentColor;fill:none;stroke-width:2.5;}
 .project-card:hover .project-open-btn{opacity:1;}
-
-/* ── EMPTY STATE ── */
 .empty-state{grid-column:1/-1;text-align:center;padding:72px 20px;}
 .empty-icon{width:64px;height:64px;border-radius:16px;background:var(--bg2);border:1px solid var(--b);display:flex;align-items:center;justify-content:center;margin:0 auto 20px;animation:float 3s ease-in-out infinite;}
 .empty-icon svg{width:26px;height:26px;stroke:var(--dim);fill:none;stroke-width:1.4;}
@@ -311,33 +244,11 @@ body::before{
 .empty-state p{font-size:10.5px;color:var(--dim2);line-height:1.85;}
 .empty-hint{display:inline-flex;align-items:center;gap:7px;margin-top:18px;padding:8px 16px;border-radius:8px;background:rgba(0,229,255,.04);border:1px solid rgba(0,229,255,.12);font-size:9.5px;color:var(--cyan);}
 .empty-hint svg{width:11px;height:11px;stroke:currentColor;fill:none;stroke-width:2;}
-
-/* ── TOAST ── */
 .nx-toast{position:fixed;bottom:22px;right:22px;z-index:9999;padding:11px 16px;border-radius:9px;font-size:11px;font-family:"JetBrains Mono",monospace;background:var(--bg3);border:1px solid var(--b);box-shadow:0 8px 32px rgba(0,0,0,.7);animation:toastIn .22s ease;pointer-events:none;max-width:300px;display:flex;align-items:center;gap:8px;}
 .nx-toast svg{width:12px;height:12px;stroke:currentColor;fill:none;stroke-width:2;flex-shrink:0;}
-
-/* ── OVERLAYS & MODALS ──
-   FIXED: overlay scrollable, modal uses max-height + internal scroll
-── */
-.overlay{
-  position:fixed;inset:0;background:rgba(3,3,18,.88);z-index:500;
-  display:none;align-items:flex-start;justify-content:center;
-  backdrop-filter:blur(8px);
-  /* FIXED: overlay is scrollable so tall modals don't get cut off */
-  overflow-y:auto;
-  padding:20px 16px;
-}
+.overlay{position:fixed;inset:0;background:rgba(3,3,18,.88);z-index:500;display:none;align-items:flex-start;justify-content:center;backdrop-filter:blur(8px);overflow-y:auto;padding:20px 16px;}
 .overlay.show{display:flex;}
-.modal-box{
-  background:var(--bg2);border:1px solid var(--b);border-radius:16px;padding:28px;
-  width:420px;max-width:100%;
-  box-shadow:0 32px 80px rgba(0,0,0,.95),0 0 0 1px rgba(255,255,255,.03);
-  animation:fadeIn .2s ease;
-  /* FIXED: margin:auto centers within scrollable overlay */
-  margin:auto;
-  /* FIXED: no fixed max-height on modal-box — let it grow naturally */
-  position:relative;
-}
+.modal-box{background:var(--bg2);border:1px solid var(--b);border-radius:16px;padding:28px;width:420px;max-width:100%;box-shadow:0 32px 80px rgba(0,0,0,.95),0 0 0 1px rgba(255,255,255,.03);animation:fadeIn .2s ease;margin:auto;position:relative;}
 .modal-box.wide{width:510px;}
 .modal-icon{width:44px;height:44px;border-radius:11px;background:rgba(255,45,107,.09);border:1px solid rgba(255,45,107,.22);display:flex;align-items:center;justify-content:center;margin:0 0 16px;}
 .modal-icon svg{width:19px;height:19px;stroke:var(--pink);fill:none;stroke-width:2;}
@@ -354,8 +265,6 @@ body::before{
 .modal-btn.danger:hover{background:var(--pink);color:#fff;}
 .modal-btn.primary{background:linear-gradient(135deg,var(--cyan),var(--purple));color:#030312;}
 .modal-btn.primary:hover{opacity:.88;}
-
-/* ── SETTINGS MODAL ── */
 .settings-hdr{display:flex;align-items:center;justify-content:space-between;margin-bottom:22px;}
 .settings-hdr-title{font-family:"Orbitron",sans-serif;font-size:13px;font-weight:700;color:var(--cyan);display:flex;align-items:center;gap:8px;}
 .settings-hdr-title svg{width:15px;height:15px;stroke:currentColor;fill:none;stroke-width:2;}
@@ -387,26 +296,9 @@ body::before{
 .redeem-input:focus{border-color:rgba(0,229,255,.35);box-shadow:0 0 0 2px rgba(0,229,255,.05);}
 .redeem-msg{font-size:10px;margin-top:8px;display:none;}
 .redeem-msg.show{display:block;}
-
-/* ── RESPONSIVE ── */
-@media(max-width:768px){
-  .dnav{padding:0 16px;}
-  .dash-main{padding:28px 14px 64px;}
-  .stats-row{grid-template-columns:1fr 1fr;}
-  .header-info h1{font-size:19px;}
-  .user-name-nav{display:none;}
-  .create-card{padding:20px 18px 20px;}
-  .projects-grid{grid-template-columns:1fr 1fr;}
-}
-@media(max-width:640px){
-  .input-row{flex-direction:column;}
-  .btn-create{width:100%;justify-content:center;height:46px;}
-  .projects-grid{grid-template-columns:1fr;}
-}
-@media(max-width:420px){
-  .stats-row{grid-template-columns:1fr;}
-  .modal-box{padding:20px 16px;}
-}
+@media(max-width:768px){.dnav{padding:0 16px;}.dash-main{padding:28px 14px 64px;}.stats-row{grid-template-columns:1fr 1fr;}.header-info h1{font-size:19px;}.user-name-nav{display:none;}.create-card{padding:20px 18px 20px;}.projects-grid{grid-template-columns:1fr 1fr;}}
+@media(max-width:640px){.input-row{flex-direction:column;}.btn-create{width:100%;justify-content:center;height:46px;}.projects-grid{grid-template-columns:1fr;}}
+@media(max-width:420px){.stats-row{grid-template-columns:1fr;}.modal-box{padding:20px 16px;}}
 `
 
 /* ─────────────────────────────────────────────────────────────────────────────
@@ -435,7 +327,6 @@ function generateProjectId(): string {
    COMPONENT
 ───────────────────────────────────────────────────────────────────────────── */
 export default function DashboardPage() {
-  /* ── state ── */
   const [loaded, setLoaded] = useState(false)
   const [loaderPct, setLoaderPct] = useState(0)
   const [session, setSession] = useState<NexusSession | null>(null)
@@ -444,12 +335,10 @@ export default function DashboardPage() {
   const [isOnline, setIsOnline] = useState(true)
   const [syncState, setSyncState] = useState<'' | 'syncing' | 'error' | 'ok'>('')
   const [saveState, setSaveState] = useState<{state:string,msg:string}|null>(null)
-
   const [ddOpen, setDdOpen] = useState(false)
   const [settingsOpen, setSettingsOpen] = useState(false)
   const [deleteModal, setDeleteModal] = useState<{id:string,name:string}|null>(null)
   const [logoutModal, setLogoutModal] = useState(false)
-
   const [searchQ, setSearchQ] = useState('')
   const [sortBy, setSortBy] = useState<'newest'|'oldest'|'name'>('newest')
   const [projectName, setProjectName] = useState('')
@@ -462,11 +351,9 @@ export default function DashboardPage() {
   const sessionRef = useRef<NexusSession | null>(null)
   const userDataRef = useRef<UserData>({})
 
-  /* keep refs in sync */
   useEffect(() => { sessionRef.current = session }, [session])
   useEffect(() => { userDataRef.current = userData }, [userData])
 
-  /* ── inject fonts & styles ── */
   useEffect(() => {
     document.title = 'NEXUS AI — Dashboard'
     const addLink = (href: string) => {
@@ -477,7 +364,6 @@ export default function DashboardPage() {
     addLink('https://fonts.googleapis.com/css2?family=Orbitron:wght@400;700;900&family=JetBrains+Mono:wght@300;400;500;600&display=swap')
   }, [])
 
-  /* ── online/offline ── */
   useEffect(() => {
     const on = () => { setIsOnline(true); setTimeout(retryQueue, 1000) }
     const off = () => setIsOnline(false)
@@ -488,7 +374,6 @@ export default function DashboardPage() {
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
 
-  /* ── close DD on outside click ── */
   useEffect(() => {
     const h = (e: MouseEvent) => {
       const w = document.getElementById('userPillWrap')
@@ -498,7 +383,6 @@ export default function DashboardPage() {
     return () => document.removeEventListener('click', h)
   }, [])
 
-  /* ── keyboard shortcuts ── */
   useEffect(() => {
     const h = (e: KeyboardEvent) => {
       if (e.key === 'Escape') { setSettingsOpen(false); setDeleteModal(null); setLogoutModal(false); setDdOpen(false) }
@@ -508,18 +392,9 @@ export default function DashboardPage() {
     return () => document.removeEventListener('keydown', h)
   }, [])
 
-  /* ── init ── */
-  useEffect(() => {
-    initDashboard()
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [])
+  useEffect(() => { initDashboard() }, []) // eslint-disable-line react-hooks/exhaustive-deps
+  useEffect(() => { updateDailyStatus(userData) }, [userData])
 
-  /* ── update daily status when userData changes ── */
-  useEffect(() => {
-    updateDailyStatus(userData)
-  }, [userData])
-
-  /* ── INIT ── */
   async function initDashboard() {
     setLoaderPct(15)
     const raw = localStorage.getItem('nexus_session')
@@ -536,13 +411,10 @@ export default function DashboardPage() {
     }
     setSession(sess)
     sessionRef.current = sess
-
-    /* load pending queue */
     try {
       const q = JSON.parse(localStorage.getItem('nexus_pending_queue') || '[]')
       if (Array.isArray(q)) setPendingQueue(q)
     } catch {}
-
     setLoaderPct(40)
     const ud = await syncFromServer(sess)
     setUserData(ud)
@@ -550,13 +422,9 @@ export default function DashboardPage() {
     setLoaderPct(90)
     setLoaderPct(100)
     setTimeout(() => setLoaded(true), 300)
-
-    if (navigator.onLine) {
-      setTimeout(() => retryQueue(), 2000)
-    }
+    if (navigator.onLine) setTimeout(() => retryQueue(), 2000)
   }
 
-  /* ── SYNC FROM SERVER ── */
   async function syncFromServer(sess: NexusSession): Promise<UserData> {
     try {
       const username = (sess.user.username || '').toLowerCase()
@@ -584,7 +452,6 @@ export default function DashboardPage() {
     return fallback as UserData
   }
 
-  /* ── SAVE LOCAL ── */
   const saveLocal = useCallback((ud: UserData, sess: NexusSession) => {
     try {
       const updated = { ...sess, data: { ...(sess.data || {}), ...ud } }
@@ -594,12 +461,10 @@ export default function DashboardPage() {
     } catch {}
   }, [])
 
-  /* ── SAVE TO SERVER ── */
   async function saveToServer(ud: UserData, sess: NexusSession, showStatus?: boolean): Promise<boolean> {
     saveLocal(ud, sess)
     if (showStatus) setSaveState({ state: 'saving', msg: 'Saving to server...' })
     setSyncState('syncing')
-
     const payload = {
       user: (sess.user.username || '').toLowerCase(),
       robloxId: sess.user.robloxId || '',
@@ -625,23 +490,13 @@ export default function DashboardPage() {
     }
   }
 
-  async function attemptSave(
-    payload: QueueItem['payload'],
-    maxRetry: number,
-    showStatus: boolean | undefined,
-    ud: UserData
-  ): Promise<boolean> {
+  async function attemptSave(payload: QueueItem['payload'], maxRetry: number, showStatus: boolean | undefined, ud: UserData): Promise<boolean> {
     let delay = RETRY_BASE
     for (let attempt = 1; attempt <= maxRetry; attempt++) {
       try {
         const ctrl = new AbortController()
         const tid = setTimeout(() => ctrl.abort(), 9000)
-        const r = await fetch(API_SYNC, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify(payload),
-          signal: ctrl.signal
-        })
+        const r = await fetch(API_SYNC, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload), signal: ctrl.signal })
         clearTimeout(tid)
         if (!r.ok) throw new Error('HTTP ' + r.status)
         const result = await r.json()
@@ -673,7 +528,6 @@ export default function DashboardPage() {
     return false
   }
 
-  /* ── QUEUE ── */
   function enqueueSave(payload: QueueItem['payload']) {
     setPendingQueue(q => {
       const newQ = [...q, { type: 'save', payload, ts: Date.now() }]
@@ -710,7 +564,6 @@ export default function DashboardPage() {
     })
   }
 
-  /* ── NOTIFY PLUGIN ── */
   async function notifyPlugin(projectId: string, projectName: string) {
     if (!sessionRef.current) return
     const username = (sessionRef.current.user.username || '').toLowerCase()
@@ -723,7 +576,6 @@ export default function DashboardPage() {
     } catch {}
   }
 
-  /* ── HELPERS ── */
   function getCredits(ud: UserData) {
     const c = ud.credits ?? (sessionRef.current?.data?.credits) ?? 30
     const plan = (ud.plan || 'free').toLowerCase()
@@ -777,7 +629,6 @@ export default function DashboardPage() {
     }
     const limit = getLimit(userData)
     if ((userData.projects || []).length >= limit) { showToast('Project limit reached — upgrade to Pro', 'var(--pink)'); return }
-
     setCreating(true)
     const pid  = generateProjectId()
     const proj: Project = { id: pid, name: projectName.trim(), createdAt: new Date().toISOString() }
@@ -785,21 +636,21 @@ export default function DashboardPage() {
     setUserData(newUd); userDataRef.current = newUd
     if (sessionRef.current) saveLocal(newUd, sessionRef.current)
     setProjectName('')
-
     const saved = sessionRef.current ? await saveToServer(newUd, sessionRef.current, true) : false
     setCreating(false)
     showToast(saved ? 'Project created — opening chat...' : 'Saved locally — will sync when online', saved ? 'var(--green)' : 'var(--orange)', saved ? 1800 : 2500)
     await notifyPlugin(pid, proj.name)
-    setTimeout(() => { window.location.href = '/chats?id=' + encodeURIComponent(pid) }, 900)
+    // ✅ UPDATED: menggunakan /chats/[id] bukan /chats?id=
+    setTimeout(() => { window.location.href = '/chats/' + encodeURIComponent(pid) }, 900)
   }
 
   /* ── OPEN PROJECT ── */
   async function openProject(id: string, name: string) {
     await notifyPlugin(id, name)
-    window.location.href = '/chats?id=' + encodeURIComponent(id)
+    // ✅ UPDATED: menggunakan /chats/[id] bukan /chats?id=
+    window.location.href = '/chats/' + encodeURIComponent(id)
   }
 
-  /* ── DELETE PROJECT ── */
   async function executeDelete(id: string) {
     setDeleteModal(null)
     const newUd = { ...userData, projects: (userData.projects || []).filter(p => p.id !== id) }
@@ -810,7 +661,6 @@ export default function DashboardPage() {
     }
   }
 
-  /* ── DAILY CLAIM ── */
   async function claimDaily() {
     const plan = (userData.plan || 'free').toLowerCase()
     const roles = userData.roles || []
@@ -822,7 +672,6 @@ export default function DashboardPage() {
     showToast(`+${n} CR claimed!`, 'var(--green)')
   }
 
-  /* ── REDEEM ── */
   async function handleRedeem() {
     if (!redeemCode.trim()) { showToast('Enter a redeem code', 'var(--yellow)'); return }
     const code = redeemCode.trim().toUpperCase()
@@ -848,10 +697,8 @@ export default function DashboardPage() {
     }
   }
 
-  /* ── LOGOUT ── */
   function doLogout() { localStorage.removeItem('nexus_session'); window.location.replace('/') }
 
-  /* ── TOAST ── */
   function showToast(msg: string, color?: string, dur?: number) {
     document.querySelectorAll('.nx-toast').forEach(t => t.remove())
     const t = document.createElement('div')
@@ -865,7 +712,6 @@ export default function DashboardPage() {
     setTimeout(() => t.remove(), dur || 2800)
   }
 
-  /* ── AVATAR URL ── */
   const av = session?.user?.avatar
     || (session?.user?.robloxId
       ? `https://www.roblox.com/headshot-thumbnail/image?userId=${session.user.robloxId}&width=150&height=150&format=png`
@@ -876,7 +722,6 @@ export default function DashboardPage() {
   const limit = getLimit(userData)
   const unlimited = limit === 999
 
-  /* ── FILTER & SORT PROJECTS ── */
   const allProjects = userData.projects || []
   const filtered = searchQ
     ? allProjects.filter(p => p.name.toLowerCase().includes(searchQ.toLowerCase()))
@@ -888,31 +733,21 @@ export default function DashboardPage() {
   const pendingIds = new Set(pendingQueue.flatMap(q => (q.payload?.data?.projects || []).map(p => p.id)))
   const atLimit = allProjects.length >= limit
 
-  /* ── SAVE STATUS AUTO-HIDE ── */
   useEffect(() => {
     if (!saveState) return
     if (saveState.state === 'saved') { const t = setTimeout(() => setSaveState(null), 3000); return () => clearTimeout(t) }
     if (saveState.state === 'error') { const t = setTimeout(() => setSaveState(null), 6000); return () => clearTimeout(t) }
   }, [saveState])
 
-  /* ════════════════════════════════════════════════════════
-     RENDER
-  ════════════════════════════════════════════════════════ */
   return (
     <>
       <style dangerouslySetInnerHTML={{ __html: PAGE_CSS }} />
-
-      {/* SYNC BAR */}
       <div id="syncBar" className={syncState} />
-
-      {/* OFFLINE BANNER */}
       <div id="offlineBanner" className={!isOnline ? 'show' : ''}>
         <svg viewBox="0 0 24 24"><line x1="1" y1="1" x2="23" y2="23"/><path d="M16.72 11.06A10.94 10.94 0 0119 12.55M5 12.55a10.94 10.94 0 015.17-2.39M10.71 5.05A16 16 0 0122.56 9M1.42 9a15.91 15.91 0 014.7-2.88M8.53 16.11a6 6 0 016.95 0M12 20h.01"/></svg>
         No network connection — changes are queued locally
         <button className="retry-btn-offline" onClick={() => retryQueue()}>Retry Now</button>
       </div>
-
-      {/* LOADER */}
       <div id="dash-loader" className={loaded ? 'hide' : ''}>
         <div className="loader-logo">NEXUS AI</div>
         <div className="loader-ring" />
@@ -920,7 +755,6 @@ export default function DashboardPage() {
         <div className="loader-sub">Loading workspace...</div>
       </div>
 
-      {/* NAV */}
       <nav className="dnav">
         <a className="dnav-logo" onClick={() => window.location.href = '/dashboard'}>
           <div className="dnav-logo-icon"><img src="/nexusai.png" alt="" onError={e => { (e.currentTarget as HTMLImageElement).style.display='none' }} /></div>
@@ -952,8 +786,7 @@ export default function DashboardPage() {
                 </div>
                 <a className="ud-item" href="/payment" onClick={() => setDdOpen(false)}>
                   <svg viewBox="0 0 24 24"><polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"/></svg>
-                  Buy Credits
-                  <span className="ud-badge">{creditsDisplay} CR</span>
+                  Buy Credits <span className="ud-badge">{creditsDisplay} CR</span>
                 </a>
                 <a className="ud-item" href="/inbox" onClick={() => setDdOpen(false)}>
                   <svg viewBox="0 0 24 24"><polyline points="22 12 16 12 14 15 10 15 8 12 2 12"/><path d="M5.45 5.11L2 12v6a2 2 0 002 2h16a2 2 0 002-2v-6l-3.45-6.89A2 2 0 0016.76 4H7.24a2 2 0 00-1.79 1.11z"/></svg>
@@ -983,13 +816,11 @@ export default function DashboardPage() {
         </div>
       </nav>
 
-      {/* MAIN */}
       <div className="dash-main">
-        {/* Page Header */}
         <div className="page-header">
           <div className="header-left">
             <div className="header-av-wrap">
-              <img id="headerAv" src={av} alt="" onError={e => { (e.currentTarget as HTMLImageElement).src='/nexusai.png' }} />
+              <img src={av} alt="" onError={e => { (e.currentTarget as HTMLImageElement).src='/nexusai.png' }} />
             </div>
             <div className="header-info">
               <h1>Welcome, <span>{session?.user.username || 'Dev'}</span>!</h1>
@@ -1002,29 +833,21 @@ export default function DashboardPage() {
           </a>
         </div>
 
-        {/* Stats */}
         <div className="stats-row">
           <div className="stat-card">
-            <div className="stat-icon yellow">
-              <svg viewBox="0 0 24 24"><polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"/></svg>
-            </div>
+            <div className="stat-icon yellow"><svg viewBox="0 0 24 24"><polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"/></svg></div>
             <div><div className="stat-val">{creditsDisplay}</div><div className="stat-lbl">Credits Available</div></div>
           </div>
           <div className="stat-card">
-            <div className="stat-icon cyan">
-              <svg viewBox="0 0 24 24"><path d="M22 19a2 2 0 01-2 2H4a2 2 0 01-2-2V5a2 2 0 012-2h5l2 3h9a2 2 0 012 2z"/></svg>
-            </div>
+            <div className="stat-icon cyan"><svg viewBox="0 0 24 24"><path d="M22 19a2 2 0 01-2 2H4a2 2 0 01-2-2V5a2 2 0 012-2h5l2 3h9a2 2 0 012 2z"/></svg></div>
             <div><div className="stat-val">{allProjects.length}</div><div className="stat-lbl">Total Projects</div></div>
           </div>
           <div className="stat-card">
-            <div className="stat-icon green">
-              <svg viewBox="0 0 24 24"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg>
-            </div>
+            <div className="stat-icon green"><svg viewBox="0 0 24 24"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg></div>
             <div><div className="stat-val">{planLabel}</div><div className="stat-lbl">Current Plan</div></div>
           </div>
         </div>
 
-        {/* Create Card */}
         <div className="create-card">
           <div className="create-card-top">
             <div className="card-title">
@@ -1034,8 +857,7 @@ export default function DashboardPage() {
             <div className="limit-badge">
               <span className="used">{allProjects.length}</span>
               <span className="sep">/</span>
-              <span>{unlimited ? '∞' : limit}</span>
-              &nbsp;used
+              <span>{unlimited ? '∞' : limit}</span>&nbsp;used
             </div>
           </div>
           <div className="input-row">
@@ -1050,11 +872,7 @@ export default function DashboardPage() {
               onChange={e => setProjectName(e.target.value)}
               onKeyDown={e => { if (e.key === 'Enter') handleCreate() }}
             />
-            <button
-              className={`btn-create${creating ? ' loading' : ''}`}
-              disabled={atLimit || creating}
-              onClick={handleCreate}
-            >
+            <button className={`btn-create${creating ? ' loading' : ''}`} disabled={atLimit || creating} onClick={handleCreate}>
               <div className="btn-spinner" />
               <span className="btn-lbl">CREATE</span>
               <svg className="btn-lbl" viewBox="0 0 24 24"><polyline points="9 18 15 12 9 6"/></svg>
@@ -1079,44 +897,31 @@ export default function DashboardPage() {
           </div>
         </div>
 
-        {/* Search */}
         <div className="search-row">
           <div className="search-wrap">
             <svg viewBox="0 0 24 24"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
-            <input
-              type="text"
-              className="search-input"
-              placeholder="Search projects..."
-              value={searchQ}
-              onChange={e => setSearchQ(e.target.value)}
-            />
+            <input type="text" className="search-input" placeholder="Search projects..." value={searchQ} onChange={e => setSearchQ(e.target.value)} />
           </div>
-          <select
-            className="sort-select"
-            value={sortBy}
-            onChange={e => setSortBy(e.target.value as 'newest'|'oldest'|'name')}
-          >
+          <select className="sort-select" value={sortBy} onChange={e => setSortBy(e.target.value as 'newest'|'oldest'|'name')}>
             <option value="newest">Newest first</option>
             <option value="oldest">Oldest first</option>
             <option value="name">A – Z</option>
           </select>
         </div>
 
-        {/* Section header */}
         <div className="section-header">
           <h2>Your Projects</h2>
           <div className="section-line" />
           <div className="section-count">{filtered.length} project{filtered.length !== 1 ? 's' : ''}</div>
         </div>
 
-        {/* Projects Grid */}
         <div className="projects-grid">
           {filtered.length === 0 ? (
             searchQ ? (
               <div className="empty-state">
                 <div className="empty-icon"><svg viewBox="0 0 24 24"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg></div>
                 <strong>No results</strong>
-                <p>No projects match "<strong>{searchQ}</strong>".<br/>Try a different search term.</p>
+                <p>No projects match &quot;<strong>{searchQ}</strong>&quot;.<br/>Try a different search term.</p>
               </div>
             ) : (
               <div className="empty-state">
@@ -1137,16 +942,10 @@ export default function DashboardPage() {
               onClick={() => openProject(p.id, p.name)}
             >
               <div className="project-card-top">
-                <div className="project-icon">
-                  <svg viewBox="0 0 24 24"><path d="M22 19a2 2 0 01-2 2H4a2 2 0 01-2-2V5a2 2 0 012-2h5l2 3h9a2 2 0 012 2z"/></svg>
-                </div>
+                <div className="project-icon"><svg viewBox="0 0 24 24"><path d="M22 19a2 2 0 01-2 2H4a2 2 0 01-2-2V5a2 2 0 012-2h5l2 3h9a2 2 0 012 2z"/></svg></div>
                 <div className="project-top-right">
                   <span className="project-id-tag" title={p.id}>{p.id.slice(0, 15)}…</span>
-                  <button
-                    className="btn-del"
-                    title="Delete project"
-                    onClick={e => { e.stopPropagation(); setDeleteModal({ id: p.id, name: p.name }) }}
-                  >
+                  <button className="btn-del" title="Delete project" onClick={e => { e.stopPropagation(); setDeleteModal({ id: p.id, name: p.name }) }}>
                     <svg viewBox="0 0 24 24"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 01-2 2H7a2 2 0 01-2-2V6m3 0V4a2 2 0 012-2h4a2 2 0 012 2v2"/></svg>
                   </button>
                 </div>
@@ -1172,18 +971,12 @@ export default function DashboardPage() {
         </div>
       </div>
 
-      {/* ═══════════ DELETE MODAL ═══════════ */}
+      {/* DELETE MODAL */}
       <div className={`overlay${deleteModal ? ' show' : ''}`} onClick={e => { if (e.target === e.currentTarget) setDeleteModal(null) }}>
         <div className="modal-box">
-          <div className="modal-icon">
-            <svg viewBox="0 0 24 24"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 01-2 2H7a2 2 0 01-2-2V6m3 0V4a2 2 0 012-2h4a2 2 0 012 2v2"/></svg>
-          </div>
+          <div className="modal-icon"><svg viewBox="0 0 24 24"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 01-2 2H7a2 2 0 01-2-2V6m3 0V4a2 2 0 012-2h4a2 2 0 012 2v2"/></svg></div>
           <div className="modal-title">Delete Project?</div>
-          <div className="modal-desc">
-            Are you sure you want to delete{' '}
-            <span className="highlight">"{deleteModal?.name}"</span>?{' '}
-            All chat history will be permanently removed. This action cannot be undone.
-          </div>
+          <div className="modal-desc">Are you sure you want to delete <span className="highlight">&quot;{deleteModal?.name}&quot;</span>? All chat history will be permanently removed. This action cannot be undone.</div>
           <div className="modal-btns">
             <button className="modal-btn cancel" onClick={() => setDeleteModal(null)}>Cancel</button>
             <button className="modal-btn danger" onClick={() => deleteModal && executeDelete(deleteModal.id)}>Delete Project</button>
@@ -1191,12 +984,10 @@ export default function DashboardPage() {
         </div>
       </div>
 
-      {/* ═══════════ LOGOUT MODAL ═══════════ */}
+      {/* LOGOUT MODAL */}
       <div className={`overlay${logoutModal ? ' show' : ''}`} onClick={e => { if (e.target === e.currentTarget) setLogoutModal(false) }}>
         <div className="modal-box">
-          <div className="modal-icon">
-            <svg viewBox="0 0 24 24"><path d="M9 21H5a2 2 0 01-2-2V5a2 2 0 012-2h4"/><polyline points="16 17 21 12 16 7"/><line x1="21" y1="12" x2="9" y2="12"/></svg>
-          </div>
+          <div className="modal-icon"><svg viewBox="0 0 24 24"><path d="M9 21H5a2 2 0 01-2-2V5a2 2 0 012-2h4"/><polyline points="16 17 21 12 16 7"/><line x1="21" y1="12" x2="9" y2="12"/></svg></div>
           <div className="modal-title">Sign Out?</div>
           <div className="modal-desc">You will be signed out of NEXUS AI. Your projects and chat history are safely stored on the server.</div>
           <div className="modal-btns">
@@ -1206,7 +997,7 @@ export default function DashboardPage() {
         </div>
       </div>
 
-      {/* ═══════════ SETTINGS MODAL ═══════════ */}
+      {/* SETTINGS MODAL */}
       <div className={`overlay${settingsOpen ? ' show' : ''}`} onClick={e => { if (e.target === e.currentTarget) setSettingsOpen(false) }}>
         <div className="modal-box wide">
           <div className="settings-hdr">
@@ -1218,8 +1009,6 @@ export default function DashboardPage() {
               <svg viewBox="0 0 24 24"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
             </button>
           </div>
-
-          {/* Roblox Account */}
           <div className="settings-sec">
             <div className="settings-sec-title">Roblox Account</div>
             <div className="settings-av-row">
@@ -1229,17 +1018,9 @@ export default function DashboardPage() {
                 <div className="settings-av-id">Roblox ID: {session?.user.robloxId || '–'}</div>
               </div>
             </div>
-            <div className="settings-row">
-              <label>Credits</label>
-              <span className="s-val yellow">{creditsDisplay} CR</span>
-            </div>
-            <div className="settings-row">
-              <label>Plan</label>
-              <span className="s-val cyan">{planLabel}</span>
-            </div>
+            <div className="settings-row"><label>Credits</label><span className="s-val yellow">{creditsDisplay} CR</span></div>
+            <div className="settings-row"><label>Plan</label><span className="s-val cyan">{planLabel}</span></div>
           </div>
-
-          {/* Daily Credits */}
           <div className="settings-sec">
             <div className="settings-sec-title">Daily Credits</div>
             <div className="settings-row"><label>Free Plan</label><span style={{ color: 'var(--green)', fontSize: 11 }}>+2 CR / day</span></div>
@@ -1249,53 +1030,30 @@ export default function DashboardPage() {
               <button className="settings-btn success" disabled={dailyDisabled} onClick={claimDaily}>Claim Daily</button>
             </div>
           </div>
-
-          {/* Redeem Code */}
           <div className="settings-sec">
             <div className="settings-sec-title">Redeem Code</div>
             <div style={{ fontSize: 10, color: 'var(--dim2)', marginBottom: 10 }}>
               Get codes on{' '}
-              <a href="https://discord.gg/FzAF48mvK5" target="_blank" rel="noreferrer" style={{ color: 'var(--cyan)', textDecoration: 'none' }}>
-                NEXUS STUDIO Discord
-              </a>
+              <a href="https://discord.gg/FzAF48mvK5" target="_blank" rel="noreferrer" style={{ color: 'var(--cyan)', textDecoration: 'none' }}>NEXUS STUDIO Discord</a>
             </div>
             <div className="redeem-row">
-              <input
-                type="text"
-                className="redeem-input"
-                placeholder="Enter redeem code..."
-                value={redeemCode}
-                onChange={e => setRedeemCode(e.target.value)}
-                onKeyDown={e => { if (e.key === 'Enter') handleRedeem() }}
-              />
+              <input type="text" className="redeem-input" placeholder="Enter redeem code..." value={redeemCode} onChange={e => setRedeemCode(e.target.value)} onKeyDown={e => { if (e.key === 'Enter') handleRedeem() }} />
               <button className="settings-btn" onClick={handleRedeem}>Redeem</button>
             </div>
-            {redeemMsg && (
-              <div className="redeem-msg show" style={{ color: redeemMsg.ok ? 'var(--green)' : 'var(--pink)' }}>
-                {redeemMsg.msg}
-              </div>
-            )}
+            {redeemMsg && <div className="redeem-msg show" style={{ color: redeemMsg.ok ? 'var(--green)' : 'var(--pink)' }}>{redeemMsg.msg}</div>}
           </div>
-
-          {/* Studio Plugin */}
           <div className="settings-sec">
             <div className="settings-sec-title">Studio Plugin</div>
             <div className="settings-row">
               <label>NEXUS AI Plugin for Roblox Studio</label>
-              <button className="settings-btn" onClick={() => window.open('https://create.roblox.com/store/asset/91870814099475/NEXUS-AI', '_blank')}>
-                Download
-              </button>
+              <button className="settings-btn" onClick={() => window.open('https://create.roblox.com/store/asset/91870814099475/NEXUS-AI', '_blank')}>Download</button>
             </div>
           </div>
-
-          {/* Danger Zone */}
           <div className="settings-sec">
             <div className="settings-sec-title" style={{ color: 'var(--pink)', opacity: .9 }}>Danger Zone</div>
             <div className="settings-row">
               <label>Sign out of this session</label>
-              <button className="settings-btn danger" onClick={() => { setSettingsOpen(false); setLogoutModal(true) }}>
-                Sign Out
-              </button>
+              <button className="settings-btn danger" onClick={() => { setSettingsOpen(false); setLogoutModal(true) }}>Sign Out</button>
             </div>
           </div>
         </div>
