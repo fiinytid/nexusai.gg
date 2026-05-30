@@ -218,7 +218,7 @@ var MODEL_LIST=[
 {id:'gemini-3.1-flash-lite',prov:'gemini',cost:0,label:'Gemini 3.1 Flash Lite',icon:'/gemini.png',badge:'FREE'},
 {id:'gemini-3.1-pro-preview',prov:'gemini',cost:8,label:'Gemini 3.1 Pro',icon:'/gemini.png',badge:'BEST'},
 {grp:'StepFun'},
-{id:'stepfun/step-3.5-flash',prov:'openrouter',cost:0,label:'Step 3.5 Flash',icon:'',badge:'FREE'},
+{id:'stepfun/step-3.5-flash',prov:'openrouter',cost:0,label:'Step 3.5 Flash',icon:'/stepfun.png',badge:'FREE'},
 {grp:'Poolside'},
 {id:'poolside/laguna-m.1:free',prov:'openrouter',cost:0,label:'Laguna M.1',icon:'/laguna.svg',badge:'FREE'},
 {grp:'DeepSeek'},
