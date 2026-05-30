@@ -921,9 +921,9 @@ export default function HomePage() {
         </div>
         <div className="screen-grid">
           {[
-            { badge: 'Web',       img: '/screen/screen1.png', alt: 'Chat Interface',   iconColor: 'var(--cyan)',   icon: <path d="M21 15a2 2 0 01-2 2H7l-4 4V5a2 2 0 012-2h14a2 2 0 012 2z" />, title: 'Chat Interface',   desc: 'Type your request in plain English. NEXUS AI breaks it into precise actions and executes immediately.', delay: 'd1' },
-            { badge: 'Plugin',    img: '/screen/screen2.png', alt: 'Studio Plugin',    iconColor: 'var(--green)',  icon: <><path d="M20.24 12.24a6 6 0 0 0-8.49-8.49L5 10.5V19h8.5z" /><line x1="16" y1="8" x2="2" y2="22" /></>, title: 'Studio Plugin',   desc: 'The companion plugin in Roblox Studio — connected, listening, injecting in real-time with zero lag.', delay: 'd2' },
-            { badge: 'Connected', img: '/screen/screen3.png', alt: 'Live Injection',   iconColor: 'var(--yellow)', icon: <polyline points="20 6 9 17 4 12" />, title: 'Live & Injecting', desc: 'When connected, every AI command materializes in your place — parts, scripts, GUIs, systems — all live.', delay: 'd3' },
+            { badge: 'Web',       img: '/screenshot/screen1.png', alt: 'Chat Interface',   iconColor: 'var(--cyan)',   icon: <path d="M21 15a2 2 0 01-2 2H7l-4 4V5a2 2 0 012-2h14a2 2 0 012 2z" />, title: 'Chat Interface',   desc: 'Type your request in plain English. NEXUS AI breaks it into precise actions and executes immediately.', delay: 'd1' },
+            { badge: 'Plugin',    img: '/screenshot/screen2.png', alt: 'Studio Plugin',    iconColor: 'var(--green)',  icon: <><path d="M20.24 12.24a6 6 0 0 0-8.49-8.49L5 10.5V19h8.5z" /><line x1="16" y1="8" x2="2" y2="22" /></>, title: 'Studio Plugin',   desc: 'The companion plugin in Roblox Studio — connected, listening, injecting in real-time with zero lag.', delay: 'd2' },
+            { badge: 'Connected', img: '/screenshot/screen3.png', alt: 'Live Injection',   iconColor: 'var(--yellow)', icon: <polyline points="20 6 9 17 4 12" />, title: 'Live & Injecting', desc: 'When connected, every AI command materializes in your place — parts, scripts, GUIs, systems — all live.', delay: 'd3' },
           ].map((s, i) => (
             <div key={i} className={`screen-card reveal ${s.delay}`}>
               <span className="screen-badge">{s.badge}</span>

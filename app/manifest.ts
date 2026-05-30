@@ -33,14 +33,14 @@ export default function manifest(): MetadataRoute.Manifest {
     ],
     screenshots: [
       {
-        src:          "/screenshot-desktop.png",
+        src:          "/screenshot/desktop.png",
         sizes:        "1280x720",
         type:         "image/png",
         form_factor:  "wide",
         label:        "NEXUS AI Dashboard",
       },
       {
-        src:    "/screenshot-mobile.png",
+        src:    "/screenshot/mobile.png",
         sizes:  "390x844",
         type:   "image/png",
         label:  "NEXUS AI Chat on Mobile",
