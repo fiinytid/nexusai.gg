@@ -68,8 +68,7 @@ var studioPollTimer=null;
 var API_URL='/api/control';
 
 // ── ROBLOX DOCS & TOOLBOX SEARCH ─────────────────────────────────────────────
-// Cari referensi Roblox API docs sebelum generate code
-var _docsCache={}; // cache hasil search agar tidak double-request
+var _docsCache={};
 var _docsSearchInProgress=false;
 
 async function searchRobloxDocs(query,maxResults){
@@ -83,25 +82,13 @@ async function searchRobloxDocs(query,maxResults){
       method:'POST',
       headers:{'Content-Type':'application/json'},
       signal:ctrl.signal,
-      body:JSON.stringify({
-        action:'search_docs',
-        query:query,
-        doc_type:'all',
-        limit:maxResults||5,
-        _user:(SESSION?SESSION.user.username:'web')
-      })
+      body:JSON.stringify({action:'search_docs',query:query,doc_type:'all',limit:maxResults||5,_user:(SESSION?SESSION.user.username:'web')})
     });
     clearTimeout(tid);
     if(!r.ok)return null;
     var d=await r.json();
-    if(d&&d.results&&d.results.length>0){
-      _docsCache[cacheKey]=d;
-      return d;
-    }
-  }catch(e){
-    if(e&&e.name==='AbortError')return null;
-    console.warn('[NEXUS docs] search error:',e&&e.message);
-  }
+    if(d&&d.results&&d.results.length>0){_docsCache[cacheKey]=d;return d;}
+  }catch(e){if(e&&e.name==='AbortError')return null;console.warn('[NEXUS docs] search error:',e&&e.message);}
   return null;
 }
 
@@ -110,68 +97,27 @@ async function searchRobloxToolbox(keyword,assetType,limit){
   try{
     var ctrl=new AbortController();
     var tid=setTimeout(function(){ctrl.abort();},10000);
-    var r=await fetch(API_URL,{
-      method:'POST',
-      headers:{'Content-Type':'application/json'},
-      signal:ctrl.signal,
-      body:JSON.stringify({
-        action:'search_toolbox',
-        keyword:keyword,
-        asset_type:assetType||'Model',
-        limit:limit||6,
-        _user:(SESSION?SESSION.user.username:'web')
-      })
-    });
+    var r=await fetch(API_URL,{method:'POST',headers:{'Content-Type':'application/json'},signal:ctrl.signal,body:JSON.stringify({action:'search_toolbox',keyword:keyword,asset_type:assetType||'Model',limit:limit||6,_user:(SESSION?SESSION.user.username:'web')})});
     clearTimeout(tid);
     if(!r.ok)return null;
     var d=await r.json();
     return(d&&d.status==='ok')?d:null;
-  }catch(e){
-    if(e&&e.name==='AbortError')return null;
-    console.warn('[NEXUS toolbox] search error:',e&&e.message);
-  }
+  }catch(e){if(e&&e.name==='AbortError')return null;console.warn('[NEXUS toolbox] search error:',e&&e.message);}
   return null;
 }
 
-// Deteksi apakah query butuh referensi Roblox docs
-var _DOCS_KEYWORDS=[
-  'tweenservice','tween','datastore','remoteevent','remotefunction','bindable',
-  'humanoid','leaderstats','collectionservice','pathfinding','runservice',
-  'userinputservice','httprequest','http','lighting','terrain','particles',
-  'sound','animation','constraint','weld','billboardgui','surfacegui',
-  'proximityprompt','clickdetector','proximityprompt','badge','marketplace',
-  'textchatservice','proximity','attachment','motor6d','hingeconstraint',
-  'springconstraint','ropecconstraint','part','model','script','localscript',
-  'modulescript','error','bug','issue','crash','api','method','function',
-  'service','instance','property','event','enum','spawn','respawn','teleport',
-  'npc','enemy','mob','ai','pathfind','jump','walk','health','damage','kill',
-  'inventory','backpack','tool','equipment','shop','purchase','buy','sell',
-  'coin','gem','currency','economy','rank','level','xp','exp',
-  'gui','frame','button','label','image','scroll','viewport',
-  'color','material','mesh','texture','decal','light','fire','smoke',
-  'timer','countdown','round','game mode','lobby','match','session',
-  'admin','ban','kick','mute','chat','message','broadcast'
-];
+var _DOCS_KEYWORDS=['tweenservice','tween','datastore','remoteevent','remotefunction','bindable','humanoid','leaderstats','collectionservice','pathfinding','runservice','userinputservice','httprequest','http','lighting','terrain','particles','sound','animation','constraint','weld','billboardgui','surfacegui','proximityprompt','clickdetector','badge','marketplace','textchatservice','proximity','attachment','motor6d','hingeconstraint','springconstraint','ropecconstraint','part','model','script','localscript','modulescript','error','bug','issue','crash','api','method','function','service','instance','property','event','enum','spawn','respawn','teleport','npc','enemy','mob','ai','pathfind','jump','walk','health','damage','kill','inventory','backpack','tool','equipment','shop','purchase','buy','sell','coin','gem','currency','economy','rank','level','xp','exp','gui','frame','button','label','image','scroll','viewport','color','material','mesh','texture','decal','light','fire','smoke','timer','countdown','round','game mode','lobby','match','session','admin','ban','kick','mute','chat','message','broadcast'];
 
-function _shouldSearchDocs(txt){
-  if(!txt||txt.length<5)return false;
-  var lower=txt.toLowerCase();
-  for(var i=0;i<_DOCS_KEYWORDS.length;i++){
-    if(lower.indexOf(_DOCS_KEYWORDS[i])>=0)return true;
-  }
-  return false;
-}
+function _shouldSearchDocs(txt){if(!txt||txt.length<5)return false;var lower=txt.toLowerCase();for(var i=0;i<_DOCS_KEYWORDS.length;i++){if(lower.indexOf(_DOCS_KEYWORDS[i])>=0)return true;}return false;}
 
-// Build docs context string untuk di-append ke system prompt
 function _buildDocsContext(docsResult){
   if(!docsResult||!docsResult.results||!docsResult.results.length)return'';
   var lines=['[ROBLOX DOCS REFERENCE — Retrieved live for this query]'];
-  docsResult.results.slice(0,4).forEach(function(r){
-    lines.push('• '+r.title+': '+r.snippet+' → '+r.url);
-  });
+  docsResult.results.slice(0,4).forEach(function(r){lines.push('• '+r.title+': '+r.snippet+' → '+r.url);});
   lines.push('[Use these references to write accurate, up-to-date Roblox code]');
   return lines.join('\n');
 }
+
 var REPORT_URL='/api/report';
 var K={gemini:'',turnstile:''};
 var _turnstileWidget=null;
@@ -184,11 +130,11 @@ var _mentionActive=false,_mentionAtPos=-1,_mentionSelIdx=0;
 var _wsCache=null,_wsLoading=false;
 var _playTestActive=false;
 
-// ── SYNC STATE (FIX: debounce + mutex untuk cegah 500 error) ─────────────────
+// ── SYNC STATE ────────────────────────────────────────────────────────────────
 var _syncTimer=null;
 var _syncInProgress=false;
 var _syncDebounceTimer=null;
-var _syncFailCount=0; // track consecutive failures
+var _syncFailCount=0;
 
 function updateLoader(p,m){var b=document.getElementById('plBar'),t=document.getElementById('plTxt');if(b)b.style.width=p+'%';if(t&&m)t.textContent=m;}
 function hideLoader(){var l=document.getElementById('pageLoader');if(!l)return;l.classList.add('hide');setTimeout(function(){l.style.display='none';},500);}
@@ -274,22 +220,16 @@ var _curGuiTheme='nexus_ai';
 
 function esc(s){return String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');}
 function toast(msg,col,dur){document.querySelectorAll('.nx-toast').forEach(function(x){x.remove();});var t=document.createElement('div');t.className='nx-toast';t.textContent=msg;t.style.cssText='position:fixed;bottom:22px;right:22px;background:var(--bg3);border:1px solid var(--b);border-radius:8px;padding:9px 15px;font-size:11px;z-index:9999;color:'+(col||'var(--cyan)')+';animation:toastIn .2s ease;pointer-events:none;max-width:300px;';document.body.appendChild(t);setTimeout(function(){t.remove();},(dur||2800));}
-// FIX: stripAllCode — hapus SEMUA code blocks di connected mode
-// User tidak perlu lihat code karena sudah diinjeksi ke Studio
+
 function stripAllCode(text){
   if(!text)return'';
-  // Hapus semua code blocks (json, lua, luau, js, dll)
   text=text.replace(/```[a-zA-Z]*\n[\s\S]*?```/g,'');
   text=text.replace(/```[\s\S]*?```/g,'');
-  // Hapus call: syntax
   text=text.replace(/^\s*call:[a-z_]+\([\s\S]*?\)\s*$/gm,'');
-  // Hapus action block patterns (inject_script({...}) dll)
   text=text.replace(/\b(?:inject_script|create_gui|create_remote|batch_commands|edit_script|create_script|create_local_script)\s*\(\{[\s\S]*?\}\)/g,'');
-  // Cleanup whitespace berlebih
   text=text.replace(/\n{3,}/g,'\n\n');
   return text.trim();
 }
-// cleanAIResponse — untuk mode OFFLINE: pertahankan code Lua tapi strip JSON/action blocks
 function cleanAIResponse(text){
   if(!text)return'';
   text=text.replace(/```json[\s\S]*?```/gi,'');
@@ -309,7 +249,6 @@ function checkDailyOnLoad(){
   var diff=(Date.now()-new Date(S.lastClaim).getTime())/3600000;
   if(diff>=24){toast(t.dailyReady,'var(--green)',5000);}
 }
-
 function checkDailyCredits(){
   if(isOwner()||isAdmin())return;
   var t=T();
@@ -319,7 +258,6 @@ function checkDailyCredits(){
   if(diff>=24){if(ce)ce.textContent=t.dailyReady;if(cb)cb.disabled=false;}
   else{var hrs=Math.ceil(24-diff);if(ce)ce.textContent=t.dailyNext+hrs+'h';if(cb)cb.disabled=true;}
 }
-
 function claimDaily(){
   if(isOwner()||isAdmin())return;
   var t=T();
@@ -338,7 +276,7 @@ function togglePlayTest(){S.playTestEnabled=!S.playTestEnabled;localStorage.setI
 function setPlayTestDur(val){var v=Math.max(5,Math.min(120,parseInt(val)||15));S.playTestDuration=v;localStorage.setItem('nexus_play_test_dur',String(v));var inp=document.getElementById('playTestDurInput');if(inp)inp.value=v;}
 function updatePlayTestUI(){var tg=document.getElementById('playTestToggle');if(tg)tg.className='toggle-sw'+(S.playTestEnabled?' on':'');var dur=document.getElementById('playTestDurInput');if(dur)dur.value=S.playTestDuration;}
 
-// ── SAVE/LOAD/SYNC ────────────────────────────────────────────────────────────
+// ── SAVE / LOAD / SYNC ────────────────────────────────────────────────────────
 function getStoreConvs(){
   return(S.allConvs||[]).slice(-30).map(function(c){
     return Object.assign({},c,{msgs:(c.msgs||[]).slice(-40).map(function(m){
@@ -348,7 +286,6 @@ function getStoreConvs(){
     })});
   });
 }
-
 function saveS(){
   if(!SESSION)return;
   if(!S.allConvs)S.allConvs=[];
@@ -362,160 +299,65 @@ function saveS(){
   SESSION.data.convs=getStoreConvs();
   try{localStorage.setItem('nexus_session',JSON.stringify(SESSION));}
   catch(e){try{SESSION.data.convs=getStoreConvs().slice(-5);localStorage.setItem('nexus_session',JSON.stringify(SESSION));}catch(e2){}}
-  // FIX: gunakan debounced sync, jangan langsung panggil syncToServer()
   _debouncedSync();
 }
-
-// FIX: Debounced sync — cegah flooding 500 error di /api/sync
-// Tunggu 4 detik idle sebelum kirim, dengan mutex
 function _debouncedSync(){
-  // Jangan schedule jika sudah terlalu banyak gagal (backoff aktif)
   if(_syncFailCount>=5)return;
   if(_syncDebounceTimer){clearTimeout(_syncDebounceTimer);}
-  _syncDebounceTimer=setTimeout(function(){
-    _syncDebounceTimer=null;
-    if(!_syncInProgress)syncToServer();
-  },4000);
+  _syncDebounceTimer=setTimeout(function(){_syncDebounceTimer=null;if(!_syncInProgress)syncToServer();},4000);
 }
-
 async function syncToServer(){
   if(!SESSION)return;
-  // FIX: Mutex — cegah concurrent requests yang bikin server 500
   if(_syncInProgress){
-    // Jangan queue lagi jika sudah ada timer pending
-    if(!_syncDebounceTimer){
-      _syncDebounceTimer=setTimeout(function(){
-        _syncDebounceTimer=null;
-        if(!_syncInProgress)syncToServer();
-      },4000);
-    }
+    if(!_syncDebounceTimer){_syncDebounceTimer=setTimeout(function(){_syncDebounceTimer=null;if(!_syncInProgress)syncToServer();},4000);}
     return;
   }
-  // FIX: Backoff bertahap jika server terus error
-  if(_syncFailCount>=5){
-    setTimeout(function(){_syncFailCount=0;},90000);
-    return;
-  }
+  if(_syncFailCount>=5){setTimeout(function(){_syncFailCount=0;},90000);return;}
   _syncInProgress=true;
   var ctrl=new AbortController();
   var timeoutId=setTimeout(function(){ctrl.abort();},12000);
   try{
-    // FIX: Batasi jumlah konversasi yang dikirim agar body tidak terlalu besar (penyebab 500)
     var convsTrimmed=getStoreConvs().slice(-15).map(function(c){
       return Object.assign({},c,{msgs:(c.msgs||[]).slice(-20).map(function(m){
-        var mc=Object.assign({},m);
-        delete mc._rawContent;
+        var mc=Object.assign({},m);delete mc._rawContent;
         if(typeof mc.content==='string'&&mc.content.length>3000)mc.content=mc.content.slice(0,3000)+'…';
         return mc;
       })});
     });
-    var resp=await fetch('/api/sync',{
-      method:'POST',
-      headers:{'Content-Type':'application/json'},
-      signal:ctrl.signal,
-      body:JSON.stringify({
-        user:(SESSION.user.username||'').toLowerCase(),
-        robloxId:SESSION.user.robloxId,
-        data:{
-          credits:S.credits,plan:S.plan,model:S.model,lastClaim:S.lastClaim,
-          selectedTheme:S.selectedTheme||'nexus_ai',
-          convs:convsTrimmed,projects:S.projects||[],lastSync:Date.now()
-        }
-      })
-    });
+    var resp=await fetch('/api/sync',{method:'POST',headers:{'Content-Type':'application/json'},signal:ctrl.signal,body:JSON.stringify({user:(SESSION.user.username||'').toLowerCase(),robloxId:SESSION.user.robloxId,data:{credits:S.credits,plan:S.plan,model:S.model,lastClaim:S.lastClaim,selectedTheme:S.selectedTheme||'nexus_ai',convs:convsTrimmed,projects:S.projects||[],lastSync:Date.now()}})});
     clearTimeout(timeoutId);
-    if(resp.ok){
-      _syncFailCount=0;
-    }else if(resp.status===500||resp.status===413){
-      // 500 = server error, 413 = payload too large — increment fail count
-      _syncFailCount++;
-    }else if(resp.status===401||resp.status===403){
-      // Auth error - jangan retry
-      _syncFailCount=5;
-    }
-  }catch(e){
-    clearTimeout(timeoutId);
-    if(e&&e.name!=='AbortError'){_syncFailCount++;}
-  }finally{
-    _syncInProgress=false;
-  }
+    if(resp.ok){_syncFailCount=0;}
+    else if(resp.status===500||resp.status===413){_syncFailCount++;}
+    else if(resp.status===401||resp.status===403){_syncFailCount=5;}
+  }catch(e){clearTimeout(timeoutId);if(e&&e.name!=='AbortError'){_syncFailCount++;}}
+  finally{_syncInProgress=false;}
 }
-
-// FIX: Auto-sync setiap 5 menit, dan hanya jika tab aktif
 function startAutoSync(){
   if(_syncTimer)clearInterval(_syncTimer);
-  _syncTimer=setInterval(function(){
-    // Jangan sync jika tab tersembunyi (minimized / background) - hemat server
-    if(document.hidden)return;
-    if(!_syncInProgress&&!_syncDebounceTimer){syncToServer();}
-  },300000); // 5 menit
+  _syncTimer=setInterval(function(){if(document.hidden)return;if(!_syncInProgress&&!_syncDebounceTimer){syncToServer();}},300000);
 }
 
-// FIX: Map model ID lama ke yang baru untuk migrasi seamless
-var _MODEL_ID_MIGRATION = {
-  'gemini-2.5-flash-lite':    'gemini-3.1-flash-lite',
-  'gemini-3-flash-preview':   'gemini-3.5-flash',
-  'gemini-3.5-flash-preview': 'gemini-3.5-flash',
-  'gemini-3-pro-preview':     'gemini-3.1-pro-preview',
-  'gemini-3.5-pro-preview':   'gemini-3.1-pro-preview',
-  'gemini-3.1-pro-preview':   'gemini-3.1-pro-preview',
-  'gemini-3.5-ultra-preview':  'gemini-3.1-pro-preview',
-};
-function _migrateModelId(modelObj){
-  if(!modelObj||!modelObj.id)return modelObj;
-  var newId=_MODEL_ID_MIGRATION[modelObj.id];
-  if(newId){
-    var found=MODEL_LIST.find(function(m){return m.id===newId;});
-    return found||Object.assign({},modelObj,{id:newId});
-  }
-  return modelObj;
-}
+var _MODEL_ID_MIGRATION={'gemini-2.5-flash-lite':'gemini-3.1-flash-lite','gemini-3-flash-preview':'gemini-3.5-flash','gemini-3.5-flash-preview':'gemini-3.5-flash','gemini-3-pro-preview':'gemini-3.1-pro-preview','gemini-3.5-pro-preview':'gemini-3.1-pro-preview','gemini-3.1-pro-preview':'gemini-3.1-pro-preview','gemini-3.5-ultra-preview':'gemini-3.1-pro-preview'};
+function _migrateModelId(modelObj){if(!modelObj||!modelObj.id)return modelObj;var newId=_MODEL_ID_MIGRATION[modelObj.id];if(newId){var found=MODEL_LIST.find(function(m){return m.id===newId;});return found||Object.assign({},modelObj,{id:newId});}return modelObj;}
 
 async function loadS(){
   if(!SESSION)return;
   S.credits=parseFloat((SESSION.data&&SESSION.data.credits!==undefined)?SESSION.data.credits:30)||30;
   S.plan=(SESSION.data&&SESSION.data.plan)||'free';
   S.lastClaim=(SESSION.data&&SESSION.data.lastClaim)||null;
-  if(SESSION.data&&SESSION.data.model){
-    var sm=SESSION.data.model;
-    var found=MODEL_LIST.find(function(m){return m.id===sm.id;});
-    // FIX: Jika model tidak ditemukan (mungkin ID lama), coba migrasi dulu
-    if(!found){var migrated=_migrateModelId(sm);found=MODEL_LIST.find(function(m){return m.id===migrated.id;})||migrated;}
-    S.model=found||sm;
-  }
+  if(SESSION.data&&SESSION.data.model){var sm=SESSION.data.model;var found=MODEL_LIST.find(function(m){return m.id===sm.id;});if(!found){var migrated=_migrateModelId(sm);found=MODEL_LIST.find(function(m){return m.id===migrated.id;})||migrated;}S.model=found||sm;}
   if(SESSION.data&&SESSION.data.selectedTheme)S.selectedTheme=SESSION.data.selectedTheme||'nexus_ai';
   S.allConvs=(SESSION.data&&SESSION.data.convs)||[];
   S.convs=S.currentProjectId?S.allConvs.filter(function(c){return c.projectId===S.currentProjectId;}):S.allConvs.slice();
   try{
-    var ctrl=new AbortController();
-    var tid=setTimeout(function(){ctrl.abort();},12000);
+    var ctrl=new AbortController();var tid=setTimeout(function(){ctrl.abort();},12000);
     var r=await fetch('/api/sync?user='+encodeURIComponent((SESSION.user.username||'').toLowerCase())+'&robloxId='+encodeURIComponent(SESSION.user.robloxId||''),{signal:ctrl.signal});
     clearTimeout(tid);
-    if(r.ok){var d=await r.json();
-      if(d&&d.credits!==undefined){
-        S.credits=parseFloat(d.credits)||0;S.plan=d.plan||S.plan;S.lastClaim=d.lastClaim||S.lastClaim;
-        if(d.convs&&d.convs.length){S.allConvs=d.convs;S.convs=S.currentProjectId?S.allConvs.filter(function(c){return c.projectId===S.currentProjectId;}):S.allConvs.slice();}
-        if(d.projects)S.projects=d.projects;
-        SESSION.data=Object.assign(SESSION.data||{},d);
-        try{localStorage.setItem('nexus_session',JSON.stringify(SESSION));}catch(e){}
-      }
-    }
+    if(r.ok){var d=await r.json();if(d&&d.credits!==undefined){S.credits=parseFloat(d.credits)||0;S.plan=d.plan||S.plan;S.lastClaim=d.lastClaim||S.lastClaim;if(d.convs&&d.convs.length){S.allConvs=d.convs;S.convs=S.currentProjectId?S.allConvs.filter(function(c){return c.projectId===S.currentProjectId;}):S.allConvs.slice();}if(d.projects)S.projects=d.projects;SESSION.data=Object.assign(SESSION.data||{},d);try{localStorage.setItem('nexus_session',JSON.stringify(SESSION));}catch(e){}}}
   }catch(e){}
 }
 async function loadKeys(){try{var r=await fetch('/api/main');if(r.ok){var d=await r.json();K.gemini=d.gemini_key||'';K.turnstile=d.turnstile_site_key||'';if(K.turnstile&&window.turnstile){var wrap=document.getElementById('cf-turnstile-wrap');if(wrap)wrap.style.display='block';_turnstileWidget=turnstile.render('#cf-turnstile-report',{sitekey:K.turnstile,theme:'dark',size:'normal',callback:function(token){document.getElementById('_tsToken')&&(document.getElementById('_tsToken').value=token);}});}}}catch(e){}}
-async function loadAdminIds(){
-  try{
-    var ctrl=new AbortController();
-    var tid=setTimeout(function(){ctrl.abort();},8000);
-    var r=await fetch('/api/sync?admin_ids=1',{signal:ctrl.signal});
-    clearTimeout(tid);
-    // FIX: 401/403 = fitur disabled atau tidak ada akses, abaikan saja (jangan log error)
-    if(r.ok){var d=await r.json();if(d&&d.admin_ids)ADMIN_IDS=d.admin_ids;}
-    // Status lain (401, 403, 500) diabaikan dengan silent fail
-  }catch(e){
-    // Network error atau abort - abaikan, ini bukan fitur kritis
-  }
-}
+async function loadAdminIds(){try{var ctrl=new AbortController();var tid=setTimeout(function(){ctrl.abort();},8000);var r=await fetch('/api/sync?admin_ids=1',{signal:ctrl.signal});clearTimeout(tid);if(r.ok){var d=await r.json();if(d&&d.admin_ids)ADMIN_IDS=d.admin_ids;}}catch(e){}}
 async function loadInboxCount(){try{var r=await fetch('/api/inbox?count=1&user='+(SESSION?SESSION.user.username:''));if(r.ok){var d=await r.json();S.unreadInbox=d.count||0;var b=document.getElementById('inboxBadge');if(b)b.textContent=S.unreadInbox;}}catch(e){}}
 
 // ── CREDITS ───────────────────────────────────────────────────────────────────
@@ -531,8 +373,7 @@ function updateCreds(){
 function updateRoleDisplay(){
   if(!SESSION)return;
   var plan=S.plan||'free';var isO=isOwner(),isA=isAdmin();
-  var roleEl=document.getElementById('sbRole'),planEl=document.getElementById('settingsPlan'),
-    badgeEl=document.getElementById('settingsBadge'),adminSec=document.getElementById('adminSection');
+  var roleEl=document.getElementById('sbRole'),planEl=document.getElementById('settingsPlan'),badgeEl=document.getElementById('settingsBadge'),adminSec=document.getElementById('adminSection');
   if(roleEl){if(isO)roleEl.textContent='Owner \u00b7 Unlimited';else if(isA)roleEl.textContent='Admin';else if(plan==='pro')roleEl.textContent='Pro Member';else roleEl.textContent='Roblox Developer';}
   if(planEl)planEl.textContent=isO?'OWNER':isA?'Admin':plan.charAt(0).toUpperCase()+plan.slice(1);
   if(badgeEl){if(isO)badgeEl.innerHTML='<span class="badge-owner">OWNER</span>';else if(isA)badgeEl.innerHTML='<span class="badge-admin">ADMIN</span>';else if(plan==='pro')badgeEl.innerHTML='<span class="badge-pro">PRO</span>';else badgeEl.innerHTML='<span style="font-size:9px;color:var(--dim);">FREE</span>';}
@@ -550,10 +391,7 @@ function moveMentionSel(dir){var list=document.getElementById('mentionList');if(
 function selectCurrentMention(){var list=document.getElementById('mentionList');if(!list)return false;var sel=list.querySelectorAll('.mention-item')[_mentionSelIdx];if(!sel)return false;sel.click();return true;}
 
 // ── LANG ──────────────────────────────────────────────────────────────────────
-function renderSuggestions(){
-  var t=T();var grid=document.getElementById('suggGrid');if(!grid)return;
-  grid.innerHTML=t.suggs.map(function(s){return'<div class="sugg" onclick="useSugg(this.dataset.q)" data-q="'+esc(s.q)+'">'+'<div class="sugg-title"><svg viewBox="0 0 24 24">'+s.icon+'</svg>'+esc(s.title)+'</div>'+esc(s.body)+'</div>';}).join('');
-}
+function renderSuggestions(){var t=T();var grid=document.getElementById('suggGrid');if(!grid)return;grid.innerHTML=t.suggs.map(function(s){return'<div class="sugg" onclick="useSugg(this.dataset.q)" data-q="'+esc(s.q)+'">'+'<div class="sugg-title"><svg viewBox="0 0 24 24">'+s.icon+'</svg>'+esc(s.title)+'</div>'+esc(s.body)+'</div>';}).join('');}
 function applyLang(){
   var t=T();
   function s(id,v){var e=document.getElementById(id);if(e)e.textContent=v;}
@@ -589,51 +427,21 @@ function changeLang(l){curLang=l;localStorage.setItem('nexus_lang',l);applyLang(
 // ── STUDIO ────────────────────────────────────────────────────────────────────
 function setStudioStatus(on){studioConnected=on;var t=T();var badge=document.getElementById('studioBadge'),dot=document.getElementById('studioDot'),txt=document.getElementById('studioTxt'),banner=document.getElementById('plugBanner'),bTxt=document.getElementById('plugBannerTxt');if(on){if(badge)badge.className='status-badge on';if(dot)dot.className='sdot pulse';if(txt)txt.textContent=t.son;if(banner)banner.className='plug-banner connected';if(bTxt)bTxt.textContent=t.connected;if(!_wsCache&&!_wsLoading)fetchWsCache();}else{if(badge)badge.className='status-badge off';if(dot)dot.className='sdot pulse';if(txt)txt.textContent=t.soff;if(banner)banner.className='plug-banner';if(bTxt)bTxt.textContent=t.disconnected;_wsCache=null;_wsLoading=false;}}
 function startStudioPoll(){if(studioPollTimer)clearInterval(studioPollTimer);checkStudio();studioPollTimer=setInterval(checkStudio,5000);}
-// FIX: Connection stability - track consecutive failures before marking offline
-// This prevents flicker when AI is generating (long request blocks poll timing)
-var _pollFailCount = 0;
-var _POLL_FAIL_THRESHOLD = 2; // need 2 consecutive failures before marking offline
-
+var _pollFailCount=0;
+var _POLL_FAIL_THRESHOLD=2;
 async function checkStudio(){
   if(!SESSION)return;
-  // FIX: Jika AI sedang generating, jangan ubah status ke offline
-  // AI request bisa 30-90 detik, selama itu poll mungkin lebih lambat
-  if(S.gen){
-    // Hanya cek jika sebelumnya sudah terconnect, dan pakai silent mode
-    if(!studioConnected)return;
-  }
+  if(S.gen){if(!studioConnected)return;}
   var user=(SESSION.user.username||'').toLowerCase();
   try{
-    var ctrl=new AbortController();
-    var tid=setTimeout(function(){ctrl.abort();},8000);
+    var ctrl=new AbortController();var tid=setTimeout(function(){ctrl.abort();},8000);
     var r=await fetch(API_URL+'?check=1&user='+encodeURIComponent(user),{signal:ctrl.signal});
     clearTimeout(tid);
-    if(r.ok){
-      var d=await r.json();
-      var newStatus=d._pluginConnected===true||d.connected===true||d.online===true;
-      var wasOn=studioConnected;
-      if(newStatus){
-        _pollFailCount=0; // reset fail count on success
-        setStudioStatus(true);
-        if(!wasOn){_wsCache=null;_wsLoading=false;fetchWsCache();}
-      }else{
-        _pollFailCount++;
-        // Hanya disconnect jika sudah gagal threshold kali ATAU tidak sedang generate
-        if(_pollFailCount>=_POLL_FAIL_THRESHOLD&&!S.gen){
-          setStudioStatus(false);
-        }
-      }
-    }else{
-      if(!S.gen){_pollFailCount++;if(_pollFailCount>=_POLL_FAIL_THRESHOLD)setStudioStatus(false);}
-    }
+    if(r.ok){var d=await r.json();var newStatus=d._pluginConnected===true||d.connected===true||d.online===true;var wasOn=studioConnected;if(newStatus){_pollFailCount=0;setStudioStatus(true);if(!wasOn){_wsCache=null;_wsLoading=false;fetchWsCache();}}else{_pollFailCount++;if(_pollFailCount>=_POLL_FAIL_THRESHOLD&&!S.gen){setStudioStatus(false);}}}
+    else{if(!S.gen){_pollFailCount++;if(_pollFailCount>=_POLL_FAIL_THRESHOLD)setStudioStatus(false);}}
   }catch(e){
-    if(e&&e.name==='AbortError'){
-      // Timeout - jangan ubah status, mungkin server lambat
-      // Hanya tambah fail count jika tidak sedang generate
-      if(!S.gen){_pollFailCount++; if(_pollFailCount>=_POLL_FAIL_THRESHOLD+1)setStudioStatus(false);}
-    }else{
-      if(!S.gen){_pollFailCount++;if(_pollFailCount>=_POLL_FAIL_THRESHOLD)setStudioStatus(false);}
-    }
+    if(e&&e.name==='AbortError'){if(!S.gen){_pollFailCount++;if(_pollFailCount>=_POLL_FAIL_THRESHOLD+1)setStudioStatus(false);}}
+    else{if(!S.gen){_pollFailCount++;if(_pollFailCount>=_POLL_FAIL_THRESHOLD)setStudioStatus(false);}}
   }
 }
 async function retryStudio(){_pollFailCount=0;toast(T().reconnectToast);await checkStudio();}
@@ -699,79 +507,42 @@ function _injectSuggChipStyles(){
     '.suggestion-chip:hover::before{opacity:1;transform:translateX(2px);}'+
     '.suggestion-chip:active{transform:scale(.97);}'+
     '.suggestion-chip.sending{opacity:.5;pointer-events:none;}'+
-    // Label kecil di atas chips
-    '.suggestion-chips-label{'+
-      'font-size:9.5px;'+
-      'color:var(--dim,#4a5568);'+
-      'letter-spacing:.05em;'+
-      'margin-bottom:4px;'+
-      'text-transform:uppercase;'+
-    '}';
+    '.suggestion-chips-label{font-size:9.5px;color:var(--dim,#4a5568);letter-spacing:.05em;margin-bottom:4px;text-transform:uppercase;}';
   document.head.appendChild(s);
 }
- 
-// Proses bubble AI: konversi <ul> list jadi clickable suggestion chips
+
 function _processSuggestionChips(bubble){
   if(!bubble)return;
   var uls=bubble.querySelectorAll('ul');
   if(!uls.length)return;
- 
   uls.forEach(function(ul){
-    // Skip jika sudah diproses
     if(ul.getAttribute('data-chips-done'))return;
- 
     var liEls=ul.querySelectorAll('li');
     var count=liEls.length;
- 
-    // Hanya proses list pendek (2-12 item) - kemungkinan adalah suggestions
     if(count<2||count>12)return;
- 
-    // Pastikan semua item cukup pendek (bukan paragraf)
     var allShort=Array.from(liEls).every(function(li){
       return li.textContent.trim().length<=100&&li.querySelectorAll('ul,ol,p,pre').length===0;
     });
     if(!allShort)return;
- 
-    // Buat wrapper chips
     var wrap=document.createElement('div');
     wrap.className='suggestion-chips';
- 
     Array.from(liEls).forEach(function(li){
       var text=li.textContent.trim();
       if(!text)return;
- 
       var btn=document.createElement('button');
       btn.className='suggestion-chip';
       btn.textContent=text;
       btn.title=curLang==='id'?'Klik untuk tanya ini':'Click to ask this';
- 
       btn.onclick=function(){
-        if(S.gen)return; // Jangan kirim jika AI sedang generating
-        // Tandai sebagai sedang dikirim
+        if(S.gen)return;
         btn.classList.add('sending');
- 
         var inp=document.getElementById('inp');
-        if(inp){
-          inp.value=text;
-          inp.style.height='auto';
-          inp.style.height=Math.min(inp.scrollHeight,130)+'px';
-          inp.focus();
-        }
-        // Sedikit delay agar animasi terlihat
+        if(inp){inp.value=text;inp.style.height='auto';inp.style.height=Math.min(inp.scrollHeight,130)+'px';inp.focus();}
         setTimeout(function(){send();},80);
       };
- 
       wrap.appendChild(btn);
     });
- 
-    // Hanya ganti jika berhasil buat minimal 2 chip
     if(wrap.children.length>=2){
-      // Tambahkan label di atas jika belum ada
-      var prevEl=ul.previousElementSibling;
-      var hasLabel=prevEl&&(prevEl.tagName==='P'||prevEl.tagName==='DIV')&&
-                   prevEl.textContent.length<120;
- 
-      // Sisipkan chips setelah ul, sembunyikan ul asli
       ul.parentNode.insertBefore(wrap,ul.nextSibling);
       ul.style.display='none';
       ul.setAttribute('data-chips-done','1');
@@ -821,26 +592,13 @@ function appendMsg(m,skipScroll){
   wrap.appendChild(mbWrap);c.appendChild(wrap);
   if(!skipScroll)c.scrollTop=c.scrollHeight;
 }
-function openCodePreview(stepId){
-  var meta=_stepMeta.get(stepId);
-  if(!meta||!meta.code)return;
-  var title=document.getElementById('codePreviewTitle');
-  var path=document.getElementById('codePreviewPath');
-  var codeEl=document.getElementById('codePreviewCode');
-  if(title)title.textContent=(meta.type||'Script')+': '+meta.name;
-  if(path)path.textContent=meta.parent+'/'+meta.name;
-  if(codeEl){codeEl.textContent=meta.code;try{hljs.highlightElement(codeEl);}catch(e){}}
-  document.getElementById('codePreviewModal').classList.add('show');
-}
-function copyPreviewCode(){
-  var codeEl=document.getElementById('codePreviewCode');
-  if(codeEl)navigator.clipboard.writeText(codeEl.textContent).then(function(){toast(T().copiedToast);});
-}
+function openCodePreview(stepId){var meta=_stepMeta.get(stepId);if(!meta||!meta.code)return;var title=document.getElementById('codePreviewTitle');var path=document.getElementById('codePreviewPath');var codeEl=document.getElementById('codePreviewCode');if(title)title.textContent=(meta.type||'Script')+': '+meta.name;if(path)path.textContent=meta.parent+'/'+meta.name;if(codeEl){codeEl.textContent=meta.code;try{hljs.highlightElement(codeEl);}catch(e){}}document.getElementById('codePreviewModal').classList.add('show');}
+function copyPreviewCode(){var codeEl=document.getElementById('codePreviewCode');if(codeEl)navigator.clipboard.writeText(codeEl.textContent).then(function(){toast(T().copiedToast);});}
 function copyCode(btn){var pre=btn.closest('.code-block-wrap').querySelector('pre code');if(pre)navigator.clipboard.writeText(pre.textContent).then(function(){toast(T().copiedToast);});}
 function downloadCode(btn,lang){var pre=btn.closest('.code-block-wrap').querySelector('pre code');if(!pre)return;var a=document.createElement('a');a.href='data:text/plain;charset=utf-8,'+encodeURIComponent(pre.textContent);a.download='nexus_code.'+getFileExt(lang);a.click();}
 function copyMsgText(btn){var b=btn.closest('.mb-wrap').querySelector('.bubble');if(b)navigator.clipboard.writeText(b.innerText||b.textContent).then(function(){toast(T().copiedToast);});}
 
-// ── THINKING STEPS ─────────────────────────────────────────────────────────────
+// ── THINKING STEPS ────────────────────────────────────────────────────────────
 function createStepsCard(){removeStepsCard();var c=document.getElementById('msgs');if(!c)return;var w=document.getElementById('welcome');if(w)w.style.display='none';var wrap=document.createElement('div');wrap.className='steps-wrap';wrap.id='stepsWrap';wrap.appendChild(mkAv('ai'));var mbW=document.createElement('div');mbW.className='mb-wrap';var sender=document.createElement('div');sender.className='msg-sender';sender.innerHTML='<span>NEXUS AI</span><span>'+new Date().toLocaleTimeString(curLang==='id'?'id-ID':'en-US',{hour:'2-digit',minute:'2-digit'})+'</span>';mbW.appendChild(sender);var box=document.createElement('div');box.className='steps-box';var hdr=document.createElement('div');hdr.className='steps-hdr';hdr.id='stepsHdr';var spinner=document.createElement('div');spinner.className='steps-hdr-spinner';spinner.id='stepsSpinner';var hdrTxt=document.createElement('span');hdrTxt.className='steps-hdr-txt';hdrTxt.id='stepsTxt';hdrTxt.textContent=T().workingOn;var hdrCount=document.createElement('span');hdrCount.className='steps-hdr-count';hdrCount.id='stepsCount';hdrCount.textContent='(0/0)';hdr.appendChild(spinner);hdr.appendChild(hdrTxt);hdr.appendChild(hdrCount);box.appendChild(hdr);var list=document.createElement('div');list.className='steps-list';list.id='stepsList';box.appendChild(list);var cancelDiv=document.createElement('div');cancelDiv.className='steps-cancel';cancelDiv.id='stepsCancel';var cb=document.createElement('button');cb.className='steps-cancel-btn';cb.textContent=T().cancel;cb.onclick=cancelGen;cancelDiv.appendChild(cb);box.appendChild(cancelDiv);mbW.appendChild(box);wrap.appendChild(mbW);c.appendChild(wrap);_stepsEl=wrap;_stepsList=list;_stepsMap.clear();_stepsId=0;c.scrollTop=c.scrollHeight;}
 function removeStepsCard(){var el=document.getElementById('stepsWrap');if(el)el.remove();_stepsEl=null;_stepsList=null;_stepsMap.clear();_stepMeta.clear();}
 function clearSteps(){if(!_stepsList)return;_stepsList.innerHTML='';_stepsMap.clear();_stepsId=0;var cnt=document.getElementById('stepsCount');if(cnt)cnt.textContent='';}
@@ -883,549 +641,189 @@ function updateStep(id,state,text,sub){var row=_stepsMap.get(id);if(!row)return;
 }
 function finalizeSteps(){var spinner=document.getElementById('stepsSpinner');if(spinner)spinner.style.display='none';var hdrTxt=document.getElementById('stepsTxt');if(hdrTxt)hdrTxt.style.color='var(--green)';var cancelDiv=document.getElementById('stepsCancel');if(cancelDiv)cancelDiv.remove();_stepsMap.forEach(function(row){if(row.getAttribute('data-st')==='running'){var ic=row.querySelector('.step-ic');if(ic)ic.innerHTML='<svg class="step-check" viewBox="0 0 24 24"><polyline points="20 6 9 17 4 12"/></svg>';row.setAttribute('data-st','done');}});}
 function setStepTitle(txt){var el=document.getElementById('stepsTxt');if(el)el.textContent=txt;}
-
 function cancelGen(){if(S.cancelCtrl)S.cancelCtrl.abort();S.gen=false;S.cancelCtrl=null;_playTestActive=false;removeStepsCard();var sb=document.getElementById('sendBtn'),cb=document.getElementById('cancelBtn');if(sb)sb.classList.remove('hidden');if(cb)cb.classList.add('hidden');toast(T().cancelToast,'var(--yellow)');}
 
-// ════════════════════════════════════════════════════════════════════════════
-// ── JSON PARSING PIPELINE (FIXED) ───────────────────────────────────────────
-// ════════════════════════════════════════════════════════════════════════════
-
-function _stripLuaExpressions(str) {
-  if (typeof str !== 'string') return str;
-  str = str.replace(/UDim2\.new\s*\(\s*([-\d.\s,]+)\s*\)/g, function(m, args) {
-    var parts = args.split(',').map(function(p) { return parseFloat(p.trim()) || 0; });
-    return '[' + parts.join(',') + ']';
-  });
-  str = str.replace(/Vector3\.new\s*\(\s*([-\d.\s,]+)\s*\)/g, function(m, args) {
-    var parts = args.split(',').map(function(p) { return parseFloat(p.trim()) || 0; });
-    return '[' + parts.join(',') + ']';
-  });
-  str = str.replace(/Color3\.fromRGB\s*\(\s*([\d.\s,]+)\s*\)/g, function(m, args) {
-    var parts = args.split(',').map(function(p) { return parseInt(p.trim()) || 0; });
-    return '[' + parts.join(',') + ']';
-  });
-  str = str.replace(/Color3\.new\s*\([^)]*\)/g, 'null');
-  str = str.replace(/Vector2\.new\s*\(\s*([-\d.\s,]+)\s*\)/g, function(m, args) {
-    var parts = args.split(',').map(function(p) { return parseFloat(p.trim()) || 0; });
-    return '[' + parts.join(',') + ']';
-  });
-  str = str.replace(/UDim\.new\s*\(\s*([-\d.\s,]+)\s*\)/g, function(m, args) {
-    var parts = args.split(',').map(function(p) { return parseFloat(p.trim()) || 0; });
-    return '[' + parts.join(',') + ']';
-  });
-  str = str.replace(/BrickColor\.new\s*\(\s*"([^"]+)"\s*\)/g, '"$1"');
-  str = str.replace(/Enum\.[A-Za-z]+\.([A-Za-z]+)/g, '"$1"');
-  str = str.replace(/CFrame\.[a-zA-Z]*\s*\([^)]*\)/g, 'null');
-  str = str.replace(/NumberRange\.new\s*\([^)]*\)/g, 'null');
-  str = str.replace(/NumberSequence\.new\s*\([^)]*\)/g, 'null');
-  str = str.replace(/ColorSequence\.new\s*\([^)]*\)/g, 'null');
-  str = str.replace(/\b[A-Z][a-zA-Z]+\.[a-zA-Z]+\s*\([^)]{0,200}\)/g, 'null');
+// ── JSON PARSING PIPELINE ─────────────────────────────────────────────────────
+function _stripLuaExpressions(str){
+  if(typeof str!=='string')return str;
+  str=str.replace(/UDim2\.new\s*\(\s*([-\d.\s,]+)\s*\)/g,function(m,args){var parts=args.split(',').map(function(p){return parseFloat(p.trim())||0;});return'['+parts.join(',')+']';});
+  str=str.replace(/Vector3\.new\s*\(\s*([-\d.\s,]+)\s*\)/g,function(m,args){var parts=args.split(',').map(function(p){return parseFloat(p.trim())||0;});return'['+parts.join(',')+']';});
+  str=str.replace(/Color3\.fromRGB\s*\(\s*([\d.\s,]+)\s*\)/g,function(m,args){var parts=args.split(',').map(function(p){return parseInt(p.trim())||0;});return'['+parts.join(',')+']';});
+  str=str.replace(/Color3\.new\s*\([^)]*\)/g,'null');
+  str=str.replace(/Vector2\.new\s*\(\s*([-\d.\s,]+)\s*\)/g,function(m,args){var parts=args.split(',').map(function(p){return parseFloat(p.trim())||0;});return'['+parts.join(',')+']';});
+  str=str.replace(/UDim\.new\s*\(\s*([-\d.\s,]+)\s*\)/g,function(m,args){var parts=args.split(',').map(function(p){return parseFloat(p.trim())||0;});return'['+parts.join(',')+']';});
+  str=str.replace(/BrickColor\.new\s*\(\s*"([^"]+)"\s*\)/g,'"$1"');
+  str=str.replace(/Enum\.[A-Za-z]+\.([A-Za-z]+)/g,'"$1"');
+  str=str.replace(/CFrame\.[a-zA-Z]*\s*\([^)]*\)/g,'null');
+  str=str.replace(/NumberRange\.new\s*\([^)]*\)/g,'null');
+  str=str.replace(/NumberSequence\.new\s*\([^)]*\)/g,'null');
+  str=str.replace(/ColorSequence\.new\s*\([^)]*\)/g,'null');
+  str=str.replace(/\b[A-Z][a-zA-Z]+\.[a-zA-Z]+\s*\([^)]{0,200}\)/g,'null');
   return str;
 }
-
-function _normalizeCmd(obj) {
-  if (!obj || typeof obj !== 'object' || Array.isArray(obj)) return null;
-  var actionName = obj.action || obj.command || obj.type || '';
-  if (!actionName || typeof actionName !== 'string') return null;
-  actionName = String(actionName).trim();
-  if (actionName.length === 0 || actionName.length > 80) return null;
-  if (!/^[a-z_][a-z0-9_]*$/.test(actionName)) return null;
-  var result = { action: actionName };
-  if (obj.params && typeof obj.params === 'object' && !Array.isArray(obj.params)) {
-    Object.keys(obj.params).forEach(function(k) {
-      if (k !== 'action' && k !== 'command' && k !== 'type') {
-        result[k] = obj.params[k];
-      }
-    });
-  }
-  Object.keys(obj).forEach(function(k) {
-    if (k !== 'action' && k !== 'command' && k !== 'type' && k !== 'params') {
-      result[k] = obj[k];
-    }
-  });
+function _normalizeCmd(obj){
+  if(!obj||typeof obj!=='object'||Array.isArray(obj))return null;
+  var actionName=obj.action||obj.command||obj.type||'';
+  if(!actionName||typeof actionName!=='string')return null;
+  actionName=String(actionName).trim();
+  if(actionName.length===0||actionName.length>80)return null;
+  if(!/^[a-z_][a-z0-9_]*$/.test(actionName))return null;
+  var result={action:actionName};
+  if(obj.params&&typeof obj.params==='object'&&!Array.isArray(obj.params)){Object.keys(obj.params).forEach(function(k){if(k!=='action'&&k!=='command'&&k!=='type'){result[k]=obj.params[k];}});}
+  Object.keys(obj).forEach(function(k){if(k!=='action'&&k!=='command'&&k!=='type'&&k!=='params'){result[k]=obj[k];}});
   return result;
 }
-
-// FIX: _jsonSanitize yang lebih robust untuk handle Lua code di dalam JSON strings
-function _jsonSanitize(str) {
-  if (!str || typeof str !== 'string') return str;
-  var out = ''; var inStr = false; var esc2 = false; var i = 0;
-  while (i < str.length) {
-    var c = str[i]; var code = str.charCodeAt(i);
-    if (esc2) { out += c; esc2 = false; i++; continue; }
-    if (c === '\\' && inStr) { out += c; esc2 = true; i++; continue; }
-    if (c === '"') { inStr = !inStr; out += c; i++; continue; }
-    // Strip // line comments (outside strings)
-    if (!inStr && c === '/' && str[i + 1] === '/') {
-      while (i < str.length && str[i] !== '\n') i++;
-      i++; continue;
-    }
-    // Strip /* */ block comments (outside strings)
-    if (!inStr && c === '/' && str[i + 1] === '*') {
-      i += 2;
-      while (i < str.length && !(str[i] === '*' && str[i + 1] === '/')) i++;
-      i += 2; continue;
-    }
-    // Strip Lua -- comments (outside strings)
-    if (!inStr && c === '-' && str[i + 1] === '-') {
-      while (i < str.length && str[i] !== '\n') i++;
-      continue;
-    }
-    // Inside string: escape control chars
-    if (inStr) {
-      if (c === '\n') { out += '\\n'; i++; continue; }
-      if (c === '\r') { out += '\\r'; i++; continue; }
-      if (c === '\t') { out += '\\t'; i++; continue; }
-      if (code < 0x20) { out += '\\u' + ('000' + code.toString(16)).slice(-4); i++; continue; }
-    }
-    out += c; i++;
+function _jsonSanitize(str){
+  if(!str||typeof str!=='string')return str;
+  var out='';var inStr=false;var esc2=false;var i=0;
+  while(i<str.length){
+    var c=str[i];var code=str.charCodeAt(i);
+    if(esc2){out+=c;esc2=false;i++;continue;}
+    if(c==='\\'&&inStr){out+=c;esc2=true;i++;continue;}
+    if(c==='"'){inStr=!inStr;out+=c;i++;continue;}
+    if(!inStr&&c==='/'&&str[i+1]==='/'){while(i<str.length&&str[i]!=='\n')i++;i++;continue;}
+    if(!inStr&&c==='/'&&str[i+1]==='*'){i+=2;while(i<str.length&&!(str[i]==='*'&&str[i+1]==='/'))i++;i+=2;continue;}
+    if(!inStr&&c==='-'&&str[i+1]==='-'){while(i<str.length&&str[i]!=='\n')i++;continue;}
+    if(inStr){if(c==='\n'){out+='\\n';i++;continue;}if(c==='\r'){out+='\\r';i++;continue;}if(c==='\t'){out+='\\t';i++;continue;}if(code<0x20){out+='\\u'+('000'+code.toString(16)).slice(-4);i++;continue;}}
+    out+=c;i++;
   }
   return out;
 }
-
-function _jsonRepair(raw) {
-  if (!raw || typeof raw !== 'string') return raw;
-  raw = _stripLuaExpressions(raw);
-  raw = _jsonSanitize(raw);
-  raw = raw.replace(/([{,\[]\s*)([a-zA-Z_$][a-zA-Z0-9_$]*)(\s*=\s*(?![=>]))/g, '$1"$2": ');
-  raw = raw.replace(/([{,]\s*)([a-zA-Z_$][a-zA-Z0-9_$]*)(\s*:(?!:))/g, '$1"$2"$3');
-  raw = raw.replace(/:\s*'([^'\\]*)'/g, ':"$1"');
-  raw = raw.replace(/\[\s*'([^'\\]*)'/g, '["$1"');
-  raw = raw.replace(/,\s*'([^'\\]*)'/g, ',"$1"');
-  raw = raw.replace(/,(\s*[}\]])/g, '$1');
-  raw = raw.replace(/:\s*True\b/g, ':true')
-           .replace(/:\s*False\b/g, ':false')
-           .replace(/:\s*None\b/g, ':null')
-           .replace(/:\s*nil\b/g, ':null');
+function _jsonRepair(raw){
+  if(!raw||typeof raw!=='string')return raw;
+  raw=_stripLuaExpressions(raw);raw=_jsonSanitize(raw);
+  raw=raw.replace(/([{,\[]\s*)([a-zA-Z_$][a-zA-Z0-9_$]*)(\s*=\s*(?![=>]))/g,'$1"$2": ');
+  raw=raw.replace(/([{,]\s*)([a-zA-Z_$][a-zA-Z0-9_$]*)(\s*:(?!:))/g,'$1"$2"$3');
+  raw=raw.replace(/:\s*'([^'\\]*)'/g,':"$1"');
+  raw=raw.replace(/\[\s*'([^'\\]*)'/g,'["$1"');
+  raw=raw.replace(/,\s*'([^'\\]*)'/g,',"$1"');
+  raw=raw.replace(/,(\s*[}\]])/g,'$1');
+  raw=raw.replace(/:\s*True\b/g,':true').replace(/:\s*False\b/g,':false').replace(/:\s*None\b/g,':null').replace(/:\s*nil\b/g,':null');
   return raw;
 }
-
-// FIX: _tryParseJson dengan limit ukuran dan graceful fail
-function _tryParseJson(raw) {
-  if (!raw || typeof raw !== 'string') return null;
-  raw = raw.trim();
-  if (!raw) return null;
-  // FIX: Skip jika terlalu panjang (kemungkinan raw Lua code, bukan JSON command)
-  if (raw.length > 50000) return null;
-  // Quick sanity check
-  if (!raw.startsWith('{') && !raw.startsWith('[')) return null;
+function _tryParseJson(raw){
+  if(!raw||typeof raw!=='string')return null;
+  raw=raw.trim();if(!raw)return null;
+  if(raw.length>50000)return null;
+  if(!raw.startsWith('{')&&!raw.startsWith('['))return null;
   var p;
-  try { p = JSON.parse(raw); return p; } catch (e1) {}
-  var stripped = _stripLuaExpressions(raw);
-  try { p = JSON.parse(stripped); return p; } catch (e2) {}
-  try { p = JSON.parse(_jsonRepair(raw)); return p; } catch (e3) {}
-  try { p = JSON.parse(_jsonRepair(stripped)); return p; } catch (e4) {}
-  var jm = stripped.match(/(\[[\s\S]+\]|\{[\s\S]+\})/);
-  if (jm) {
-    try { p = JSON.parse(jm[1]); return p; } catch (e5) {}
-    try { p = JSON.parse(_jsonRepair(jm[1])); return p; } catch (e6) {
-      // Silent warning - jangan spam console
-    }
-  } else {
-    var jm2 = raw.match(/(\[[\s\S]+\]|\{[\s\S]+\})/);
-    if (jm2) {
-      try { p = JSON.parse(_jsonRepair(jm2[1])); return p; } catch(e7) {}
-    }
-  }
+  try{p=JSON.parse(raw);return p;}catch(e1){}
+  var stripped=_stripLuaExpressions(raw);
+  try{p=JSON.parse(stripped);return p;}catch(e2){}
+  try{p=JSON.parse(_jsonRepair(raw));return p;}catch(e3){}
+  try{p=JSON.parse(_jsonRepair(stripped));return p;}catch(e4){}
+  var jm=stripped.match(/(\[[\s\S]+\]|\{[\s\S]+\})/);
+  if(jm){try{p=JSON.parse(jm[1]);return p;}catch(e5){}try{p=JSON.parse(_jsonRepair(jm[1]));return p;}catch(e6){}}
+  else{var jm2=raw.match(/(\[[\s\S]+\]|\{[\s\S]+\})/);if(jm2){try{p=JSON.parse(_jsonRepair(jm2[1]));return p;}catch(e7){}}}
   return null;
 }
 
-// ── FIX: Deteksi apakah blok Lua berisi action calls (bukan Lua asli) ────────
-// ROOT CAUSE dari bug "GUI kosong" dan "script salah isi":
-// AI kadang generate action calls (create_gui, inject_script, dll) di dalam
-// ```lua block. Ini harus DILEWATI oleh parseLuaBlocks dan diproses sebagai
-// action commands, bukan disuntik sebagai Lua script literal.
-var _LUA_ACTION_PATTERNS = [
-  /^\s*create_remote\s*\(/m,
-  /^\s*inject_script\s*\(/m,
-  /^\s*create_gui\s*\(/m,
-  /^\s*create_frame\s*\(/m,
-  /^\s*batch_commands\s*\(/m,
-  /^\s*create_script\s*\(/m,
-  /^\s*create_local_script\s*\(/m,
-  /^\s*create_module\s*\(/m,
-  /^\s*edit_script\s*\(/m,
-  /^\s*create_part\s*\(/m,
-  /^\s*set_property\s*\(/m,
-  /^\s*create_text_label\s*\(/m,
-  /^\s*inject_quick_script\s*\(/m,
-];
+var _LUA_ACTION_PATTERNS=[/^\s*create_remote\s*\(/m,/^\s*inject_script\s*\(/m,/^\s*create_gui\s*\(/m,/^\s*create_frame\s*\(/m,/^\s*batch_commands\s*\(/m,/^\s*create_script\s*\(/m,/^\s*create_local_script\s*\(/m,/^\s*create_module\s*\(/m,/^\s*edit_script\s*\(/m,/^\s*create_part\s*\(/m,/^\s*set_property\s*\(/m,/^\s*create_text_label\s*\(/m,/^\s*inject_quick_script\s*\(/m];
+function isActionCallBlock(code){var count=0;for(var i=0;i<_LUA_ACTION_PATTERNS.length;i++){if(_LUA_ACTION_PATTERNS[i].test(code)){count++;if(count>=2)return true;}}if(count===1){var hasRealLua=/\bgame:GetService\b|\blocal\s+\w+\s*=\s*Instance\.new\b|\bPlayers\.LocalPlayer\b/.test(code);if(!hasRealLua)return true;}return false;}
 
-function isActionCallBlock(code) {
-  // Jika 2+ action pattern ditemukan = ini blok action, bukan Lua asli
-  // TIDAK perlu cek Instance.new karena source code di inject_script bisa punya Instance.new
-  var count = 0;
-  for (var i = 0; i < _LUA_ACTION_PATTERNS.length; i++) {
-    if (_LUA_ACTION_PATTERNS[i].test(code)) {
-      count++;
-      if (count >= 2) return true;
-    }
-  }
-  // Satu action call + tidak ada local/game: prefix = kemungkinan action block
-  if (count === 1) {
-    var hasRealLua = /\bgame:GetService\b|\blocal\s+\w+\s*=\s*Instance\.new\b|\bPlayers\.LocalPlayer\b/.test(code);
-    if (!hasRealLua) return true;
-  }
-  return false;
-}
-
-// ── PARSE LUA BLOCKS ────────────────────────────────────────────────────────
-function parseLuaBlocks(text) {
-  var blocks = [];
-  var re = /```(?:lua|luau)\s*([\s\S]*?)```/gi, m;
-  while ((m = re.exec(text)) !== null) {
-    var c = m[1].trim();
-    if (c.length < 10) continue;
-    // FIX: Skip blok yang berisi action calls - jangan inject sebagai Lua literal
-    if (isActionCallBlock(c)) continue;
-    if (/--\s*Command\s*Batch\s*Start/i.test(c)) continue;
-    if (/^\s*batch_commands\s*\(\s*\{/.test(c)) continue;
-    if (/^\s*\{\s*["']?action["']?\s*[=:]\s*["']/.test(c)) continue;
-    // Skip trivial remote-only scripts
-    if (/^\s*(local\s+\w+\s*=\s*)?Instance\.new\(["']Remote(Event|Function)["']\)/.test(c) &&
-        c.split('\n').filter(function (l) { return l.trim() && !l.trim().startsWith('--'); }).length <= 6) {
-      continue;
-    }
+function parseLuaBlocks(text){
+  var blocks=[];var re=/```(?:lua|luau)\s*([\s\S]*?)```/gi,m;
+  while((m=re.exec(text))!==null){
+    var c=m[1].trim();if(c.length<10)continue;
+    if(isActionCallBlock(c))continue;
+    if(/--\s*Command\s*Batch\s*Start/i.test(c))continue;
+    if(/^\s*batch_commands\s*\(\s*\{/.test(c))continue;
+    if(/^\s*\{\s*["']?action["']?\s*[=:]\s*["']/.test(c))continue;
+    if(/^\s*(local\s+\w+\s*=\s*)?Instance\.new\(["']Remote(Event|Function)["']\)/.test(c)&&c.split('\n').filter(function(l){return l.trim()&&!l.trim().startsWith('--');}).length<=6)continue;
     blocks.push(c);
   }
   return blocks;
 }
 
-// ── PARSE JSON BLOCKS (FIXED) ────────────────────────────────────────────────
-function parseJsonBlocks(text) {
-  var cmds = [];
-  var re = /```(?:json|JSON|Json)\s*\n?([\s\S]*?)```/g, m;
-  while ((m = re.exec(text)) !== null) {
-    var raw = m[1].trim();
-    if (!raw || raw.length < 5) continue;
-    // FIX: Skip jika terlalu besar (kemungkinan salah wrap)
-    if (raw.length > 30000) continue;
-    if (/^\s*(local\s+|function\s+[a-zA-Z]|game:Get|return\s+\{)/.test(raw) &&
-        !/["']action["']/.test(raw) && !/["']command["']/.test(raw)) continue;
-
-    var processed = _stripLuaExpressions(raw);
-    processed = processed.replace(/([{,\[]\s*)([a-zA-Z_][a-zA-Z0-9_]*)(\s*=\s*(?![=>]))/g, '$1"$2": ');
-
-    var fnMatch = processed.match(/^\s*([a-z_][a-z0-9_]{2,49})\s*\(\s*(\{[\s\S]+\})\s*\)\s*;?\s*$/);
-    if (fnMatch) {
-      var fnName = fnMatch[1];
-      var bodyStr = fnMatch[2];
-      var fnParsed = _tryParseJson(bodyStr);
-      if (fnParsed && typeof fnParsed === 'object') {
-        if (fnName === 'batch_commands') {
-          var batchArr = fnParsed.commands || fnParsed.actions || (Array.isArray(fnParsed) ? fnParsed : null);
-          if (Array.isArray(batchArr)) {
-            batchArr.forEach(function(sub) {
-              var norm = _normalizeCmd(sub);
-              if (norm) cmds.push(norm);
-            });
-            continue;
-          }
-        } else {
-          var fnCmd = Object.assign({ action: fnName }, Array.isArray(fnParsed) ? {} : fnParsed);
-          var norm = _normalizeCmd(fnCmd);
-          if (norm) { cmds.push(norm); continue; }
-        }
-      }
-    }
-
-    var parsed = _tryParseJson(processed);
-    if (!parsed) continue;
-
-    var items = [];
-    if (Array.isArray(parsed)) {
-      items = parsed;
-    } else if (parsed.batch_commands && Array.isArray(parsed.batch_commands)) {
-      items = parsed.batch_commands;
-    } else if (parsed.commands && Array.isArray(parsed.commands)) {
-      items = parsed.commands;
-    } else if (parsed.actions && Array.isArray(parsed.actions)) {
-      items = parsed.actions;
-    } else if (parsed.action || parsed.command || parsed.type) {
-      items = [parsed];
-    } else {
-      var foundArr = false;
-      Object.keys(parsed).forEach(function(k) {
-        if (!foundArr && Array.isArray(parsed[k]) && parsed[k].length > 0) {
-          var firstItem = parsed[k][0];
-          if (firstItem && typeof firstItem === 'object' &&
-              (firstItem.action || firstItem.command || firstItem.type)) {
-            items = parsed[k];
-            foundArr = true;
-          }
-        }
-      });
-      if (!foundArr && Object.keys(parsed).length > 0) {
-        Object.keys(parsed).forEach(function(k) {
-          if (/^[a-z_][a-z0-9_]*$/.test(k) && typeof parsed[k] === 'object' && !Array.isArray(parsed[k])) {
-            var candidate = Object.assign({ action: k }, parsed[k]);
-            if (_normalizeCmd(candidate)) items.push(candidate);
-          }
-        });
-      }
-    }
-
-    items.forEach(function(item) {
-      if (!item || typeof item !== 'object') return;
-      if (!Array.isArray(item)) {
-        if (item.batch_commands && Array.isArray(item.batch_commands)) {
-          item.batch_commands.forEach(function(sub) {
-            var norm = _normalizeCmd(sub);
-            if (norm) cmds.push(norm);
-          });
-          return;
-        }
-        if (item.commands && Array.isArray(item.commands)) {
-          item.commands.forEach(function(sub) {
-            var norm = _normalizeCmd(sub);
-            if (norm) cmds.push(norm);
-          });
-          return;
-        }
-      }
-      var norm = _normalizeCmd(item);
-      if (norm) cmds.push(norm);
-    });
+function parseJsonBlocks(text){
+  var cmds=[];var re=/```(?:json|JSON|Json)\s*\n?([\s\S]*?)```/g,m;
+  while((m=re.exec(text))!==null){
+    var raw=m[1].trim();if(!raw||raw.length<5)continue;if(raw.length>30000)continue;
+    if(/^\s*(local\s+|function\s+[a-zA-Z]|game:Get|return\s+\{)/.test(raw)&&!/["']action["']/.test(raw)&&!/["']command["']/.test(raw))continue;
+    var processed=_stripLuaExpressions(raw);
+    processed=processed.replace(/([{,\[]\s*)([a-zA-Z_][a-zA-Z0-9_]*)(\s*=\s*(?![=>]))/g,'$1"$2": ');
+    var fnMatch=processed.match(/^\s*([a-z_][a-z0-9_]{2,49})\s*\(\s*(\{[\s\S]+\})\s*\)\s*;?\s*$/);
+    if(fnMatch){var fnName=fnMatch[1];var bodyStr=fnMatch[2];var fnParsed=_tryParseJson(bodyStr);if(fnParsed&&typeof fnParsed==='object'){if(fnName==='batch_commands'){var batchArr=fnParsed.commands||fnParsed.actions||(Array.isArray(fnParsed)?fnParsed:null);if(Array.isArray(batchArr)){batchArr.forEach(function(sub){var norm=_normalizeCmd(sub);if(norm)cmds.push(norm);});continue;}}else{var fnCmd=Object.assign({action:fnName},Array.isArray(fnParsed)?{}:fnParsed);var norm=_normalizeCmd(fnCmd);if(norm){cmds.push(norm);continue;}}}}
+    var parsed=_tryParseJson(processed);if(!parsed)continue;
+    var items=[];
+    if(Array.isArray(parsed)){items=parsed;}
+    else if(parsed.batch_commands&&Array.isArray(parsed.batch_commands)){items=parsed.batch_commands;}
+    else if(parsed.commands&&Array.isArray(parsed.commands)){items=parsed.commands;}
+    else if(parsed.actions&&Array.isArray(parsed.actions)){items=parsed.actions;}
+    else if(parsed.action||parsed.command||parsed.type){items=[parsed];}
+    else{var foundArr=false;Object.keys(parsed).forEach(function(k){if(!foundArr&&Array.isArray(parsed[k])&&parsed[k].length>0){var firstItem=parsed[k][0];if(firstItem&&typeof firstItem==='object'&&(firstItem.action||firstItem.command||firstItem.type)){items=parsed[k];foundArr=true;}}});if(!foundArr&&Object.keys(parsed).length>0){Object.keys(parsed).forEach(function(k){if(/^[a-z_][a-z0-9_]*$/.test(k)&&typeof parsed[k]==='object'&&!Array.isArray(parsed[k])){var candidate=Object.assign({action:k},parsed[k]);if(_normalizeCmd(candidate))items.push(candidate);}});}}
+    items.forEach(function(item){if(!item||typeof item!=='object')return;if(!Array.isArray(item)){if(item.batch_commands&&Array.isArray(item.batch_commands)){item.batch_commands.forEach(function(sub){var norm=_normalizeCmd(sub);if(norm)cmds.push(norm);});return;}if(item.commands&&Array.isArray(item.commands)){item.commands.forEach(function(sub){var norm=_normalizeCmd(sub);if(norm)cmds.push(norm);});return;}}var norm=_normalizeCmd(item);if(norm)cmds.push(norm);});
   }
   return cmds;
 }
 
-// ── FIX: Ekstrak action commands dari Lua block yang berisi action calls ──────
-// Ini menangani kasus AI generate inject_script({source=[[...]]}) dll di dalam ```lua
-function _extractActionsFromLuaBlock(blockCode) {
-  var cmds = [];
-  var pos = 0;
-  var code = blockCode;
-  
-  while (pos < code.length) {
-    // Cari pola: action_name({
-    var searchStr = code.slice(pos);
-    var matchIdx = -1;
-    var matchedName = '';
-    
-    // Cari action call berikutnya
-    var re = /\b([a-z_][a-z0-9_]{3,49})\s*\(\s*\{/g;
-    re.lastIndex = 0;
-    var m = re.exec(searchStr);
-    if (!m) break;
-    
-    var fnName = m[1];
-    var skipFns2 = ['function','require','print','warn','error','local','if','for','while','end','do','then','return','and','or','not','true','false','nil','table','string','math','tostring','tonumber','type','pairs','ipairs','next','select','unpack','pcall','xpcall','rawget','rawset'];
-    if (skipFns2.indexOf(fnName) >= 0) {
-      pos += m.index + m[0].length;
-      continue;
+function _extractActionsFromLuaBlock(blockCode){
+  var cmds=[];var pos=0;var code=blockCode;
+  while(pos<code.length){
+    var searchStr=code.slice(pos);
+    var re=/\b([a-z_][a-z0-9_]{3,49})\s*\(\s*\{/g;re.lastIndex=0;var m=re.exec(searchStr);if(!m)break;
+    var fnName=m[1];
+    var skipFns2=['function','require','print','warn','error','local','if','for','while','end','do','then','return','and','or','not','true','false','nil','table','string','math','tostring','tonumber','type','pairs','ipairs','next','select','unpack','pcall','xpcall','rawget','rawset'];
+    if(skipFns2.indexOf(fnName)>=0){pos+=m.index+m[0].length;continue;}
+    var braceStart=pos+m.index+m[0].length-1;
+    var depth=0,inStr=false,strChar='',inLongStr=false,bodyEnd=-1;
+    for(var bi=braceStart;bi<code.length;bi++){
+      var ch=code[bi];
+      if(!inStr&&ch==='['&&code[bi+1]==='['){inLongStr=true;bi+=1;continue;}
+      if(inLongStr&&ch===']'&&code[bi+1]===']'){inLongStr=false;bi+=1;continue;}
+      if(inLongStr)continue;
+      if(!inStr&&(ch==='"'||ch==="'")){inStr=true;strChar=ch;continue;}
+      if(inStr&&ch===strChar&&code[bi-1]!=='\\'){inStr=false;continue;}
+      if(inStr)continue;
+      if(ch==='{')depth++;
+      else if(ch==='}'){depth--;if(depth===0){bodyEnd=bi;break;}}
     }
-    
-    // Posisi '{' pertama
-    var braceStart = pos + m.index + m[0].length - 1;
-    
-    // Ekstrak badan dengan balanced brace matching
-    var depth = 0;
-    var inStr = false;
-    var strChar = '';
-    var inLongStr = false;
-    var bodyEnd = -1;
-    
-    for (var bi = braceStart; bi < code.length; bi++) {
-      var ch = code[bi];
-      
-      // Handle Lua long strings [[...]]
-      if (!inStr && ch === '[' && code[bi+1] === '[') {
-        inLongStr = true; bi += 1; continue;
-      }
-      if (inLongStr && ch === ']' && code[bi+1] === ']') {
-        inLongStr = false; bi += 1; continue;
-      }
-      if (inLongStr) continue;
-      
-      // Handle strings
-      if (!inStr && (ch === '"' || ch === "'")) { inStr = true; strChar = ch; continue; }
-      if (inStr && ch === strChar && code[bi-1] !== '\\') { inStr = false; continue; }
-      if (inStr) continue;
-      
-      if (ch === '{') depth++;
-      else if (ch === '}') {
-        depth--;
-        if (depth === 0) { bodyEnd = bi; break; }
-      }
-    }
-    
-    if (bodyEnd < 0) {
-      pos += m.index + m[0].length;
-      continue;
-    }
-    
-    var body = code.slice(braceStart, bodyEnd + 1);
-    
-    // Coba parse body (skip jika ada long string - terlalu rumit)
-    if (body.indexOf('[[') >= 0) {
-      // inject_script dengan source [[...]] - extract metadata saja
-      var nameM = body.match(/name\s*=\s*["']([^"']+)["']/);
-      var parentM = body.match(/parent\s*=\s*["']([^"']+)["']/);
-      var typeM = body.match(/script_type\s*=\s*["']([^"']+)["']/);
-      var srcM = body.match(/source\s*=\s*\[\[([^\]]*(?:\][^\]][^\]]*)*)\]\]/);
-      
-      if (fnName === 'inject_script' && nameM) {
-        var cmd = {
-          action: 'inject_script',
-          name: nameM[1],
-          parent: parentM ? parentM[1] : 'ServerScriptService',
-          script_type: typeM ? typeM[1] : 'Script',
-          source: srcM ? srcM[1].trim() : ''
-        };
-        if (cmd.source && cmd.source.length > 5) {
-          cmds.push(cmd);
-        }
-      }
-    } else {
-      // Normal body - coba parse JSON
-      var stripped = _stripLuaExpressions(body);
-      var parsed = _tryParseJson(stripped) || _tryParseJson(_jsonRepair(stripped));
-      if (parsed && typeof parsed === 'object' && !Array.isArray(parsed)) {
-        var cmd2 = Object.assign({ action: fnName }, parsed);
-        var norm = _normalizeCmd(cmd2);
-        if (norm) cmds.push(norm);
-      }
-    }
-    
-    pos = bodyEnd + 1;
+    if(bodyEnd<0){pos+=m.index+m[0].length;continue;}
+    var body=code.slice(braceStart,bodyEnd+1);
+    if(body.indexOf('[[')>=0){
+      var nameM=body.match(/name\s*=\s*["']([^"']+)["']/);var parentM=body.match(/parent\s*=\s*["']([^"']+)["']/);var typeM=body.match(/script_type\s*=\s*["']([^"']+)["']/);var srcM=body.match(/source\s*=\s*\[\[([^\]]*(?:\][^\]][^\]]*)*)\]\]/);
+      if(fnName==='inject_script'&&nameM){var cmd={action:'inject_script',name:nameM[1],parent:parentM?parentM[1]:'ServerScriptService',script_type:typeM?typeM[1]:'Script',source:srcM?srcM[1].trim():''};if(cmd.source&&cmd.source.length>5){cmds.push(cmd);}}
+    }else{var stripped=_stripLuaExpressions(body);var parsed=_tryParseJson(stripped)||_tryParseJson(_jsonRepair(stripped));if(parsed&&typeof parsed==='object'&&!Array.isArray(parsed)){var cmd2=Object.assign({action:fnName},parsed);var norm=_normalizeCmd(cmd2);if(norm)cmds.push(norm);}}
+    pos=bodyEnd+1;
   }
-  
   return cmds;
 }
 
-function parseCallBlocks(text) {
-  var cmds = [];
-  
-  // FIX: Juga cari di dalam Lua blocks yang berisi action calls
-  var luaActionText = '';
-  var reLua = /```(?:lua|luau)\s*([\s\S]*?)```/gi, mLua;
-  while ((mLua = reLua.exec(text)) !== null) {
-    var block = mLua[1].trim();
-    if (isActionCallBlock(block)) {
-      // Ekstrak action commands dari blok ini
-      var extracted = _extractActionsFromLuaBlock(block);
-      extracted.forEach(function(cmd) { cmds.push(cmd); });
-      luaActionText += '\n' + block;
-    }
+function parseCallBlocks(text){
+  var cmds=[];
+  var luaActionText='';var reLua=/```(?:lua|luau)\s*([\s\S]*?)```/gi,mLua;
+  while((mLua=reLua.exec(text))!==null){var block=mLua[1].trim();if(isActionCallBlock(block)){var extracted=_extractActionsFromLuaBlock(block);extracted.forEach(function(cmd){cmds.push(cmd);});luaActionText+='\n'+block;}}
+  var textNoBlocks=text.replace(/```[\s\S]*?```/g,'');
+  var searchText=textNoBlocks+'\n'+luaActionText;
+  var re1=/call:([a-z_]+)\(\s*(\{[\s\S]+?\})\s*\)/g,m;
+  while((m=re1.exec(searchText))!==null){var params=_tryParseJson(_stripLuaExpressions(m[2]));if(m[1]&&params){var cmd=Object.assign({action:m[1]},params);var norm=_normalizeCmd(cmd);if(norm)cmds.push(norm);}}
+  var re2=/\b([a-z_][a-z0-9_]{2,49})\s*\(\s*(\{[\s\S]*?\})\s*\)/g;
+  while((m=re2.exec(textNoBlocks))!==null){
+    var fnName=m[1];var skipFns=['function','require','print','warn','error','typeof','instanceof','Object','Array','String','Number','Boolean','Math','JSON','Promise','fetch','console','setTimeout','setInterval','parseInt','parseFloat'];
+    if(skipFns.indexOf(fnName)>=0)continue;
+    var bodyStr=_stripLuaExpressions(m[2]);var params2=_tryParseJson(bodyStr);if(!params2||typeof params2!=='object')continue;
+    if(fnName==='batch_commands'){var batchCmds=params2.commands||params2.actions||(Array.isArray(params2)?params2:null);if(Array.isArray(batchCmds)){batchCmds.forEach(function(sub){var norm=_normalizeCmd(sub);if(norm)cmds.push(norm);});}}
+    else{var cmd2=Object.assign({action:fnName},Array.isArray(params2)?{}:params2);var norm2=_normalizeCmd(cmd2);if(norm2)cmds.push(norm2);}
   }
-  
-  // Cari di luar code blocks (existing behavior)
-  var textNoBlocks = text.replace(/```[\s\S]*?```/g, '');
-  // Tambahkan teks dari action-lua-blocks untuk call: syntax
-  var searchText = textNoBlocks + '\n' + luaActionText;
-  
-  var re1 = /call:([a-z_]+)\(\s*(\{[\s\S]+?\})\s*\)/g, m;
-  while ((m = re1.exec(searchText)) !== null) {
-    var params = _tryParseJson(_stripLuaExpressions(m[2]));
-    if (m[1] && params) {
-      var cmd = Object.assign({ action: m[1] }, params);
-      var norm = _normalizeCmd(cmd);
-      if (norm) cmds.push(norm);
-    }
-  }
-  var re2 = /\b([a-z_][a-z0-9_]{2,49})\s*\(\s*(\{[\s\S]*?\})\s*\)/g;
-  while ((m = re2.exec(textNoBlocks)) !== null) {
-    var fnName = m[1];
-    var skipFns = ['function','require','print','warn','error','typeof','instanceof','Object','Array','String','Number','Boolean','Math','JSON','Promise','fetch','console','setTimeout','setInterval','parseInt','parseFloat'];
-    if (skipFns.indexOf(fnName) >= 0) continue;
-    var bodyStr = _stripLuaExpressions(m[2]);
-    var params2 = _tryParseJson(bodyStr);
-    if (!params2 || typeof params2 !== 'object') continue;
-    if (fnName === 'batch_commands') {
-      var batchCmds = params2.commands || params2.actions || (Array.isArray(params2) ? params2 : null);
-      if (Array.isArray(batchCmds)) {
-        batchCmds.forEach(function(sub) {
-          var norm = _normalizeCmd(sub);
-          if (norm) cmds.push(norm);
-        });
-      }
-    } else {
-      var cmd2 = Object.assign({ action: fnName }, Array.isArray(params2) ? {} : params2);
-      var norm2 = _normalizeCmd(cmd2);
-      if (norm2) cmds.push(norm2);
-    }
-  }
-  
-  // Dedup: remove duplicate commands (same action + name)
-  var seen = {};
-  return cmds.filter(function(cmd) {
-    var key = (cmd.action||'') + '|' + (cmd.name||'');
-    if (seen[key]) return false;
-    seen[key] = true;
-    return true;
-  });
+  var seen={};return cmds.filter(function(cmd){var key=(cmd.action||'')+'|'+(cmd.name||'');if(seen[key])return false;seen[key]=true;return true;});
 }
 
-function parseAllCommands(text) {
-  var cmds = parseJsonBlocks(text);
-  // FIX: Selalu jalankan parseCallBlocks untuk tangkap action calls di Lua blocks
-  var callCmds = parseCallBlocks(text);
-  callCmds.forEach(function(cmd) {
-    var exists = cmds.some(function(e) {
-      return e.action === cmd.action && (e.name||'') === (cmd.name||'');
-    });
-    if (!exists) cmds.push(cmd);
-  });
-
-  // FIX: Deteksi plain JSON tanpa code fences
-  // Beberapa model (Gemini Flash Lite, dll) output JSON tanpa backticks
-  if (cmds.length === 0) {
-    // Coba cari JSON object/array di teks biasa
-    var jsonMatches = text.match(/(\[[\s\S]*?"action"[\s\S]*?\]|\{[\s\S]*?"action"[\s\S]*?\})/g);
-    if (jsonMatches) {
-      jsonMatches.forEach(function(raw) {
-        if (raw.length > 30000) return;
-        var parsed = _tryParseJson(raw.trim());
-        if (!parsed) return;
-        var items = Array.isArray(parsed) ? parsed : [parsed];
-        items.forEach(function(item) {
-          if (!item || !item.action) return;
-          var norm = _normalizeCmd(item);
-          if (norm) {
-            var exists = cmds.some(function(e) {
-              return e.action === norm.action && (e.name||'') === (norm.name||'');
-            });
-            if (!exists) cmds.push(norm);
-          }
-        });
-      });
-    }
-  }
-
-  // FIX: Deteksi batch_commands tanpa fences
-  if (cmds.length === 0) {
-    var batchMatch = text.match(/"commands"\s*:\s*(\[[\s\S]*?\])/);
-    if (batchMatch) {
-      var batchParsed = _tryParseJson('[' + batchMatch[1].slice(1,-1) + ']');
-      if (Array.isArray(batchParsed)) {
-        batchParsed.forEach(function(item) {
-          var norm = _normalizeCmd(item);
-          if (norm && !cmds.some(function(e){return e.action===norm.action&&(e.name||'')===(norm.name||'');})) {
-            cmds.push(norm);
-          }
-        });
-      }
-    }
-  }
-
+function parseAllCommands(text){
+  var cmds=parseJsonBlocks(text);
+  var callCmds=parseCallBlocks(text);
+  callCmds.forEach(function(cmd){var exists=cmds.some(function(e){return e.action===cmd.action&&(e.name||'')===(cmd.name||'');});if(!exists)cmds.push(cmd);});
+  if(cmds.length===0){var jsonMatches=text.match(/(\[[\s\S]*?"action"[\s\S]*?\]|\{[\s\S]*?"action"[\s\S]*?\})/g);if(jsonMatches){jsonMatches.forEach(function(raw){if(raw.length>30000)return;var parsed=_tryParseJson(raw.trim());if(!parsed)return;var items=Array.isArray(parsed)?parsed:[parsed];items.forEach(function(item){if(!item||!item.action)return;var norm=_normalizeCmd(item);if(norm){var exists=cmds.some(function(e){return e.action===norm.action&&(e.name||'')===(norm.name||'');});if(!exists)cmds.push(norm);}});});}}
+  if(cmds.length===0){var batchMatch=text.match(/"commands"\s*:\s*(\[[\s\S]*?\])/);if(batchMatch){var batchParsed=_tryParseJson('['+batchMatch[1].slice(1,-1)+']');if(Array.isArray(batchParsed)){batchParsed.forEach(function(item){var norm=_normalizeCmd(item);if(norm&&!cmds.some(function(e){return e.action===norm.action&&(e.name||'')===(norm.name||'');})){cmds.push(norm);}});}}}
   return cmds;
 }
-
 
 function detectScriptParent(code){
-  var c=code||'';
-  var first200=c.slice(0,200);
-  var trimmed=c.trim();
-  var typeHint=c.match(/--\s*script_type:\s*(\w+)/i);
-  var parentHint=c.match(/--\s*parent:\s*([\w.]+)/i);
+  var c=code||'';var first200=c.slice(0,200);var trimmed=c.trim();
+  var typeHint=c.match(/--\s*script_type:\s*(\w+)/i);var parentHint=c.match(/--\s*parent:\s*([\w.]+)/i);
   var type='Script',parent='ServerScriptService';
-  var isModule=(/^\s*local\s+\w+\s*=\s*\{\s*\}/.test(trimmed)&&/\breturn\s+\w+\s*$/.test(trimmed))
-    ||(/^return\s*\{/.test(trimmed))
-    ||(/^--\s*@?(module|modulescript)/im.test(first200));
+  var isModule=(/^\s*local\s+\w+\s*=\s*\{\s*\}/.test(trimmed)&&/\breturn\s+\w+\s*$/.test(trimmed))||(/^return\s*\{/.test(trimmed))||(/^--\s*@?(module|modulescript)/im.test(first200));
   if(isModule){parent='ReplicatedStorage';type='ModuleScript';}
-  else if(/Players\.LocalPlayer|PlayerGui|LocalUserInputService|UserInputService|StarterPlayerScripts/i.test(c)
-    ||(/ScreenGui|StarterGui/i.test(c)&&!/ServerScriptService|DataStoreService|PlayerAdded/i.test(c))){
+  else if(/Players\.LocalPlayer|PlayerGui|LocalUserInputService|UserInputService|StarterPlayerScripts/i.test(c)||(/ScreenGui|StarterGui/i.test(c)&&!/ServerScriptService|DataStoreService|PlayerAdded/i.test(c))){
     if(/ReplicatedFirst|LoadingScreen_Client/i.test(c)||(/ReplicatedFirst/i.test(first200))){parent='ReplicatedFirst';type='LocalScript';}
     else if(/StarterCharacterScripts/i.test(c)){parent='StarterCharacterScripts';type='LocalScript';}
     else{parent='StarterPlayerScripts';type='LocalScript';}
@@ -1433,339 +831,130 @@ function detectScriptParent(code){
   else if(/DataStoreService|PlayerAdded|OnServerEvent|FireClient|ServerStorage|HttpService:GetAsync/i.test(c)){parent='ServerScriptService';type='Script';}
   else if(/ReplicatedFirst/i.test(first200)){parent='ReplicatedFirst';type='LocalScript';}
   else if(/Players\.LocalPlayer/i.test(first200)){parent='StarterPlayerScripts';type='LocalScript';}
-  if(typeHint)type=typeHint[1];
-  if(parentHint)parent=parentHint[1];
+  if(typeHint)type=typeHint[1];if(parentHint)parent=parentHint[1];
   return{parent:parent,type:type};
 }
 function makeScriptName(prompt,i,code){if(code){var nm=code.match(/--\s*name:\s*([\w_]+)/i);if(nm&&nm[1]&&nm[1].length>2)return nm[1];}var l=(prompt||'').toLowerCase();var kw=[['loading','LoadingScreen_Client'],['shop gui','ShopGUI_Client'],['shop','ShopSystem_Server'],['leaderboard','Leaderboard_Server'],['admin','AdminSystem_Server'],['coin','CoinSystem_Server'],['inventory','InventorySystem'],['npc','NPCBehavior_Server'],['datastore','DataStore_Module'],['zombie','ZombieAI_Server'],['vehicle','VehicleSystem'],['tycoon','TycoonPlot'],['round','RoundSystem_Server'],['hud','HUD_Client'],['gui','GUIScript_Client']];for(var k=0;k<kw.length;k++){if(l.includes(kw[k][0]))return kw[k][1]+(i>0?'_'+(i+1):'');}return'GameScript'+(i>0?'_'+(i+1):'');}
 function makeStepLabel(cmd){var a=cmd.action||'',nm=cmd.name||'';if(a==='inject_script')return'create '+(cmd.script_type||'Script')+' '+(nm||'?');if(a==='batch_inject')return'batch '+(cmd.scripts||[]).length+' scripts';if(a==='create_gui')return'create GUI '+nm;if(a==='get_theme')return'get theme '+(cmd.theme||'nexus_ai');if(a==='apply_theme')return'apply theme '+nm;if(a==='create_shop_script')return'create Shop '+nm;if(a==='create_admin_panel')return'create AdminPanel '+nm;if(a==='create_datastore_script')return'create DataStore '+nm;if(a==='create_leaderstats_script')return'create Leaderstats '+nm;if(a==='create_zombie')return'create Zombie '+nm;if(a==='create_vehicle')return'create Vehicle '+nm;if(a==='create_tycoon_plot')return'create TycoonPlot '+nm;if(a==='create_badge_script')return'create BadgeManager '+nm;if(a==='create_notification_script')return'create NotifSystem '+nm;if(a==='setup_topbar')return'setup Topbar';if(a==='import_module')return'import '+(cmd.module||nm);if(a==='inject_quick_script')return'quick inject '+(cmd.script||nm);if(a==='use_asset_folder_script')return'use asset '+(cmd.name||'');if(a==='read_script')return(curLang==='id'?'baca ':'read ')+nm;if(a==='scan_workspace'||a==='request_scan')return'scan Workspace';if(a==='resolve_mention')return'resolve @'+(cmd.name||cmd.mention||'?');if(a==='play_test'||a==='run_test')return T().testRunning;if(a==='stop_test')return T().testDone;if(a==='none')return null;return a+(nm?' '+nm:'');}
 
-// FIX: fetchRetry dengan jitter untuk WiFi jelek
+// ── FETCH HELPERS ─────────────────────────────────────────────────────────────
 function _sleep(ms){return new Promise(function(resolve){setTimeout(resolve,ms);});}
-function _jitter(ms){return ms + Math.floor(Math.random()*ms*0.5);}
-
+function _jitter(ms){return ms+Math.floor(Math.random()*ms*0.5);}
 async function fetchRetry(url,opts,tries){
   tries=tries||3;
-  if(opts&&opts.headers&&typeof opts.headers==='object'&&url&&url.indexOf('/api/control')!==-1){
-    opts.headers['X-Nexus-Nonce']=_csrfNonce;
-    if(isAdmin()||isOwner()){opts.headers['X-Admin-Token']=_adminToken||generateAdminToken();}
-  }
+  if(opts&&opts.headers&&typeof opts.headers==='object'&&url&&url.indexOf('/api/control')!==-1){opts.headers['X-Nexus-Nonce']=_csrfNonce;if(isAdmin()||isOwner()){opts.headers['X-Admin-Token']=_adminToken||generateAdminToken();}}
   for(var i=0;i<tries;i++){
     try{
-      var ctrl=new AbortController();
-      var tid=setTimeout(function(){ctrl.abort();},12000); // 12s timeout per attempt
-      var origSignal=opts&&opts.signal;
+      var ctrl=new AbortController();var tid=setTimeout(function(){ctrl.abort();},12000);
       var mergedOpts=Object.assign({},opts,{signal:ctrl.signal});
-      var r=await fetch(url,mergedOpts);
-      clearTimeout(tid);
+      var r=await fetch(url,mergedOpts);clearTimeout(tid);
       if(r.ok)return r;
-      if(r.status===429){
-        toast(curLang==='id'?'Rate limit server, tunggu...':'Server rate limit, waiting...','var(--yellow)');
-        await _sleep(_jitter(3000*(i+1)));
-      } else if(r.status>=500){
-        // FIX: Jangan spam retry untuk server error
-        if(i<tries-1)await _sleep(_jitter(1000*(i+1)));
-        else return r;
-      } else{
-        return r;
-      }
+      if(r.status===429){toast(curLang==='id'?'Rate limit server, tunggu...':'Server rate limit, waiting...','var(--yellow)');await _sleep(_jitter(3000*(i+1)));}
+      else if(r.status>=500){if(i<tries-1)await _sleep(_jitter(1000*(i+1)));else return r;}
+      else{return r;}
     }catch(e){
-      if(e&&e.name==='AbortError'){
-        // Check apakah ini dari cancel user atau dari timeout kita
-        if(opts&&opts.signal&&opts.signal.aborted)throw e;
-        // Timeout kita sendiri, retry
-        if(i<tries-1){await _sleep(_jitter(800*(i+1)));continue;}
-        throw e;
-      }
+      if(e&&e.name==='AbortError'){if(opts&&opts.signal&&opts.signal.aborted)throw e;if(i<tries-1){await _sleep(_jitter(800*(i+1)));continue;}throw e;}
       if(i===tries-1)throw e;
       await _sleep(_jitter(800*(i+1)));
     }
   }
   return null;
 }
-
 async function safeFetch(bodyData,signal){
   try{
-    // FIX: Jika source terlalu besar (>80KB), potong agar tidak 413
-    if(bodyData&&bodyData.command&&bodyData.command.source&&bodyData.command.source.length>80000){
-      bodyData=Object.assign({},bodyData,{command:Object.assign({},bodyData.command,{
-        source:bodyData.command.source.slice(0,80000)+'-- [TRUNCATED: script too large]'
-      })});
-    }
-    var opts={
-      method:'POST',
-      headers:{'Content-Type':'application/json','X-Nexus-Nonce':_csrfNonce},
-      body:JSON.stringify(bodyData)
-    };
+    if(bodyData&&bodyData.command&&bodyData.command.source&&bodyData.command.source.length>80000){bodyData=Object.assign({},bodyData,{command:Object.assign({},bodyData.command,{source:bodyData.command.source.slice(0,80000)+'-- [TRUNCATED: script too large]'})});}
+    var opts={method:'POST',headers:{'Content-Type':'application/json','X-Nexus-Nonce':_csrfNonce},body:JSON.stringify(bodyData)};
     if(signal&&!signal.aborted){opts.signal=signal;}
-    var r=await fetch(API_URL,opts);
-    return r;
-  }catch(e){
-    if(e&&e.name==='AbortError')throw e;
-    console.warn('[NEXUS inject] safeFetch error:',e&&e.message);
-    return null;
-  }
+    var r=await fetch(API_URL,opts);return r;
+  }catch(e){if(e&&e.name==='AbortError')throw e;console.warn('[NEXUS inject] safeFetch error:',e&&e.message);return null;}
 }
-
-// FIX: safeFetchWithRetry - retry inject jika network error (WiFi jelek)
 async function safeFetchWithRetry(bodyData,signal,maxRetries){
   maxRetries=maxRetries||2;
   for(var attempt=0;attempt<=maxRetries;attempt++){
-    // Cek cancel dulu
     if(signal&&signal.aborted)throw new Error('AbortError');
-    try{
-      var r=await safeFetch(bodyData,signal);
-      if(r)return r;
-      // null result = network error, retry
-      if(attempt<maxRetries){
-        await _sleep(_jitter(1000*(attempt+1)));
-        continue;
-      }
-      return null;
-    }catch(e){
-      if(e&&(e.name==='AbortError'||String(e.message).includes('AbortError')))throw e;
-      if(attempt<maxRetries){
-        await _sleep(_jitter(1000*(attempt+1)));
-        continue;
-      }
-      throw e;
-    }
+    try{var r=await safeFetch(bodyData,signal);if(r)return r;if(attempt<maxRetries){await _sleep(_jitter(1000*(attempt+1)));continue;}return null;}
+    catch(e){if(e&&(e.name==='AbortError'||String(e.message).includes('AbortError')))throw e;if(attempt<maxRetries){await _sleep(_jitter(1000*(attempt+1)));continue;}throw e;}
   }
   return null;
 }
 
-// ── AUTO INJECT TO STUDIO (FIXED: retry + better error handling) ─────────────
+// ── AUTO INJECT TO STUDIO ─────────────────────────────────────────────────────
 async function autoInjectToStudio(aiResponse,userPrompt){
   if(!studioConnected)return null;
-  var t=T();
-  var summary=[];
-  var user=(SESSION?SESSION.user.username:'').toLowerCase();
-
-  var jsonCmds=parseAllCommands(aiResponse);
-  var luaBlocks=parseLuaBlocks(aiResponse);
-
-  // Debug log untuk mempermudah troubleshoot
-  if(jsonCmds.length||luaBlocks.length){
-    console.log('[NEXUS inject] Commands:',jsonCmds.length,'Lua blocks:',luaBlocks.length);
-  }
-
+  var t=T();var summary=[];var user=(SESSION?SESSION.user.username:'').toLowerCase();
+  var jsonCmds=parseAllCommands(aiResponse);var luaBlocks=parseLuaBlocks(aiResponse);
+  if(jsonCmds.length||luaBlocks.length){console.log('[NEXUS inject] Commands:',jsonCmds.length,'Lua blocks:',luaBlocks.length);}
   var allCmds=[];
-
-  jsonCmds.forEach(function(cmd){
-    if(!cmd.action||cmd.action==='none')return;
-    // FIX: Normalize source/code field — beberapa AI output pakai 'code', plugin harapkan 'source'
-    if(cmd.code&&!cmd.source){cmd.source=cmd.code;delete cmd.code;}
-    allCmds.push({type:'json',cmd:cmd});
-  });
-
-  luaBlocks.forEach(function(code,i){
-    var sanR=sanitizeLuaCode(code);
-    if(!sanR.ok)return;
-    var info=detectScriptParent(sanR.code);
-    var tm=sanR.code.match(/--\s*script_type:\s*(\w+)/i);if(tm)info.type=tm[1];
-    var pm=sanR.code.match(/--\s*parent:\s*([\w.]+)/i);if(pm)info.parent=pm[1];
-    var sName=makeScriptName(userPrompt,i,sanR.code);
-    allCmds.push({type:'lua',code:sanR.code,info:info,name:sName});
-  });
-
-  if(!allCmds.length){
-    console.warn('[NEXUS inject] Tidak ada command ditemukan di respon AI. Cek format respon.');
-    return null;
-  }
-
+  jsonCmds.forEach(function(cmd){if(!cmd.action||cmd.action==='none')return;if(cmd.code&&!cmd.source){cmd.source=cmd.code;delete cmd.code;}allCmds.push({type:'json',cmd:cmd});});
+  luaBlocks.forEach(function(code,i){var sanR=sanitizeLuaCode(code);if(!sanR.ok)return;var info=detectScriptParent(sanR.code);var tm=sanR.code.match(/--\s*script_type:\s*(\w+)/i);if(tm)info.type=tm[1];var pm=sanR.code.match(/--\s*parent:\s*([\w.]+)/i);if(pm)info.parent=pm[1];var sName=makeScriptName(userPrompt,i,sanR.code);allCmds.push({type:'lua',code:sanR.code,info:info,name:sName});});
+  if(!allCmds.length){console.warn('[NEXUS inject] Tidak ada command ditemukan di respon AI.');return null;}
   var hasPlayTest=jsonCmds.some(function(c){return c.action==='play_test'||c.action==='run_test';});
   var hasStopTest=jsonCmds.some(function(c){return c.action==='stop_test';});
-  if(S.playTestEnabled&&!hasPlayTest&&!hasStopTest){
-    allCmds.push({type:'playtest'});
-  }
-
+  if(S.playTestEnabled&&!hasPlayTest&&!hasStopTest){allCmds.push({type:'playtest'});}
   var planSteps=[];
   allCmds.forEach(function(item){
     var lbl,sub,meta;
-    if(item.type==='json'){
-      lbl=makeStepLabel(item.cmd);
-      if(!lbl)return;
-      sub=item.cmd.parent||item.cmd.theme||'';
-    }else if(item.type==='lua'){
-      lbl=(curLang==='id'?'Buat ':'Create ')+item.info.type+': '+item.name;
-      sub=item.info.parent;
-      meta={code:item.code,name:item.name,parent:item.info.parent,type:item.info.type};
-    }else{
-      lbl=t.testRunning;sub='auto play_test';
-    }
+    if(item.type==='json'){lbl=makeStepLabel(item.cmd);if(!lbl)return;sub=item.cmd.parent||item.cmd.theme||'';}
+    else if(item.type==='lua'){lbl=(curLang==='id'?'Buat ':'Create ')+item.info.type+': '+item.name;sub=item.info.parent;meta={code:item.code,name:item.name,parent:item.info.parent,type:item.info.type};}
+    else{lbl=t.testRunning;sub='auto play_test';}
     var sid=addStep(lbl,'pending',sub,meta||undefined);
     planSteps.push(Object.assign({},item,{sid:sid}));
   });
-
-  var cntEl=document.getElementById('stepsCount');
-  if(cntEl)cntEl.textContent='(0/'+planSteps.length+')';
-
+  var cntEl=document.getElementById('stepsCount');if(cntEl)cntEl.textContent='(0/'+planSteps.length+')';
   var doneCount=0;
-
   for(var pi=0;pi<planSteps.length;pi++){
-    var step=planSteps[pi];
-    if(!step.sid)continue;
-
-    updateStep(step.sid,'running');
-    await _sleep(80);
-
-    var sig=S.cancelCtrl?S.cancelCtrl.signal:undefined;
-    if(sig&&sig.aborted)break;
-
+    var step=planSteps[pi];if(!step.sid)continue;
+    updateStep(step.sid,'running');await _sleep(80);
+    var sig=S.cancelCtrl?S.cancelCtrl.signal:undefined;if(sig&&sig.aborted)break;
     if(step.type==='lua'){
       try{
-        var r2=await safeFetchWithRetry({
-          type:'inject_command',
-          command:{
-            action:'inject_script',
-            name:step.name,
-            parent:step.info.parent,
-            script_type:step.info.type,
-            source:step.code  // selalu 'source', bukan 'code'
-          },
-          _user:user,        // FIX: gunakan lowercase konsisten
-          _target_user:user
-        },sig,2);
-
-        if(r2&&r2.ok){
-          var rd2;
-          try{rd2=await r2.json();}catch(je){rd2={};}
-          if(rd2.status==='ok'||rd2.pushed>0){
-            updateStep(step.sid,'done',step.info.type+': '+step.name,step.info.parent);
-            summary.push(step.info.type+': '+step.name);
-          }else{
-            var rejMsg2=(rd2.error||rd2.hint||'server rejected').slice(0,60);
-            updateStep(step.sid,'error',rejMsg2);
-            console.warn('[NEXUS inject] Lua inject rejected:',rd2);
-          }
-        }else if(r2){
-          var errMsg2='HTTP '+r2.status;
-          try{var ed2=await r2.json();if(ed2&&ed2.error)errMsg2=ed2.error.slice(0,60);}catch(e){}
-          updateStep(step.sid,'error',errMsg2);
-        }else{
-          updateStep(step.sid,'error','No response (network error)');
-        }
-      }catch(e){
-        if(e&&(e.name==='AbortError'||String(e.message).includes('AbortError')))return null;
-        updateStep(step.sid,'error',String(e&&e.message||'unknown').slice(0,60));
-      }
-
+        var r2=await safeFetchWithRetry({type:'inject_command',command:{action:'inject_script',name:step.name,parent:step.info.parent,script_type:step.info.type,source:step.code},_user:user,_target_user:user},sig,2);
+        if(r2&&r2.ok){var rd2;try{rd2=await r2.json();}catch(je){rd2={};}if(rd2.status==='ok'||rd2.pushed>0){updateStep(step.sid,'done',step.info.type+': '+step.name,step.info.parent);summary.push(step.info.type+': '+step.name);}else{updateStep(step.sid,'error',(rd2.error||rd2.hint||'server rejected').slice(0,60));console.warn('[NEXUS inject] Lua inject rejected:',rd2);}}
+        else if(r2){var errMsg2='HTTP '+r2.status;try{var ed2=await r2.json();if(ed2&&ed2.error)errMsg2=ed2.error.slice(0,60);}catch(e){}updateStep(step.sid,'error',errMsg2);}
+        else{updateStep(step.sid,'error','No response (network error)');}
+      }catch(e){if(e&&(e.name==='AbortError'||String(e.message).includes('AbortError')))return null;updateStep(step.sid,'error',String(e&&e.message||'unknown').slice(0,60));}
     }else if(step.type==='playtest'){
       var ptSid=step.sid;
-      try{
-        var ptDur=S.playTestDuration||15;
-        await safeFetchWithRetry({
-          type:'batch_commands',
-          commands:[{action:'play_test',duration:ptDur}],
-          _user:user,
-          _target_user:user
-        },sig,1);
-        await _sleep(5000);
-        updateStep(ptSid,'done',t.testDone);
-      }catch(e){
-        if(e&&(e.name==='AbortError'||String(e.message).includes('AbortError')))return null;
-        updateStep(ptSid,'error',String(e&&e.message||'').slice(0,60));
-      }
-
+      try{var ptDur=S.playTestDuration||15;await safeFetchWithRetry({type:'batch_commands',commands:[{action:'play_test',duration:ptDur}],_user:user,_target_user:user},sig,1);await _sleep(5000);updateStep(ptSid,'done',t.testDone);}
+      catch(e){if(e&&(e.name==='AbortError'||String(e.message).includes('AbortError')))return null;updateStep(ptSid,'error',String(e&&e.message||'').slice(0,60));}
     }else{
-      var cmd=step.cmd;
-      var a=cmd.action||'';
-      // FIX: Normalize source/code juga di JSON commands sebelum kirim
-      var cmdToSend=Object.assign({},cmd);
-      if(cmdToSend.code&&!cmdToSend.source){cmdToSend.source=cmdToSend.code;delete cmdToSend.code;}
+      var cmd=step.cmd;var a=cmd.action||'';var cmdToSend=Object.assign({},cmd);if(cmdToSend.code&&!cmdToSend.source){cmdToSend.source=cmdToSend.code;delete cmdToSend.code;}
       try{
-        var r4=await safeFetchWithRetry({
-          type:'inject_command',
-          command:cmdToSend,
-          _user:user,
-          _target_user:user
-        },sig,2);
-
-        if(r4&&r4.ok){
-          var rd4;
-          try{rd4=await r4.json();}catch(je){rd4={};}
-          if(rd4.status==='ok'||rd4.pushed>0){
-            if(a==='play_test'||a==='run_test'){
-              updateStep(step.sid,'running',t.testRunning);
-              _playTestActive=true;
-            }else if(a==='stop_test'){
-              updateStep(step.sid,'done');
-              _playTestActive=false;
-            }else if(a==='read_script'||a==='scan_workspace'||a==='request_scan'){
-              updateStep(step.sid,'info');
-            }else{
-              updateStep(step.sid,'done');
-              var lbl2=makeStepLabel(cmd);
-              if(lbl2)summary.push(lbl2);
-            }
-          }else{
-            var rejMsg=(rd4.error||rd4.hint||'action rejected').slice(0,60);
-            updateStep(step.sid,'error',rejMsg);
-            console.warn('[NEXUS inject] JSON cmd rejected:',a,rd4);
-          }
-        }else if(r4){
-          var errTxt='HTTP '+r4.status;
-          try{var ed4=await r4.json();if(ed4&&ed4.error)errTxt=ed4.error.slice(0,60);}catch(e){}
-          updateStep(step.sid,'error',errTxt);
-        }else{
-          updateStep(step.sid,'error','No response (check network)');
-        }
-      }catch(e){
-        if(e&&(e.name==='AbortError'||String(e.message).includes('AbortError')))return null;
-        updateStep(step.sid,'error',String(e&&e.message||'unknown').slice(0,60));
-      }
+        var r4=await safeFetchWithRetry({type:'inject_command',command:cmdToSend,_user:user,_target_user:user},sig,2);
+        if(r4&&r4.ok){var rd4;try{rd4=await r4.json();}catch(je){rd4={};}if(rd4.status==='ok'||rd4.pushed>0){if(a==='play_test'||a==='run_test'){updateStep(step.sid,'running',t.testRunning);_playTestActive=true;}else if(a==='stop_test'){updateStep(step.sid,'done');_playTestActive=false;}else if(a==='read_script'||a==='scan_workspace'||a==='request_scan'){updateStep(step.sid,'info');}else{updateStep(step.sid,'done');var lbl2=makeStepLabel(cmd);if(lbl2)summary.push(lbl2);}}else{updateStep(step.sid,'error',(rd4.error||rd4.hint||'action rejected').slice(0,60));console.warn('[NEXUS inject] JSON cmd rejected:',a,rd4);}}
+        else if(r4){var errTxt='HTTP '+r4.status;try{var ed4=await r4.json();if(ed4&&ed4.error)errTxt=ed4.error.slice(0,60);}catch(e){}updateStep(step.sid,'error',errTxt);}
+        else{updateStep(step.sid,'error','No response (check network)');}
+      }catch(e){if(e&&(e.name==='AbortError'||String(e.message).includes('AbortError')))return null;updateStep(step.sid,'error',String(e&&e.message||'unknown').slice(0,60));}
     }
-
-    doneCount++;
-    if(cntEl)cntEl.textContent='('+doneCount+'/'+planSteps.length+')';
+    doneCount++;if(cntEl)cntEl.textContent='('+doneCount+'/'+planSteps.length+')';
     if(pi<planSteps.length-1)await _sleep(180);
   }
-
   return summary.length>0?summary:null;
 }
 
 // ── SYSTEM PROMPT ─────────────────────────────────────────────────────────────
-// FIX ROOT CAUSE: System prompt harus di-load SAAT initApp(), bukan di dalam send().
-// Sebelumnya _ensureSysPromptLoaded() tidak pernah dipanggil → buildSysPrompt() selalu return ''
-// → AI tidak dapat instruksi → tidak tahu harus inject apa → tempat kosong.
-
-var _sysPromptReady = false;
-var _sysPromptLoadPromise = null;
-
-function _loadSysPromptScript() {
-  if (_sysPromptLoadPromise) return _sysPromptLoadPromise;
-  _sysPromptLoadPromise = new Promise(function(resolve) {
-    // Sudah ada di window (misal dari <script> di HTML)
-    if (typeof window.buildSysPrompt === 'function' && window.buildSysPrompt !== _fallbackBuildSysPrompt) {
-      _sysPromptReady = true; resolve(); return;
-    }
-    var script = document.createElement('script');
-    script.src = '/js/system_prompt.js?_v=' + (Date.now() - Date.now()%60000); // cache 1 menit
-    script.async = false;
-    script.onload = function() {
-      _sysPromptReady = true;
-      // Override window.buildSysPrompt sudah dilakukan oleh system_prompt.js
-      resolve();
-    };
-    script.onerror = function() {
-      console.warn('[NEXUS] /js/system_prompt.js gagal dimuat. AI akan jalan tanpa system prompt penuh.');
-      resolve();
-    };
+var _sysPromptReady=false;
+var _sysPromptLoadPromise=null;
+function _loadSysPromptScript(){
+  if(_sysPromptLoadPromise)return _sysPromptLoadPromise;
+  _sysPromptLoadPromise=new Promise(function(resolve){
+    if(typeof window.buildSysPrompt==='function'&&window.buildSysPrompt!==_fallbackBuildSysPrompt){_sysPromptReady=true;resolve();return;}
+    var script=document.createElement('script');
+    script.src='/js/system_prompt.js?_v='+(Date.now()-Date.now()%60000);
+    script.async=false;
+    script.onload=function(){_sysPromptReady=true;resolve();};
+    script.onerror=function(){console.warn('[NEXUS] /js/system_prompt.js gagal dimuat.');resolve();};
     document.head.appendChild(script);
   });
   return _sysPromptLoadPromise;
 }
-
-// Fallback stub — hanya dipakai jika system_prompt.js tidak tersedia
-function _fallbackBuildSysPrompt() { return ''; }
-
-// system prompt nya nanti aja!
+function _fallbackBuildSysPrompt(){return'';}
 
 // ── BUILD API MESSAGES ────────────────────────────────────────────────────────
 function buildApiMsgs(){var cv=S.convs.find(function(x){return x.id===S.curConv;});if(!cv)return[];return(cv.msgs||[]).slice(-28).map(function(m){var content=m._rawContent||m.content||'';if(Array.isArray(m.content))return{role:m.role==='user'?'user':'model',content:m.content};return{role:m.role==='user'?'user':'model',content:String(content)};});}
 function detectType(txt){var l=txt.toLowerCase();if(/error|fix|bug|debug|broken|crash|not work|tidak bisa|gagal/i.test(l))return'debug';if(/gui|hud|menu|shop|loading|inventory|screen|frame|button|tema|theme/i.test(l))return'gui';if(/read|baca|lihat|cek|check script/i.test(l))return'read';if(/edit|ubah|ganti|update|tambah ke/i.test(l)&&/script/i.test(l))return'edit';if(/test|play|jalankan|run/i.test(l))return'test';return'normal';}
 
-// ── SEND ───────────────────────────────────────────────────────────────────────
+// ── SEND ──────────────────────────────────────────────────────────────────────
 async function send(){
   if(S.gen)return;
   var inp=document.getElementById('inp');var txt=(inp?inp.value.trim():'');
@@ -1777,7 +966,6 @@ async function send(){
   if(!S.curConv)newChat();
   var cv=S.convs.find(function(x){return x.id===S.curConv;});if(!cv)return;
   S.gen=true;
-  // FIX: Abort controller lama dulu sebelum bikin baru - cegah memory leak
   if(S.cancelCtrl){try{S.cancelCtrl.abort();}catch(ex){}}
   S.cancelCtrl=new AbortController();
   _playTestActive=false;
@@ -1803,141 +991,64 @@ async function send(){
     else{addStep(t.analyzingReq,'running');await _sleep(600);updateStep(1,'done');addStep(t.designingSolution,'running');}
   }
   var msgs=buildApiMsgs();
-  // FIX: Pastikan system_prompt.js sudah terload (safety net jika initApp tidak selesai)
   if(!_sysPromptReady){await _loadSysPromptScript();}
   var sysPrompt=buildSysPrompt();
-
-  // ── PRE-SEARCH ROBLOX DOCS ────────────────────────────────────────────────
-  // Cari referensi live dari Roblox docs sebelum kirim ke AI
-  // Ini menggantikan hardcoded Lua examples di system prompt
   if(_shouldSearchDocs(txt)&&sysPrompt){
-    try{
-      var _docsResult=await searchRobloxDocs(txt,5);
-      if(_docsResult){
-        var _docsCtx=_buildDocsContext(_docsResult);
-        if(_docsCtx)sysPrompt=sysPrompt+'\n\n'+_docsCtx;
-      }
-    }catch(e){console.warn('[NEXUS] docs pre-search failed:',e&&e.message);}
+    try{var _docsResult=await searchRobloxDocs(txt,5);if(_docsResult){var _docsCtx=_buildDocsContext(_docsResult);if(_docsCtx)sysPrompt=sysPrompt+'\n\n'+_docsCtx;}}
+    catch(e){console.warn('[NEXUS] docs pre-search failed:',e&&e.message);}
   }
-
   var apiMsgs=msgs.slice(0,-1);
-  // FIX: Inject system prompt context as FIRST user message if it gets truncated by server cap
-  // api/ai.js truncates system to 8000 chars. We inject the overflow as a system-role message.
-  var sysMain=sysPrompt;
-  var sysOverflow='';
-  var SYS_CAP=7500; // leave 500 chars buffer
-  if(sysPrompt&&sysPrompt.length>SYS_CAP){
-    sysMain=sysPrompt.slice(0,SYS_CAP);
-    sysOverflow=sysPrompt.slice(SYS_CAP);
-    // Find a good break point (newline)
-    var breakAt=sysMain.lastIndexOf('\n');
-    if(breakAt>SYS_CAP*0.8){sysOverflow=sysMain.slice(breakAt)+sysOverflow;sysMain=sysMain.slice(0,breakAt);}
-  }
-  // Prepend overflow as context message if any
-  if(sysOverflow&&sysOverflow.trim().length>10){
-    apiMsgs=[{role:'user',content:'[SYSTEM CONTEXT CONTINUED]\n'+sysOverflow},{role:'assistant',content:'Understood. I have the complete context.'}].concat(apiMsgs);
-  }
+  var sysMain=sysPrompt;var sysOverflow='';var SYS_CAP=7500;
+  if(sysPrompt&&sysPrompt.length>SYS_CAP){sysMain=sysPrompt.slice(0,SYS_CAP);sysOverflow=sysPrompt.slice(SYS_CAP);var breakAt=sysMain.lastIndexOf('\n');if(breakAt>SYS_CAP*0.8){sysOverflow=sysMain.slice(breakAt)+sysOverflow;sysMain=sysMain.slice(0,breakAt);}}
+  if(sysOverflow&&sysOverflow.trim().length>10){apiMsgs=[{role:'user',content:'[SYSTEM CONTEXT CONTINUED]\n'+sysOverflow},{role:'assistant',content:'Understood. I have the complete context.'}].concat(apiMsgs);}
   var lastM={role:'user',content:txt};
   if(attachments.length){var ca=[{type:'text',text:txt}];attachments.forEach(function(a){if(a.type==='image')ca.push({type:'image',source:{type:'base64',media_type:a.mime,data:a.data}});});lastM.content=ca;}
   apiMsgs.push(lastM);
   var aiText='';
-  // FIX: Simpan referensi cancelCtrl sebelum async agar tidak ter-overwrite oleh send() baru
-  var _localCancelCtrl = S.cancelCtrl;
+  var _localCancelCtrl=S.cancelCtrl;
   try{
-    var aiCtrl=new AbortController();
-    var aiTimeoutId=setTimeout(function(){aiCtrl.abort();},90000); // 90s timeout
+    var aiCtrl=new AbortController();var aiTimeoutId=setTimeout(function(){aiCtrl.abort();},90000);
     var _onUserCancel=function(){try{aiCtrl.abort();}catch(ex){}};
-    if(_localCancelCtrl&&!_localCancelCtrl.signal.aborted){
-      _localCancelCtrl.signal.addEventListener('abort',_onUserCancel,{once:true});
-    }
-
+    if(_localCancelCtrl&&!_localCancelCtrl.signal.aborted){_localCancelCtrl.signal.addEventListener('abort',_onUserCancel,{once:true});}
     var body={provider:S.model.prov||'gemini',model:S.model.id,messages:apiMsgs,system:sysMain,max_tokens:65536};
-    var response=await fetch('/api/ai',{
-      method:'POST',
-      headers:{'Content-Type':'application/json'},
-      body:JSON.stringify(body),
-      signal:aiCtrl.signal
-    });
+    var response=await fetch('/api/ai',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body),signal:aiCtrl.signal});
     clearTimeout(aiTimeoutId);
     if(_localCancelCtrl){try{_localCancelCtrl.signal.removeEventListener('abort',_onUserCancel);}catch(ex){}}
-
-    if(!response.ok){
-      var errData=await response.json().catch(function(){return{};});
-      var errMsg=errData.error||'API error '+response.status;
-      if(response.status===503||(typeof errMsg==='string'&&errMsg.includes('overloaded')))errMsg=t.modelBusyToast+'\n\n'+errMsg;
-      throw new Error(errMsg);
-    }
-    var rd=await response.json();
-    if(!validateApiResponse(rd)){throw new Error('Invalid API response');}
+    if(!response.ok){var errData=await response.json().catch(function(){return{};});var errMsg=errData.error||'API error '+response.status;if(response.status===503||(typeof errMsg==='string'&&errMsg.includes('overloaded')))errMsg=t.modelBusyToast+'\n\n'+errMsg;throw new Error(errMsg);}
+    var rd=await response.json();if(!validateApiResponse(rd)){throw new Error('Invalid API response');}
     aiText=rd.content||'';
   }catch(e){
-    var _userCancelled = _localCancelCtrl && _localCancelCtrl.signal.aborted;
-    if(e.name==='AbortError'||_userCancelled){
-      S.gen=false;S.cancelCtrl=null;_playTestActive=false;
-      if(sb)sb.classList.remove('hidden');if(cb)cb.classList.add('hidden');
-      removeStepsCard();return;
-    }
-    var _errTxt = (e.name==='AbortError')?'Request timeout — coba lagi':e.message;
+    var _userCancelled=_localCancelCtrl&&_localCancelCtrl.signal.aborted;
+    if(e.name==='AbortError'||_userCancelled){S.gen=false;S.cancelCtrl=null;_playTestActive=false;if(sb)sb.classList.remove('hidden');if(cb)cb.classList.add('hidden');removeStepsCard();return;}
+    var _errTxt=(e.name==='AbortError')?'Request timeout — coba lagi':e.message;
     aiText='**'+t.errorPrefix+'**\n\n'+_errTxt+'\n\n'+(curLang==='id'?'Coba ganti model atau periksa koneksi.':'Try switching model or check your connection.');
   }
   var hasError=aiText&&(aiText.startsWith('**Gagal')||aiText.startsWith('**Failed'));
   if(!isOwner()&&!isAdmin()&&aiText&&!hasError){
     var _cmds=parseAllCommands(aiText);var _luas=parseLuaBlocks(aiText);
-    var _numActions=Math.max(1,_cmds.length+_luas.length);
-    var _baseCost=S.model.cost||0;
+    var _numActions=Math.max(1,_cmds.length+_luas.length);var _baseCost=S.model.cost||0;
     var _totalCost=parseFloat((_baseCost*(1+(_numActions-1)*0.1)).toFixed(2));
-    S.credits=parseFloat(Math.max(0,S.credits-_totalCost).toFixed(2));
-    updateCreds();
+    S.credits=parseFloat(Math.max(0,S.credits-_totalCost).toFixed(2));updateCreds();
   }
   var studioSummary=null,displayText='';
   if(studioConnected&&!hasError){
     if(showThinking){clearSteps();setStepTitle(t.buildingInStudio);}
-    
-    // FIX: Deteksi dulu apakah ada commands sebelum inject
-    var _preCmds=parseAllCommands(aiText);
-    var _preLuas=parseLuaBlocks(aiText);
-    var _hasAnything=(_preCmds.length>0||_preLuas.length>0);
-    
-    if(_hasAnything){
-      studioSummary=await autoInjectToStudio(aiText,lastPrompt);
-    }else{
-      // FIX: AI tidak generate commands → tampilkan respon lengkap + warning
-      // Ini terjadi saat AI hanya menjelaskan tanpa inject
+    var _preCmds=parseAllCommands(aiText);var _preLuas=parseLuaBlocks(aiText);var _hasAnything=(_preCmds.length>0||_preLuas.length>0);
+    if(_hasAnything){studioSummary=await autoInjectToStudio(aiText,lastPrompt);}
+    else{
       if(showThinking){finalizeSteps();await _sleep(350);removeStepsCard();}
       displayText=cleanAIResponse(aiText);
-      // Tambahkan hint ke user bahwa tidak ada yang diinjeksi
-      var _noInjectHint=curLang==='id'
-        ?'\n\n> ⚠️ Tidak ada script/command yang diinjeksi ke Studio. Coba ulangi permintaan atau switch model.'
-        :'\n\n> ⚠️ No scripts/commands were injected to Studio. Try rephrasing or switch model.';
+      var _noInjectHint=curLang==='id'?'\n\n> ⚠️ Tidak ada script/command yang diinjeksi ke Studio. Coba ulangi permintaan atau switch model.':'\n\n> ⚠️ No scripts/commands were injected to Studio. Try rephrasing or switch model.';
       displayText=displayText+_noInjectHint;
-      var aiMsg0={role:'ai',content:displayText,time:Date.now()};
-      aiMsg0._rawContent=aiText;
-      cv.msgs.push(aiMsg0);appendMsg(aiMsg0);
-      S.gen=false;S.cancelCtrl=null;
-      if(sb)sb.classList.remove('hidden');if(cb)cb.classList.add('hidden');
-      saveS();
-      return;
+      var aiMsg0={role:'ai',content:displayText,time:Date.now()};aiMsg0._rawContent=aiText;
+      cv.msgs.push(aiMsg0);appendMsg(aiMsg0);S.gen=false;S.cancelCtrl=null;
+      if(sb)sb.classList.remove('hidden');if(cb)cb.classList.add('hidden');saveS();return;
     }
-    
-    // Buat displayText dari teks respon AI (strip code blocks saja, pertahankan penjelasan)
     displayText=stripAllCode(aiText);
-    
-    // FIX: Jika setelah strip masih cukup teks, tampilkan itu (lebih informatif)
-    // Jika terlalu pendek, pakai fallback bermakna
     if(!displayText||displayText.length<20){
-      if(studioSummary&&studioSummary.length>0){
-        // Build summary dari apa yang berhasil diinjeksi
-        var _sLines=studioSummary.map(function(s){return'• '+s;}).join('\n');
-        displayText=(curLang==='id'
-          ?'Berhasil diinjeksi ke Studio:\n'+_sLines
-          :'Successfully injected to Studio:\n'+_sLines);
-      }else{
-        displayText=curLang==='id'
-          ?'Proses inject selesai. Cek Explorer di Studio.'
-          :'Inject process complete. Check Explorer in Studio.';
-      }
+      if(studioSummary&&studioSummary.length>0){var _sLines=studioSummary.map(function(s){return'• '+s;}).join('\n');displayText=(curLang==='id'?'Berhasil diinjeksi ke Studio:\n'+_sLines:'Successfully injected to Studio:\n'+_sLines);}
+      else{displayText=curLang==='id'?'Proses inject selesai. Cek Explorer di Studio.':'Inject process complete. Check Explorer in Studio.';}
     }
-    
     if(!_playTestActive){if(showThinking){finalizeSteps();await _sleep(500);removeStepsCard();}}
     else{var cd=document.getElementById('stepsCancel');if(cd)cd.remove();}
   }else{
@@ -1961,7 +1072,7 @@ function removeAttach(i){S.attachments.splice(i,1);renderAttachRow();}
 var _inpBox=document.getElementById('inpBox');
 if(_inpBox){_inpBox.addEventListener('dragover',function(e){e.preventDefault();this.classList.add('drag-over');});_inpBox.addEventListener('dragleave',function(){this.classList.remove('drag-over');});_inpBox.addEventListener('drop',function(e){e.preventDefault();this.classList.remove('drag-over');Array.from(e.dataTransfer.files||[]).forEach(function(file){if(file.type.startsWith('image/')){var reader=new FileReader();reader.onload=function(ev){var d=ev.target.result;S.attachments.push({type:'image',name:file.name,mime:file.type,data:d.split(',')[1],preview:d});renderAttachRow();};reader.readAsDataURL(file);}});});}
 
-// ── UI ACTIONS ─────────────────────────────────────────────────────────────────
+// ── UI ACTIONS ────────────────────────────────────────────────────────────────
 function clearChat(){if(!S.curConv)return;if(!confirm(T().clearConfirm))return;var cv=S.convs.find(function(x){return x.id===S.curConv;});if(cv)cv.msgs=[];renderMsgs([]);saveS();}
 function openSettings(){updateCreds();checkDailyCredits();updateRoleDisplay();updatePlayTestUI();document.getElementById('settingsModal').classList.add('show');}
 function openAvatarModal(){if(!SESSION)return;var u=SESSION.user;document.getElementById('avatarModalName').textContent='@'+(u.username||'-');document.getElementById('avatarModalImg').src=u.avatar||'nexusai.png';document.getElementById('avatarModalRole').textContent=isOwner()?'Owner':isAdmin()?'Admin':'Roblox Developer';document.getElementById('avatarModalId').textContent='Roblox ID: '+(u.robloxId||'-');document.getElementById('avatarModal').classList.add('show');}
@@ -1979,24 +1090,16 @@ async function sendReport(){
   var ta=document.getElementById('reportTa'),btn=document.getElementById('reportBtn'),st=document.getElementById('reportStatus');
   if(!ta||!ta.value.trim())return;
   var cfToken='';
-  if(K.turnstile&&window.turnstile&&_turnstileWidget!==null){
-    try{cfToken=await new Promise(function(res,rej){var tid=setTimeout(function(){rej('timeout');},15000);turnstile.getResponse(_turnstileWidget)?(res(turnstile.getResponse(_turnstileWidget)),clearTimeout(tid)):rej('no token');});}
-    catch(e){try{cfToken=await new Promise(function(res){turnstile.reset(_turnstileWidget);setTimeout(function(){res(turnstile.getResponse(_turnstileWidget)||'');},12000);});}catch(e2){cfToken='';}}
-  }
+  if(K.turnstile&&window.turnstile&&_turnstileWidget!==null){try{cfToken=await new Promise(function(res,rej){var tid=setTimeout(function(){rej('timeout');},15000);turnstile.getResponse(_turnstileWidget)?(res(turnstile.getResponse(_turnstileWidget)),clearTimeout(tid)):rej('no token');});}catch(e){try{cfToken=await new Promise(function(res){turnstile.reset(_turnstileWidget);setTimeout(function(){res(turnstile.getResponse(_turnstileWidget)||'');},12000);});}catch(e2){cfToken='';}}}
   if(K.turnstile&&!cfToken&&window.turnstile){if(st)st.textContent=curLang==='id'?'Selesaikan CAPTCHA dulu':'Complete CAPTCHA first';return;}
   if(btn)btn.disabled=true;
-  try{
-    await fetch(REPORT_URL,{method:'POST',headers:{'Content-Type':'application/json'},
-      body:JSON.stringify({from:SESSION&&SESSION.user.username||'?',userId:SESSION&&SESSION.user.robloxId||'?',message:ta.value,type:'report','cf-turnstile-response':cfToken,time:new Date().toISOString()})});
-    if(st)st.textContent=curLang==='id'?'Terkirim!':'Sent!';
-    if(ta)ta.value='';
-    if(K.turnstile&&window.turnstile&&_turnstileWidget!==null)turnstile.reset(_turnstileWidget);
-  }catch(e){if(st)st.textContent='Error';}
+  try{await fetch(REPORT_URL,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({from:SESSION&&SESSION.user.username||'?',userId:SESSION&&SESSION.user.robloxId||'?',message:ta.value,type:'report','cf-turnstile-response':cfToken,time:new Date().toISOString()})});if(st)st.textContent=curLang==='id'?'Terkirim!':'Sent!';if(ta)ta.value='';if(K.turnstile&&window.turnstile&&_turnstileWidget!==null)turnstile.reset(_turnstileWidget);}
+  catch(e){if(st)st.textContent='Error';}
   if(btn)setTimeout(function(){btn.disabled=false;},3000);
 }
 async function redeemCode(){var inp=document.getElementById('redeemInput'),btn=document.getElementById('redeemBtn'),st=document.getElementById('redeemStatus');if(!inp||!inp.value.trim())return;if(!checkClientRateLimit('redeem',3)){return;}var code=inp.value.trim().toUpperCase().replace(/[^A-Z0-9\-_]/g,'');if(btn)btn.disabled=true;try{var r=await fetch('/api/redeem',{method:'POST',headers:getAdminHeaders(),body:JSON.stringify({code:code,user:(SESSION&&SESSION.user.username||'').toLowerCase(),userId:SESSION&&SESSION.user.robloxId||''})});var d=await r.json();if(d.success){S.credits+=parseFloat(d.credits||0);updateCreds();saveS();if(st)st.textContent='+'+d.credits+' CR';if(inp)inp.value='';}else if(st)st.textContent='Error: '+(d.error||'Invalid');}catch(e){if(st)st.textContent='Error';}if(btn)setTimeout(function(){btn.disabled=false;},3000);}
 
-// ── GUI EDITOR ─────────────────────────────────────────────────────────────────
+// ── GUI EDITOR ────────────────────────────────────────────────────────────────
 function applyGuiTheme(themeName){if(!themeName||!GUI_THEMES[themeName])return;_curGuiTheme=themeName;var th=GUI_THEMES[themeName];Object.keys(guiElements).forEach(function(id){guiElements[id].bgColor=th.panel;guiElements[id].textColor=th.text;renderGuiEl(id);});var gts=document.getElementById('guiThemeSelect');if(gts)gts.value=themeName;toast(curLang==='id'?'Tema '+themeName+' diterapkan ke elemen!':'Theme '+themeName+' applied to elements!','var(--cyan)',1500);}
 function addEl(type){guiElCounter++;var id='el'+guiElCounter;var th=GUI_THEMES[_curGuiTheme]||GUI_THEMES.nexus_ai;var defs={Frame:{w:200,h:120,bgColor:th.panel,text:'',textColor:th.text,cornerRadius:th.corner},TextLabel:{w:160,h:40,bgColor:'transparent',text:'Label',textColor:th.text,fontSize:16,cornerRadius:0},TextButton:{w:140,h:40,bgColor:th.accent,text:'Button',textColor:'#030312',fontSize:14,cornerRadius:th.corner},TextBox:{w:180,h:36,bgColor:th.card,text:'',textColor:th.text,fontSize:13,cornerRadius:th.corner},ImageLabel:{w:80,h:80,bgColor:th.card,text:'',textColor:th.text,cornerRadius:0},ScrollingFrame:{w:200,h:150,bgColor:th.bg,text:'',textColor:th.text,cornerRadius:th.corner}};var def=defs[type]||defs.Frame;guiElements[id]=Object.assign({},def,{id:id,type:type,name:type+'_'+guiElCounter,x:20+guiElCounter*12,y:20+guiElCounter*10});var empt=document.getElementById('guiEmpty');if(empt)empt.style.display='none';renderGuiEl(id);selectEl(id);updateLayerList();}
 function renderGuiEl(id){var el=guiElements[id];if(!el)return;var canvas=document.getElementById('guiCanvasInner');if(!canvas)return;var existing=canvas.querySelector('[data-elid="'+id+'"]');if(existing)existing.remove();var div=document.createElement('div');div.className='gui-el';div.setAttribute('data-elid',id);div.style.cssText='left:'+el.x+'px;top:'+el.y+'px;width:'+el.w+'px;height:'+el.h+'px;background:'+(el.bgColor&&el.bgColor!=='transparent'?el.bgColor:'rgba(30,32,64,0.5)')+';color:'+(el.textColor||'#fff')+';font-size:'+(el.fontSize||14)+'px;border-radius:'+(el.cornerRadius||0)+'px;border:1px solid rgba(0,229,255,0.15);box-shadow:0 2px 8px rgba(0,0,0,.3);';if(el.text){var sp=document.createElement('span');sp.textContent=el.text;sp.style.cssText='pointer-events:none;padding:0 4px;text-align:center;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;max-width:100%;';div.appendChild(sp);}div.onmousedown=function(e){startDrag(e,id);};var resize=document.createElement('div');resize.className='gui-resize';resize.onmousedown=function(e){startResize(e,id);};div.appendChild(resize);canvas.appendChild(div);}
@@ -2041,84 +1144,32 @@ function startDrag(e,elId){if(e.target.classList.contains('gui-resize'))return;e
 function startResize(e,elId){e.preventDefault();e.stopPropagation();var el=document.querySelector('[data-elid="'+elId+'"]');if(!el)return;var sx=e.clientX,sy=e.clientY,sw=el.offsetWidth,sh=el.offsetHeight;function onMove(ev){var nw=Math.max(40,sw+ev.clientX-sx),nh=Math.max(20,sh+ev.clientY-sy);el.style.width=nw+'px';el.style.height=nh+'px';if(guiElements[elId]){guiElements[elId].w=nw;guiElements[elId].h=nh;}}function onUp(){document.removeEventListener('mousemove',onMove);document.removeEventListener('mouseup',onUp);updatePropsPanel();}document.addEventListener('mousemove',onMove);document.addEventListener('mouseup',onUp);}
 
 // ── THEME PICKER ──────────────────────────────────────────────────────────────
-var THEME_ACCENTS={
-  nexus_ai:{color:'#00e5ff',color2:'#8800ff',label:'NEXUS AI'},
-  aurora:  {color:'#00ffb4',color2:'#00a8ff',label:'Aurora'},
-  candy:   {color:'#ff4fa0',color2:'#ff80cc',label:'Candy'},
-  dark:    {color:'#aaaaaa',color2:'#444444',label:'Dark'},
-  default: {color:'#0062d0',color2:'#00b4ff',label:'Default'},
-  midnight:{color:'#6644ff',color2:'#aa44ff',label:'Midnight'},
-  studs:   {color:'#ff7700',color2:'#ffaa00',label:'Studs'},
-  custom:  {color:'#888888',color2:'#555555',label:'Custom (No Theme)'}
-};
-
+var THEME_ACCENTS={nexus_ai:{color:'#00e5ff',color2:'#8800ff',label:'NEXUS AI'},aurora:{color:'#00ffb4',color2:'#00a8ff',label:'Aurora'},candy:{color:'#ff4fa0',color2:'#ff80cc',label:'Candy'},dark:{color:'#aaaaaa',color2:'#444444',label:'Dark'},default:{color:'#0062d0',color2:'#00b4ff',label:'Default'},midnight:{color:'#6644ff',color2:'#aa44ff',label:'Midnight'},studs:{color:'#ff7700',color2:'#ffaa00',label:'Studs'},custom:{color:'#888888',color2:'#555555',label:'Custom (No Theme)'}};
 function buildThemeDDHtml(){
-  var cur=S.selectedTheme||'nexus_ai';
-  var isID=curLang==='id';
-  var html='<div class="theme-dd-title">'+(isID?'Tema GUI':'GUI Theme')+'</div>'
-    +'<div style="font-size:8px;color:var(--dim);padding:0 8px 6px;line-height:1.5;">'+(isID?'Custom = AI buat UI tanpa tema tertentu':'Custom = AI builds UI without a preset theme')+'</div>';
+  var cur=S.selectedTheme||'nexus_ai';var isID=curLang==='id';
+  var html='<div class="theme-dd-title">'+(isID?'Tema GUI':'GUI Theme')+'</div>'+'<div style="font-size:8px;color:var(--dim);padding:0 8px 6px;line-height:1.5;">'+(isID?'Custom = AI buat UI tanpa tema tertentu':'Custom = AI builds UI without a preset theme')+'</div>';
   Object.keys(THEME_ACCENTS).forEach(function(key){
-    var th=THEME_ACCENTS[key];
-    var act=key===cur;
-    var guith=GUI_THEMES[key]||GUI_THEMES.nexus_ai;
-    var previewHtml=key==='custom'
-      ?'<div class="theme-preview" style="align-items:center;justify-content:center;width:32px;"><svg width="16" height="16" viewBox="0 0 24 24" stroke="var(--dim)" fill="none" stroke-width="2"><circle cx="12" cy="12" r="10"/><line x1="8" y1="12" x2="16" y2="12"/><line x1="12" y1="8" x2="12" y2="16"/></svg></div>'
-      :'<div class="theme-preview"><span style="background:'+guith.bg+';"></span><span style="background:'+guith.panel+';"></span><span style="background:'+guith.accent+';"></span><span style="background:'+guith.accent2+';"></span></div>';
+    var th=THEME_ACCENTS[key];var act=key===cur;var guith=GUI_THEMES[key]||GUI_THEMES.nexus_ai;
+    var previewHtml=key==='custom'?'<div class="theme-preview" style="align-items:center;justify-content:center;width:32px;"><svg width="16" height="16" viewBox="0 0 24 24" stroke="var(--dim)" fill="none" stroke-width="2"><circle cx="12" cy="12" r="10"/><line x1="8" y1="12" x2="16" y2="12"/><line x1="12" y1="8" x2="12" y2="16"/></svg></div>':'<div class="theme-preview"><span style="background:'+guith.bg+';"></span><span style="background:'+guith.panel+';"></span><span style="background:'+guith.accent+';"></span><span style="background:'+guith.accent2+';"></span></div>';
     var nameStyle=key==='custom'?'style="color:var(--dim);font-style:italic;"':'';
-    html+='<div class="theme-opt'+(act?' act':'')+'" data-k="'+key+'" onclick="selectTheme(this.dataset.k)">'
-      +previewHtml
-      +'<span class="theme-opt-name" '+nameStyle+'>'+th.label+'</span>'
-      +(act?'<svg class="theme-opt-check" viewBox="0 0 24 24"><polyline points="20 6 9 17 4 12"/></svg>':'')
-      +'</div>';
+    html+='<div class="theme-opt'+(act?' act':'')+'" data-k="'+key+'" onclick="selectTheme(this.dataset.k)">'+previewHtml+'<span class="theme-opt-name" '+nameStyle+'>'+th.label+'</span>'+(act?'<svg class="theme-opt-check" viewBox="0 0 24 24"><polyline points="20 6 9 17 4 12"/></svg>':'')+'</div>';
   });
   return html;
 }
-
-function toggleThemeDD(e){
-  e.stopPropagation();
-  var dd=document.getElementById('themeDD');
-  if(!dd)return;
-  if(dd.classList.contains('open')){dd.classList.remove('open');return;}
-  dd.innerHTML=buildThemeDDHtml();
-  var btn=document.getElementById('themePickerBtn');
-  if(btn){var r=btn.getBoundingClientRect();dd.style.bottom=(window.innerHeight-r.top+4)+'px';dd.style.left=r.left+'px';}
-  dd.classList.add('open');
-}
-
+function toggleThemeDD(e){e.stopPropagation();var dd=document.getElementById('themeDD');if(!dd)return;if(dd.classList.contains('open')){dd.classList.remove('open');return;}dd.innerHTML=buildThemeDDHtml();var btn=document.getElementById('themePickerBtn');if(btn){var r=btn.getBoundingClientRect();dd.style.bottom=(window.innerHeight-r.top+4)+'px';dd.style.left=r.left+'px';}dd.classList.add('open');}
 function selectTheme(themeName){
-  if(!THEME_ACCENTS[themeName])return;
-  S.selectedTheme=themeName;
-  var isCustom=themeName==='custom';
-  var swatch=document.getElementById('themeSwatchBtn');
-  var label=document.getElementById('themePickerLabel');
-  var acc=THEME_ACCENTS[themeName];
-  if(swatch){
-    if(isCustom){swatch.style.background='transparent';swatch.style.border='1.5px dashed var(--dim)';}
-    else{swatch.style.background=acc.color;swatch.style.border='1px solid rgba(255,255,255,.2)';}
-  }
+  if(!THEME_ACCENTS[themeName])return;S.selectedTheme=themeName;var isCustom=themeName==='custom';
+  var swatch=document.getElementById('themeSwatchBtn');var label=document.getElementById('themePickerLabel');var acc=THEME_ACCENTS[themeName];
+  if(swatch){if(isCustom){swatch.style.background='transparent';swatch.style.border='1.5px dashed var(--dim)';}else{swatch.style.background=acc.color;swatch.style.border='1px solid rgba(255,255,255,.2)';}}
   if(label)label.textContent=isCustom?(curLang==='id'?'custom':'custom'):themeName;
   var dd=document.getElementById('themeDD');if(dd)dd.classList.remove('open');
   if(Object.keys(guiElements).length>0){applyGuiTheme(themeName);}
   var gts=document.getElementById('guiThemeSelect');if(gts)gts.value=themeName;
   var gats=document.getElementById('guiAiThemeSelect');if(gats)gats.value=themeName;
-  var msg=isCustom
-    ?(curLang==='id'?'Mode Custom — AI buat UI tanpa tema preset':'Custom mode — AI builds UI freely')
-    :(curLang==='id'?'Tema ':'Theme ')+acc.label+(curLang==='id'?' dipilih!':' selected!');
-  toast(msg,'var(--cyan)',2000);
-  saveS();
+  var msg=isCustom?(curLang==='id'?'Mode Custom — AI buat UI tanpa tema preset':'Custom mode — AI builds UI freely'):(curLang==='id'?'Tema ':'Theme ')+acc.label+(curLang==='id'?' dipilih!':' selected!');
+  toast(msg,'var(--cyan)',2000);saveS();
 }
-
-function initThemePicker(){
-  var t=S.selectedTheme||'nexus_ai';
-  var acc=THEME_ACCENTS[t]||THEME_ACCENTS.nexus_ai;
-  var swatch=document.getElementById('themeSwatchBtn');
-  var label=document.getElementById('themePickerLabel');
-  if(swatch){
-    if(t==='custom'){swatch.style.background='transparent';swatch.style.border='1.5px dashed var(--dim)';}
-    else{swatch.style.background=acc.color;swatch.style.border='1px solid rgba(255,255,255,.2)';}
-  }
-  if(label)label.textContent=t;
-}
+function initThemePicker(){var t=S.selectedTheme||'nexus_ai';var acc=THEME_ACCENTS[t]||THEME_ACCENTS.nexus_ai;var swatch=document.getElementById('themeSwatchBtn');var label=document.getElementById('themePickerLabel');if(swatch){if(t==='custom'){swatch.style.background='transparent';swatch.style.border='1.5px dashed var(--dim)';}else{swatch.style.background=acc.color;swatch.style.border='1px solid rgba(255,255,255,.2)';}}if(label)label.textContent=t;}
 
 // ── INIT ──────────────────────────────────────────────────────────────────────
 async function initApp(){
@@ -2138,7 +1189,6 @@ async function initApp(){
   var suEl=document.getElementById('settingsUsername');if(suEl)suEl.textContent='@'+(u.username||'-');
   updateRoleDisplay();updateCreds();updatePlayTestUI();
   updateLoader(58,t.loaderLoadData);
-  // FIX ROOT: Load system_prompt.js SEKARANG saat init agar buildSysPrompt() siap sebelum send() pertama
   await _loadSysPromptScript();
   await loadKeys();await loadAdminIds();await loadInboxCount();
   updateLoader(72,t.loaderConnecting);
@@ -2184,7 +1234,6 @@ window.addEventListener('click',function(e){
   var tdd=document.getElementById('themeDD');if(tdd&&!tdd.contains(e.target)){var tbtn=document.getElementById('themePickerBtn');if(!tbtn||!tbtn.contains(e.target))tdd.classList.remove('open');}
 });
 window.addEventListener('beforeunload',function(){
-  // FIX: Cancel debounce timer dan sync langsung saat page close
   if(_syncDebounceTimer){clearTimeout(_syncDebounceTimer);_syncDebounceTimer=null;}
   saveS();
 });
