@@ -6,7 +6,6 @@ const isPublicRoute = createRouteMatcher(['/', '/login(.*)']);
 export default clerkMiddleware((auth, request) => {
   const { userId } = auth();
 
-  // Jika bukan rute publik dan user belum login, arahkan ke rute /login
   if (!userId && !isPublicRoute(request)) {
     const loginUrl = new URL('/login', request.url);
     return NextResponse.redirect(loginUrl);
