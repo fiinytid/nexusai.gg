@@ -643,293 +643,960 @@ function finalizeSteps(){var spinner=document.getElementById('stepsSpinner');if(
 function setStepTitle(txt){var el=document.getElementById('stepsTxt');if(el)el.textContent=txt;}
 function cancelGen(){if(S.cancelCtrl)S.cancelCtrl.abort();S.gen=false;S.cancelCtrl=null;_playTestActive=false;removeStepsCard();var sb=document.getElementById('sendBtn'),cb=document.getElementById('cancelBtn');if(sb)sb.classList.remove('hidden');if(cb)cb.classList.add('hidden');toast(T().cancelToast,'var(--yellow)');}
 
+// ══════════════════════════════════════════════════════════════════════════════
+// NEXUS AI — Inject Pipeline v10.0
+// Fixes: JSON repair edge cases, Lua block false-positives, race conditions,
+//        AbortError propagation, duplicate dedup, step counter sync, retry logic
+// ══════════════════════════════════════════════════════════════════════════════
+
 // ── JSON PARSING PIPELINE ─────────────────────────────────────────────────────
-function _stripLuaExpressions(str){
-  if(typeof str!=='string')return str;
-  str=str.replace(/UDim2\.new\s*\(\s*([-\d.\s,]+)\s*\)/g,function(m,args){var parts=args.split(',').map(function(p){return parseFloat(p.trim())||0;});return'['+parts.join(',')+']';});
-  str=str.replace(/Vector3\.new\s*\(\s*([-\d.\s,]+)\s*\)/g,function(m,args){var parts=args.split(',').map(function(p){return parseFloat(p.trim())||0;});return'['+parts.join(',')+']';});
-  str=str.replace(/Color3\.fromRGB\s*\(\s*([\d.\s,]+)\s*\)/g,function(m,args){var parts=args.split(',').map(function(p){return parseInt(p.trim())||0;});return'['+parts.join(',')+']';});
-  str=str.replace(/Color3\.new\s*\([^)]*\)/g,'null');
-  str=str.replace(/Vector2\.new\s*\(\s*([-\d.\s,]+)\s*\)/g,function(m,args){var parts=args.split(',').map(function(p){return parseFloat(p.trim())||0;});return'['+parts.join(',')+']';});
-  str=str.replace(/UDim\.new\s*\(\s*([-\d.\s,]+)\s*\)/g,function(m,args){var parts=args.split(',').map(function(p){return parseFloat(p.trim())||0;});return'['+parts.join(',')+']';});
-  str=str.replace(/BrickColor\.new\s*\(\s*"([^"]+)"\s*\)/g,'"$1"');
-  str=str.replace(/Enum\.[A-Za-z]+\.([A-Za-z]+)/g,'"$1"');
-  str=str.replace(/CFrame\.[a-zA-Z]*\s*\([^)]*\)/g,'null');
-  str=str.replace(/NumberRange\.new\s*\([^)]*\)/g,'null');
-  str=str.replace(/NumberSequence\.new\s*\([^)]*\)/g,'null');
-  str=str.replace(/ColorSequence\.new\s*\([^)]*\)/g,'null');
-  str=str.replace(/\b[A-Z][a-zA-Z]+\.[a-zA-Z]+\s*\([^)]{0,200}\)/g,'null');
+
+function _stripLuaExpressions(str) {
+  if (typeof str !== 'string') return str;
+  // UDim2.new
+  str = str.replace(/UDim2\.new\s*\(\s*([-\d.\s,]+)\s*\)/g, function(m, args) {
+    var parts = args.split(',').map(function(p) { return parseFloat(p.trim()) || 0; });
+    return '[' + parts.join(',') + ']';
+  });
+  // Vector3.new
+  str = str.replace(/Vector3\.new\s*\(\s*([-\d.\s,]+)\s*\)/g, function(m, args) {
+    var parts = args.split(',').map(function(p) { return parseFloat(p.trim()) || 0; });
+    return '[' + parts.join(',') + ']';
+  });
+  // Color3.fromRGB
+  str = str.replace(/Color3\.fromRGB\s*\(\s*([\d.\s,]+)\s*\)/g, function(m, args) {
+    var parts = args.split(',').map(function(p) { return parseInt(p.trim()) || 0; });
+    return '[' + parts.join(',') + ']';
+  });
+  str = str.replace(/Color3\.new\s*\([^)]*\)/g, 'null');
+  // Vector2.new
+  str = str.replace(/Vector2\.new\s*\(\s*([-\d.\s,]+)\s*\)/g, function(m, args) {
+    var parts = args.split(',').map(function(p) { return parseFloat(p.trim()) || 0; });
+    return '[' + parts.join(',') + ']';
+  });
+  // UDim.new
+  str = str.replace(/UDim\.new\s*\(\s*([-\d.\s,]+)\s*\)/g, function(m, args) {
+    var parts = args.split(',').map(function(p) { return parseFloat(p.trim()) || 0; });
+    return '[' + parts.join(',') + ']';
+  });
+  str = str.replace(/BrickColor\.new\s*\(\s*"([^"]+)"\s*\)/g, '"$1"');
+  str = str.replace(/BrickColor\.new\s*\(\s*'([^']+)'\s*\)/g, '"$1"');
+  str = str.replace(/Enum\.[A-Za-z]+\.([A-Za-z]+)/g, '"$1"');
+  str = str.replace(/CFrame\.[a-zA-Z]*\s*\([^)]*\)/g, 'null');
+  str = str.replace(/NumberRange\.new\s*\([^)]*\)/g, 'null');
+  str = str.replace(/NumberSequence\.new\s*\([^)]*\)/g, 'null');
+  str = str.replace(/ColorSequence\.new\s*\([^)]*\)/g, 'null');
+  // Generic Roblox constructors — limit match length to avoid runaway
+  str = str.replace(/\b[A-Z][a-zA-Z]+\.[a-zA-Z]+\s*\([^)]{0,200}\)/g, 'null');
   return str;
 }
-function _normalizeCmd(obj){
-  if(!obj||typeof obj!=='object'||Array.isArray(obj))return null;
-  var actionName=obj.action||obj.command||obj.type||'';
-  if(!actionName||typeof actionName!=='string')return null;
-  actionName=String(actionName).trim();
-  if(actionName.length===0||actionName.length>80)return null;
-  if(!/^[a-z_][a-z0-9_]*$/.test(actionName))return null;
-  var result={action:actionName};
-  if(obj.params&&typeof obj.params==='object'&&!Array.isArray(obj.params)){Object.keys(obj.params).forEach(function(k){if(k!=='action'&&k!=='command'&&k!=='type'){result[k]=obj.params[k];}});}
-  Object.keys(obj).forEach(function(k){if(k!=='action'&&k!=='command'&&k!=='type'&&k!=='params'){result[k]=obj[k];}});
+
+function _normalizeCmd(obj) {
+  if (!obj || typeof obj !== 'object' || Array.isArray(obj)) return null;
+  var actionName = obj.action || obj.command || obj.type || '';
+  if (!actionName || typeof actionName !== 'string') return null;
+  actionName = String(actionName).trim();
+  if (actionName.length === 0 || actionName.length > 80) return null;
+  // Only allow valid snake_case action names
+  if (!/^[a-z_][a-z0-9_]*$/.test(actionName)) return null;
+  var result = { action: actionName };
+  // Flatten params sub-object
+  if (obj.params && typeof obj.params === 'object' && !Array.isArray(obj.params)) {
+    Object.keys(obj.params).forEach(function(k) {
+      if (k !== 'action' && k !== 'command' && k !== 'type') {
+        result[k] = obj.params[k];
+      }
+    });
+  }
+  // Copy top-level keys
+  Object.keys(obj).forEach(function(k) {
+    if (k !== 'action' && k !== 'command' && k !== 'type' && k !== 'params') {
+      result[k] = obj[k];
+    }
+  });
+  // Normalize code -> source alias
+  if (result.code && !result.source) {
+    result.source = result.code;
+    delete result.code;
+  }
   return result;
 }
-function _jsonSanitize(str){
-  if(!str||typeof str!=='string')return str;
-  var out='';var inStr=false;var esc2=false;var i=0;
-  while(i<str.length){
-    var c=str[i];var code=str.charCodeAt(i);
-    if(esc2){out+=c;esc2=false;i++;continue;}
-    if(c==='\\'&&inStr){out+=c;esc2=true;i++;continue;}
-    if(c==='"'){inStr=!inStr;out+=c;i++;continue;}
-    if(!inStr&&c==='/'&&str[i+1]==='/'){while(i<str.length&&str[i]!=='\n')i++;i++;continue;}
-    if(!inStr&&c==='/'&&str[i+1]==='*'){i+=2;while(i<str.length&&!(str[i]==='*'&&str[i+1]==='/'))i++;i+=2;continue;}
-    if(!inStr&&c==='-'&&str[i+1]==='-'){while(i<str.length&&str[i]!=='\n')i++;continue;}
-    if(inStr){if(c==='\n'){out+='\\n';i++;continue;}if(c==='\r'){out+='\\r';i++;continue;}if(c==='\t'){out+='\\t';i++;continue;}if(code<0x20){out+='\\u'+('000'+code.toString(16)).slice(-4);i++;continue;}}
-    out+=c;i++;
+
+function _jsonSanitize(str) {
+  if (!str || typeof str !== 'string') return str;
+  var out = '';
+  var inStr = false;
+  var escaped = false;
+  var i = 0;
+  while (i < str.length) {
+    var c = str[i];
+    var code = str.charCodeAt(i);
+    if (escaped) { out += c; escaped = false; i++; continue; }
+    if (c === '\\' && inStr) { out += c; escaped = true; i++; continue; }
+    if (c === '"') { inStr = !inStr; out += c; i++; continue; }
+    // Strip // comments (outside strings)
+    if (!inStr && c === '/' && str[i + 1] === '/') {
+      while (i < str.length && str[i] !== '\n') i++;
+      continue;
+    }
+    // Strip /* */ comments (outside strings)
+    if (!inStr && c === '/' && str[i + 1] === '*') {
+      i += 2;
+      while (i < str.length && !(str[i] === '*' && str[i + 1] === '/')) i++;
+      i += 2;
+      continue;
+    }
+    // Strip -- Lua comments (outside strings)
+    if (!inStr && c === '-' && str[i + 1] === '-') {
+      while (i < str.length && str[i] !== '\n') i++;
+      continue;
+    }
+    // Escape control characters inside strings
+    if (inStr) {
+      if (c === '\n') { out += '\\n'; i++; continue; }
+      if (c === '\r') { out += '\\r'; i++; continue; }
+      if (c === '\t') { out += '\\t'; i++; continue; }
+      if (code < 0x20) { out += '\\u' + ('000' + code.toString(16)).slice(-4); i++; continue; }
+    }
+    out += c;
+    i++;
   }
   return out;
 }
-function _jsonRepair(raw){
-  if(!raw||typeof raw!=='string')return raw;
-  raw=_stripLuaExpressions(raw);raw=_jsonSanitize(raw);
-  raw=raw.replace(/([{,\[]\s*)([a-zA-Z_$][a-zA-Z0-9_$]*)(\s*=\s*(?![=>]))/g,'$1"$2": ');
-  raw=raw.replace(/([{,]\s*)([a-zA-Z_$][a-zA-Z0-9_$]*)(\s*:(?!:))/g,'$1"$2"$3');
-  raw=raw.replace(/:\s*'([^'\\]*)'/g,':"$1"');
-  raw=raw.replace(/\[\s*'([^'\\]*)'/g,'["$1"');
-  raw=raw.replace(/,\s*'([^'\\]*)'/g,',"$1"');
-  raw=raw.replace(/,(\s*[}\]])/g,'$1');
-  raw=raw.replace(/:\s*True\b/g,':true').replace(/:\s*False\b/g,':false').replace(/:\s*None\b/g,':null').replace(/:\s*nil\b/g,':null');
+
+function _jsonRepair(raw) {
+  if (!raw || typeof raw !== 'string') return raw;
+  raw = _stripLuaExpressions(raw);
+  raw = _jsonSanitize(raw);
+  // Lua/JS assignment syntax: { key = value } -> { "key": value }
+  raw = raw.replace(/([{,\[]\s*)([a-zA-Z_$][a-zA-Z0-9_$]*)(\s*=\s*(?![=>]))/g, '$1"$2": ');
+  // Unquoted keys: { key: value } -> { "key": value }
+  raw = raw.replace(/([{,]\s*)([a-zA-Z_$][a-zA-Z0-9_$]*)(\s*:(?!:))/g, '$1"$2"$3');
+  // Single-quoted string values -> double-quoted
+  raw = raw.replace(/:\s*'([^'\\]*)'/g, ':"$1"');
+  raw = raw.replace(/\[\s*'([^'\\]*)'/g, '["$1"');
+  raw = raw.replace(/,\s*'([^'\\]*)'/g, ',"$1"');
+  // Trailing commas before ] or }
+  raw = raw.replace(/,(\s*[}\]])/g, '$1');
+  // Python/Lua boolean/null literals
+  raw = raw.replace(/:\s*True\b/g, ':true').replace(/:\s*False\b/g, ':false');
+  raw = raw.replace(/:\s*None\b/g, ':null').replace(/:\s*nil\b/g, ':null');
   return raw;
 }
-function _tryParseJson(raw){
-  if(!raw||typeof raw!=='string')return null;
-  raw=raw.trim();if(!raw)return null;
-  if(raw.length>50000)return null;
-  if(!raw.startsWith('{')&&!raw.startsWith('['))return null;
-  var p;
-  try{p=JSON.parse(raw);return p;}catch(e1){}
-  var stripped=_stripLuaExpressions(raw);
-  try{p=JSON.parse(stripped);return p;}catch(e2){}
-  try{p=JSON.parse(_jsonRepair(raw));return p;}catch(e3){}
-  try{p=JSON.parse(_jsonRepair(stripped));return p;}catch(e4){}
-  var jm=stripped.match(/(\[[\s\S]+\]|\{[\s\S]+\})/);
-  if(jm){try{p=JSON.parse(jm[1]);return p;}catch(e5){}try{p=JSON.parse(_jsonRepair(jm[1]));return p;}catch(e6){}}
-  else{var jm2=raw.match(/(\[[\s\S]+\]|\{[\s\S]+\})/);if(jm2){try{p=JSON.parse(_jsonRepair(jm2[1]));return p;}catch(e7){}}}
+
+function _tryParseJson(raw) {
+  if (!raw || typeof raw !== 'string') return null;
+  raw = raw.trim();
+  if (!raw) return null;
+  if (raw.length > 50000) return null;
+  if (!raw.startsWith('{') && !raw.startsWith('[')) return null;
+  // Attempt 1: raw
+  try { return JSON.parse(raw); } catch (e) {}
+  // Attempt 2: strip Lua expressions then parse
+  var stripped = _stripLuaExpressions(raw);
+  try { return JSON.parse(stripped); } catch (e) {}
+  // Attempt 3: full repair on raw
+  try { return JSON.parse(_jsonRepair(raw)); } catch (e) {}
+  // Attempt 4: full repair on stripped
+  try { return JSON.parse(_jsonRepair(stripped)); } catch (e) {}
+  // Attempt 5: extract outermost JSON structure from stripped
+  var jm = stripped.match(/(\[[\s\S]+\]|\{[\s\S]+\})/);
+  if (jm) {
+    try { return JSON.parse(jm[1]); } catch (e) {}
+    try { return JSON.parse(_jsonRepair(jm[1])); } catch (e) {}
+  } else {
+    var jm2 = raw.match(/(\[[\s\S]+\]|\{[\s\S]+\})/);
+    if (jm2) {
+      try { return JSON.parse(_jsonRepair(jm2[1])); } catch (e) {}
+    }
+  }
   return null;
 }
 
-var _LUA_ACTION_PATTERNS=[/^\s*create_remote\s*\(/m,/^\s*inject_script\s*\(/m,/^\s*create_gui\s*\(/m,/^\s*create_frame\s*\(/m,/^\s*batch_commands\s*\(/m,/^\s*create_script\s*\(/m,/^\s*create_local_script\s*\(/m,/^\s*create_module\s*\(/m,/^\s*edit_script\s*\(/m,/^\s*create_part\s*\(/m,/^\s*set_property\s*\(/m,/^\s*create_text_label\s*\(/m,/^\s*inject_quick_script\s*\(/m];
-function isActionCallBlock(code){var count=0;for(var i=0;i<_LUA_ACTION_PATTERNS.length;i++){if(_LUA_ACTION_PATTERNS[i].test(code)){count++;if(count>=2)return true;}}if(count===1){var hasRealLua=/\bgame:GetService\b|\blocal\s+\w+\s*=\s*Instance\.new\b|\bPlayers\.LocalPlayer\b/.test(code);if(!hasRealLua)return true;}return false;}
+// ── LUA BLOCK DETECTION ───────────────────────────────────────────────────────
 
-function parseLuaBlocks(text){
-  var blocks=[];var re=/```(?:lua|luau)\s*([\s\S]*?)```/gi,m;
-  while((m=re.exec(text))!==null){
-    var c=m[1].trim();if(c.length<10)continue;
-    if(isActionCallBlock(c))continue;
-    if(/--\s*Command\s*Batch\s*Start/i.test(c))continue;
-    if(/^\s*batch_commands\s*\(\s*\{/.test(c))continue;
-    if(/^\s*\{\s*["']?action["']?\s*[=:]\s*["']/.test(c))continue;
-    if(/^\s*(local\s+\w+\s*=\s*)?Instance\.new\(["']Remote(Event|Function)["']\)/.test(c)&&c.split('\n').filter(function(l){return l.trim()&&!l.trim().startsWith('--');}).length<=6)continue;
+// Patterns that indicate an "action call block" (not real Lua to inject)
+var _LUA_ACTION_PATTERNS = [
+  /^\s*create_remote\s*\(/m,
+  /^\s*inject_script\s*\(/m,
+  /^\s*create_gui\s*\(/m,
+  /^\s*create_frame\s*\(/m,
+  /^\s*batch_commands\s*\(/m,
+  /^\s*create_script\s*\(/m,
+  /^\s*create_local_script\s*\(/m,
+  /^\s*create_module\s*\(/m,
+  /^\s*edit_script\s*\(/m,
+  /^\s*create_part\s*\(/m,
+  /^\s*set_property\s*\(/m,
+  /^\s*create_text_label\s*\(/m,
+  /^\s*inject_quick_script\s*\(/m,
+  /^\s*set_lighting\s*\(/m,
+  /^\s*create_npc\s*\(/m,
+];
+
+// Returns true if the code block looks like action-call pseudocode, not real Lua
+function isActionCallBlock(code) {
+  var count = 0;
+  for (var i = 0; i < _LUA_ACTION_PATTERNS.length; i++) {
+    if (_LUA_ACTION_PATTERNS[i].test(code)) {
+      count++;
+      if (count >= 2) return true;
+    }
+  }
+  if (count === 1) {
+    // Check for real Lua indicators — if none found, treat as action block
+    var hasRealLua = /\bgame:GetService\b|\blocal\s+\w+\s*=\s*Instance\.new\b|\bPlayers\.LocalPlayer\b|\bscript\.Parent\b|\btask\.spawn\b|\btask\.wait\b/.test(code);
+    if (!hasRealLua) return true;
+  }
+  return false;
+}
+
+// Extract real Lua code blocks from AI response (excluding action-call pseudocode)
+function parseLuaBlocks(text) {
+  var blocks = [];
+  var re = /```(?:lua|luau)\s*([\s\S]*?)```/gi;
+  var m;
+  while ((m = re.exec(text)) !== null) {
+    var c = m[1].trim();
+    if (c.length < 10) continue;
+    if (isActionCallBlock(c)) continue;
+    if (/--\s*Command\s*Batch\s*Start/i.test(c)) continue;
+    if (/^\s*batch_commands\s*\(\s*\{/.test(c)) continue;
+    if (/^\s*\{\s*["']?action["']?\s*[=:]\s*["']/.test(c)) continue;
+    // Skip trivial remote declarations (6 or fewer real lines)
+    if (
+      /^\s*(local\s+\w+\s*=\s*)?Instance\.new\(["']Remote(Event|Function)["']\)/.test(c) &&
+      c.split('\n').filter(function(l) { return l.trim() && !l.trim().startsWith('--'); }).length <= 6
+    ) continue;
     blocks.push(c);
   }
   return blocks;
 }
 
-function parseJsonBlocks(text){
-  var cmds=[];var re=/```(?:json|JSON|Json)\s*\n?([\s\S]*?)```/g,m;
-  while((m=re.exec(text))!==null){
-    var raw=m[1].trim();if(!raw||raw.length<5)continue;if(raw.length>30000)continue;
-    if(/^\s*(local\s+|function\s+[a-zA-Z]|game:Get|return\s+\{)/.test(raw)&&!/["']action["']/.test(raw)&&!/["']command["']/.test(raw))continue;
-    var processed=_stripLuaExpressions(raw);
-    processed=processed.replace(/([{,\[]\s*)([a-zA-Z_][a-zA-Z0-9_]*)(\s*=\s*(?![=>]))/g,'$1"$2": ');
-    var fnMatch=processed.match(/^\s*([a-z_][a-z0-9_]{2,49})\s*\(\s*(\{[\s\S]+\})\s*\)\s*;?\s*$/);
-    if(fnMatch){var fnName=fnMatch[1];var bodyStr=fnMatch[2];var fnParsed=_tryParseJson(bodyStr);if(fnParsed&&typeof fnParsed==='object'){if(fnName==='batch_commands'){var batchArr=fnParsed.commands||fnParsed.actions||(Array.isArray(fnParsed)?fnParsed:null);if(Array.isArray(batchArr)){batchArr.forEach(function(sub){var norm=_normalizeCmd(sub);if(norm)cmds.push(norm);});continue;}}else{var fnCmd=Object.assign({action:fnName},Array.isArray(fnParsed)?{}:fnParsed);var norm=_normalizeCmd(fnCmd);if(norm){cmds.push(norm);continue;}}}}
-    var parsed=_tryParseJson(processed);if(!parsed)continue;
-    var items=[];
-    if(Array.isArray(parsed)){items=parsed;}
-    else if(parsed.batch_commands&&Array.isArray(parsed.batch_commands)){items=parsed.batch_commands;}
-    else if(parsed.commands&&Array.isArray(parsed.commands)){items=parsed.commands;}
-    else if(parsed.actions&&Array.isArray(parsed.actions)){items=parsed.actions;}
-    else if(parsed.action||parsed.command||parsed.type){items=[parsed];}
-    else{var foundArr=false;Object.keys(parsed).forEach(function(k){if(!foundArr&&Array.isArray(parsed[k])&&parsed[k].length>0){var firstItem=parsed[k][0];if(firstItem&&typeof firstItem==='object'&&(firstItem.action||firstItem.command||firstItem.type)){items=parsed[k];foundArr=true;}}});if(!foundArr&&Object.keys(parsed).length>0){Object.keys(parsed).forEach(function(k){if(/^[a-z_][a-z0-9_]*$/.test(k)&&typeof parsed[k]==='object'&&!Array.isArray(parsed[k])){var candidate=Object.assign({action:k},parsed[k]);if(_normalizeCmd(candidate))items.push(candidate);}});}}
-    items.forEach(function(item){if(!item||typeof item!=='object')return;if(!Array.isArray(item)){if(item.batch_commands&&Array.isArray(item.batch_commands)){item.batch_commands.forEach(function(sub){var norm=_normalizeCmd(sub);if(norm)cmds.push(norm);});return;}if(item.commands&&Array.isArray(item.commands)){item.commands.forEach(function(sub){var norm=_normalizeCmd(sub);if(norm)cmds.push(norm);});return;}}var norm=_normalizeCmd(item);if(norm)cmds.push(norm);});
-  }
-  return cmds;
-}
+// ── JSON COMMAND BLOCK PARSER ─────────────────────────────────────────────────
 
-function _extractActionsFromLuaBlock(blockCode){
-  var cmds=[];var pos=0;var code=blockCode;
-  while(pos<code.length){
-    var searchStr=code.slice(pos);
-    var re=/\b([a-z_][a-z0-9_]{3,49})\s*\(\s*\{/g;re.lastIndex=0;var m=re.exec(searchStr);if(!m)break;
-    var fnName=m[1];
-    var skipFns2=['function','require','print','warn','error','local','if','for','while','end','do','then','return','and','or','not','true','false','nil','table','string','math','tostring','tonumber','type','pairs','ipairs','next','select','unpack','pcall','xpcall','rawget','rawset'];
-    if(skipFns2.indexOf(fnName)>=0){pos+=m.index+m[0].length;continue;}
-    var braceStart=pos+m.index+m[0].length-1;
-    var depth=0,inStr=false,strChar='',inLongStr=false,bodyEnd=-1;
-    for(var bi=braceStart;bi<code.length;bi++){
-      var ch=code[bi];
-      if(!inStr&&ch==='['&&code[bi+1]==='['){inLongStr=true;bi+=1;continue;}
-      if(inLongStr&&ch===']'&&code[bi+1]===']'){inLongStr=false;bi+=1;continue;}
-      if(inLongStr)continue;
-      if(!inStr&&(ch==='"'||ch==="'")){inStr=true;strChar=ch;continue;}
-      if(inStr&&ch===strChar&&code[bi-1]!=='\\'){inStr=false;continue;}
-      if(inStr)continue;
-      if(ch==='{')depth++;
-      else if(ch==='}'){depth--;if(depth===0){bodyEnd=bi;break;}}
+function parseJsonBlocks(text) {
+  var cmds = [];
+  var re = /```(?:json|JSON|Json)\s*\n?([\s\S]*?)```/g;
+  var m;
+  while ((m = re.exec(text)) !== null) {
+    var raw = m[1].trim();
+    if (!raw || raw.length < 5) continue;
+    if (raw.length > 30000) continue;
+    // Skip if it looks like pure Lua without an action key
+    if (
+      /^\s*(local\s+|function\s+[a-zA-Z]|game:Get|return\s+\{)/.test(raw) &&
+      !/"action"/.test(raw) &&
+      !/"command"/.test(raw)
+    ) continue;
+
+    var processed = _stripLuaExpressions(raw);
+    // Normalize Lua assignment syntax
+    processed = processed.replace(
+      /([{,\[]\s*)([a-zA-Z_][a-zA-Z0-9_]*)(\s*=\s*(?![=>]))/g,
+      '$1"$2": '
+    );
+
+    // Check for function-call wrapping: funcname({ ... })
+    var fnMatch = processed.match(/^\s*([a-z_][a-z0-9_]{2,49})\s*\(\s*(\{[\s\S]+\})\s*\)\s*;?\s*$/);
+    if (fnMatch) {
+      var fnName = fnMatch[1];
+      var bodyStr = fnMatch[2];
+      var fnParsed = _tryParseJson(bodyStr);
+      if (fnParsed && typeof fnParsed === 'object') {
+        if (fnName === 'batch_commands') {
+          var batchArr = fnParsed.commands || fnParsed.actions || (Array.isArray(fnParsed) ? fnParsed : null);
+          if (Array.isArray(batchArr)) {
+            batchArr.forEach(function(sub) {
+              var norm = _normalizeCmd(sub);
+              if (norm) cmds.push(norm);
+            });
+            continue;
+          }
+        } else {
+          var fnCmd = Object.assign({ action: fnName }, Array.isArray(fnParsed) ? {} : fnParsed);
+          var norm = _normalizeCmd(fnCmd);
+          if (norm) { cmds.push(norm); continue; }
+        }
+      }
     }
-    if(bodyEnd<0){pos+=m.index+m[0].length;continue;}
-    var body=code.slice(braceStart,bodyEnd+1);
-    if(body.indexOf('[[')>=0){
-      var nameM=body.match(/name\s*=\s*["']([^"']+)["']/);var parentM=body.match(/parent\s*=\s*["']([^"']+)["']/);var typeM=body.match(/script_type\s*=\s*["']([^"']+)["']/);var srcM=body.match(/source\s*=\s*\[\[([^\]]*(?:\][^\]][^\]]*)*)\]\]/);
-      if(fnName==='inject_script'&&nameM){var cmd={action:'inject_script',name:nameM[1],parent:parentM?parentM[1]:'ServerScriptService',script_type:typeM?typeM[1]:'Script',source:srcM?srcM[1].trim():''};if(cmd.source&&cmd.source.length>5){cmds.push(cmd);}}
-    }else{var stripped=_stripLuaExpressions(body);var parsed=_tryParseJson(stripped)||_tryParseJson(_jsonRepair(stripped));if(parsed&&typeof parsed==='object'&&!Array.isArray(parsed)){var cmd2=Object.assign({action:fnName},parsed);var norm=_normalizeCmd(cmd2);if(norm)cmds.push(norm);}}
-    pos=bodyEnd+1;
+
+    var parsed = _tryParseJson(processed);
+    if (!parsed) continue;
+
+    var items = [];
+    if (Array.isArray(parsed)) {
+      items = parsed;
+    } else if (parsed.batch_commands && Array.isArray(parsed.batch_commands)) {
+      items = parsed.batch_commands;
+    } else if (parsed.commands && Array.isArray(parsed.commands)) {
+      items = parsed.commands;
+    } else if (parsed.actions && Array.isArray(parsed.actions)) {
+      items = parsed.actions;
+    } else if (parsed.action || parsed.command || parsed.type) {
+      items = [parsed];
+    } else {
+      // Try to find a nested array of commands
+      var foundArr = false;
+      Object.keys(parsed).forEach(function(k) {
+        if (!foundArr && Array.isArray(parsed[k]) && parsed[k].length > 0) {
+          var first = parsed[k][0];
+          if (first && typeof first === 'object' && (first.action || first.command || first.type)) {
+            items = parsed[k];
+            foundArr = true;
+          }
+        }
+      });
+      // Try top-level keys as action names
+      if (!foundArr && Object.keys(parsed).length > 0) {
+        Object.keys(parsed).forEach(function(k) {
+          if (/^[a-z_][a-z0-9_]*$/.test(k) && typeof parsed[k] === 'object' && !Array.isArray(parsed[k])) {
+            var candidate = Object.assign({ action: k }, parsed[k]);
+            if (_normalizeCmd(candidate)) items.push(candidate);
+          }
+        });
+      }
+    }
+
+    items.forEach(function(item) {
+      if (!item || typeof item !== 'object') return;
+      if (!Array.isArray(item)) {
+        if (item.batch_commands && Array.isArray(item.batch_commands)) {
+          item.batch_commands.forEach(function(sub) {
+            var norm = _normalizeCmd(sub);
+            if (norm) cmds.push(norm);
+          });
+          return;
+        }
+        if (item.commands && Array.isArray(item.commands)) {
+          item.commands.forEach(function(sub) {
+            var norm = _normalizeCmd(sub);
+            if (norm) cmds.push(norm);
+          });
+          return;
+        }
+      }
+      var norm = _normalizeCmd(item);
+      if (norm) cmds.push(norm);
+    });
   }
   return cmds;
 }
 
-function parseCallBlocks(text){
-  var cmds=[];
-  var luaActionText='';var reLua=/```(?:lua|luau)\s*([\s\S]*?)```/gi,mLua;
-  while((mLua=reLua.exec(text))!==null){var block=mLua[1].trim();if(isActionCallBlock(block)){var extracted=_extractActionsFromLuaBlock(block);extracted.forEach(function(cmd){cmds.push(cmd);});luaActionText+='\n'+block;}}
-  var textNoBlocks=text.replace(/```[\s\S]*?```/g,'');
-  var searchText=textNoBlocks+'\n'+luaActionText;
-  var re1=/call:([a-z_]+)\(\s*(\{[\s\S]+?\})\s*\)/g,m;
-  while((m=re1.exec(searchText))!==null){var params=_tryParseJson(_stripLuaExpressions(m[2]));if(m[1]&&params){var cmd=Object.assign({action:m[1]},params);var norm=_normalizeCmd(cmd);if(norm)cmds.push(norm);}}
-  var re2=/\b([a-z_][a-z0-9_]{2,49})\s*\(\s*(\{[\s\S]*?\})\s*\)/g;
-  while((m=re2.exec(textNoBlocks))!==null){
-    var fnName=m[1];var skipFns=['function','require','print','warn','error','typeof','instanceof','Object','Array','String','Number','Boolean','Math','JSON','Promise','fetch','console','setTimeout','setInterval','parseInt','parseFloat'];
-    if(skipFns.indexOf(fnName)>=0)continue;
-    var bodyStr=_stripLuaExpressions(m[2]);var params2=_tryParseJson(bodyStr);if(!params2||typeof params2!=='object')continue;
-    if(fnName==='batch_commands'){var batchCmds=params2.commands||params2.actions||(Array.isArray(params2)?params2:null);if(Array.isArray(batchCmds)){batchCmds.forEach(function(sub){var norm=_normalizeCmd(sub);if(norm)cmds.push(norm);});}}
-    else{var cmd2=Object.assign({action:fnName},Array.isArray(params2)?{}:params2);var norm2=_normalizeCmd(cmd2);if(norm2)cmds.push(norm2);}
-  }
-  var seen={};return cmds.filter(function(cmd){var key=(cmd.action||'')+'|'+(cmd.name||'');if(seen[key])return false;seen[key]=true;return true;});
-}
+// ── LUA ACTION-CALL BLOCK EXTRACTOR ──────────────────────────────────────────
 
-function parseAllCommands(text){
-  var cmds=parseJsonBlocks(text);
-  var callCmds=parseCallBlocks(text);
-  callCmds.forEach(function(cmd){var exists=cmds.some(function(e){return e.action===cmd.action&&(e.name||'')===(cmd.name||'');});if(!exists)cmds.push(cmd);});
-  if(cmds.length===0){var jsonMatches=text.match(/(\[[\s\S]*?"action"[\s\S]*?\]|\{[\s\S]*?"action"[\s\S]*?\})/g);if(jsonMatches){jsonMatches.forEach(function(raw){if(raw.length>30000)return;var parsed=_tryParseJson(raw.trim());if(!parsed)return;var items=Array.isArray(parsed)?parsed:[parsed];items.forEach(function(item){if(!item||!item.action)return;var norm=_normalizeCmd(item);if(norm){var exists=cmds.some(function(e){return e.action===norm.action&&(e.name||'')===(norm.name||'');});if(!exists)cmds.push(norm);}});});}}
-  if(cmds.length===0){var batchMatch=text.match(/"commands"\s*:\s*(\[[\s\S]*?\])/);if(batchMatch){var batchParsed=_tryParseJson('['+batchMatch[1].slice(1,-1)+']');if(Array.isArray(batchParsed)){batchParsed.forEach(function(item){var norm=_normalizeCmd(item);if(norm&&!cmds.some(function(e){return e.action===norm.action&&(e.name||'')===(norm.name||'');})){cmds.push(norm);}});}}}
+function _extractActionsFromLuaBlock(blockCode) {
+  var cmds = [];
+  var pos = 0;
+  var code = blockCode;
+  var SKIP_FNS = new Set([
+    'function','require','print','warn','error','local','if','for','while','end',
+    'do','then','return','and','or','not','true','false','nil','table','string',
+    'math','tostring','tonumber','type','pairs','ipairs','next','select','unpack',
+    'pcall','xpcall','rawget','rawset','task','game','workspace','script'
+  ]);
+
+  while (pos < code.length) {
+    var searchStr = code.slice(pos);
+    var re = /\b([a-z_][a-z0-9_]{3,49})\s*\(\s*\{/g;
+    re.lastIndex = 0;
+    var m = re.exec(searchStr);
+    if (!m) break;
+    var fnName = m[1];
+    if (SKIP_FNS.has(fnName)) { pos += m.index + m[0].length; continue; }
+
+    var braceStart = pos + m.index + m[0].length - 1;
+    var depth = 0, inStr = false, strChar = '', inLongStr = false, bodyEnd = -1;
+
+    for (var bi = braceStart; bi < code.length; bi++) {
+      var ch = code[bi];
+      if (!inStr && ch === '[' && code[bi + 1] === '[') { inLongStr = true; bi += 1; continue; }
+      if (inLongStr && ch === ']' && code[bi + 1] === ']') { inLongStr = false; bi += 1; continue; }
+      if (inLongStr) continue;
+      if (!inStr && (ch === '"' || ch === "'")) { inStr = true; strChar = ch; continue; }
+      if (inStr && ch === strChar && code[bi - 1] !== '\\') { inStr = false; continue; }
+      if (inStr) continue;
+      if (ch === '{') depth++;
+      else if (ch === '}') { depth--; if (depth === 0) { bodyEnd = bi; break; } }
+    }
+    if (bodyEnd < 0) { pos += m.index + m[0].length; continue; }
+
+    var body = code.slice(braceStart, bodyEnd + 1);
+    // Handle long-string source fields [[ ... ]]
+    if (body.indexOf('[[') >= 0) {
+      var nameM = body.match(/name\s*=\s*["']([^"']+)["']/);
+      var parentM = body.match(/parent\s*=\s*["']([^"']+)["']/);
+      var typeM = body.match(/script_type\s*=\s*["']([^"']+)["']/);
+      var srcM = body.match(/source\s*=\s*\[\[([^\]]*(?:\][^\]][^\]]*)*)\]\]/);
+      if (fnName === 'inject_script' && nameM) {
+        var cmd = {
+          action: 'inject_script',
+          name: nameM[1],
+          parent: parentM ? parentM[1] : 'ServerScriptService',
+          script_type: typeM ? typeM[1] : 'Script',
+          source: srcM ? srcM[1].trim() : ''
+        };
+        if (cmd.source && cmd.source.length > 5) cmds.push(cmd);
+      }
+    } else {
+      var stripped = _stripLuaExpressions(body);
+      var parsed = _tryParseJson(stripped) || _tryParseJson(_jsonRepair(stripped));
+      if (parsed && typeof parsed === 'object' && !Array.isArray(parsed)) {
+        var cmd2 = Object.assign({ action: fnName }, parsed);
+        var norm = _normalizeCmd(cmd2);
+        if (norm) cmds.push(norm);
+      }
+    }
+    pos = bodyEnd + 1;
+  }
   return cmds;
 }
 
-function detectScriptParent(code){
-  var c=code||'';var first200=c.slice(0,200);var trimmed=c.trim();
-  var typeHint=c.match(/--\s*script_type:\s*(\w+)/i);var parentHint=c.match(/--\s*parent:\s*([\w.]+)/i);
-  var type='Script',parent='ServerScriptService';
-  var isModule=(/^\s*local\s+\w+\s*=\s*\{\s*\}/.test(trimmed)&&/\breturn\s+\w+\s*$/.test(trimmed))||(/^return\s*\{/.test(trimmed))||(/^--\s*@?(module|modulescript)/im.test(first200));
-  if(isModule){parent='ReplicatedStorage';type='ModuleScript';}
-  else if(/Players\.LocalPlayer|PlayerGui|LocalUserInputService|UserInputService|StarterPlayerScripts/i.test(c)||(/ScreenGui|StarterGui/i.test(c)&&!/ServerScriptService|DataStoreService|PlayerAdded/i.test(c))){
-    if(/ReplicatedFirst|LoadingScreen_Client/i.test(c)||(/ReplicatedFirst/i.test(first200))){parent='ReplicatedFirst';type='LocalScript';}
-    else if(/StarterCharacterScripts/i.test(c)){parent='StarterCharacterScripts';type='LocalScript';}
-    else{parent='StarterPlayerScripts';type='LocalScript';}
+// ── CALL BLOCK PARSER ─────────────────────────────────────────────────────────
+
+function parseCallBlocks(text) {
+  var cmds = [];
+  var luaActionText = '';
+  var SKIP_FNS = new Set([
+    'function','require','print','warn','error','typeof','instanceof',
+    'Object','Array','String','Number','Boolean','Math','JSON','Promise',
+    'fetch','console','setTimeout','setInterval','parseInt','parseFloat',
+    'task','game','workspace','script','Instance','pcall','xpcall'
+  ]);
+
+  // Process Lua action-call blocks first
+  var reLua = /```(?:lua|luau)\s*([\s\S]*?)```/gi;
+  var mLua;
+  while ((mLua = reLua.exec(text)) !== null) {
+    var block = mLua[1].trim();
+    if (isActionCallBlock(block)) {
+      var extracted = _extractActionsFromLuaBlock(block);
+      extracted.forEach(function(cmd) { cmds.push(cmd); });
+      luaActionText += '\n' + block;
+    }
   }
-  else if(/DataStoreService|PlayerAdded|OnServerEvent|FireClient|ServerStorage|HttpService:GetAsync/i.test(c)){parent='ServerScriptService';type='Script';}
-  else if(/ReplicatedFirst/i.test(first200)){parent='ReplicatedFirst';type='LocalScript';}
-  else if(/Players\.LocalPlayer/i.test(first200)){parent='StarterPlayerScripts';type='LocalScript';}
-  if(typeHint)type=typeHint[1];if(parentHint)parent=parentHint[1];
-  return{parent:parent,type:type};
+
+  // Remove all code blocks from text for plain-text scanning
+  var textNoBlocks = text.replace(/```[\s\S]*?```/g, '');
+  var searchText = textNoBlocks + '\n' + luaActionText;
+
+  // call:action_name({ ... }) syntax
+  var re1 = /call:([a-z_]+)\(\s*(\{[\s\S]+?\})\s*\)/g;
+  var m;
+  while ((m = re1.exec(searchText)) !== null) {
+    var params = _tryParseJson(_stripLuaExpressions(m[2]));
+    if (m[1] && params) {
+      var cmd = Object.assign({ action: m[1] }, params);
+      var norm = _normalizeCmd(cmd);
+      if (norm) cmds.push(norm);
+    }
+  }
+
+  // Plain funcname({ ... }) calls in non-code text
+  var re2 = /\b([a-z_][a-z0-9_]{2,49})\s*\(\s*(\{[\s\S]*?\})\s*\)/g;
+  while ((m = re2.exec(textNoBlocks)) !== null) {
+    var fnName = m[1];
+    if (SKIP_FNS.has(fnName)) continue;
+    var bodyStr = _stripLuaExpressions(m[2]);
+    var params2 = _tryParseJson(bodyStr);
+    if (!params2 || typeof params2 !== 'object') continue;
+    if (fnName === 'batch_commands') {
+      var batchCmds = params2.commands || params2.actions || (Array.isArray(params2) ? params2 : null);
+      if (Array.isArray(batchCmds)) {
+        batchCmds.forEach(function(sub) {
+          var norm = _normalizeCmd(sub);
+          if (norm) cmds.push(norm);
+        });
+      }
+    } else {
+      var cmd2 = Object.assign({ action: fnName }, Array.isArray(params2) ? {} : params2);
+      var norm2 = _normalizeCmd(cmd2);
+      if (norm2) cmds.push(norm2);
+    }
+  }
+
+  // Deduplicate by action+name
+  var seen = {};
+  return cmds.filter(function(cmd) {
+    var key = (cmd.action || '') + '|' + (cmd.name || '') + '|' + (cmd.parent || '');
+    if (seen[key]) return false;
+    seen[key] = true;
+    return true;
+  });
 }
-function makeScriptName(prompt,i,code){if(code){var nm=code.match(/--\s*name:\s*([\w_]+)/i);if(nm&&nm[1]&&nm[1].length>2)return nm[1];}var l=(prompt||'').toLowerCase();var kw=[['loading','LoadingScreen_Client'],['shop gui','ShopGUI_Client'],['shop','ShopSystem_Server'],['leaderboard','Leaderboard_Server'],['admin','AdminSystem_Server'],['coin','CoinSystem_Server'],['inventory','InventorySystem'],['npc','NPCBehavior_Server'],['datastore','DataStore_Module'],['zombie','ZombieAI_Server'],['vehicle','VehicleSystem'],['tycoon','TycoonPlot'],['round','RoundSystem_Server'],['hud','HUD_Client'],['gui','GUIScript_Client']];for(var k=0;k<kw.length;k++){if(l.includes(kw[k][0]))return kw[k][1]+(i>0?'_'+(i+1):'');}return'GameScript'+(i>0?'_'+(i+1):'');}
-function makeStepLabel(cmd){var a=cmd.action||'',nm=cmd.name||'';if(a==='inject_script')return'create '+(cmd.script_type||'Script')+' '+(nm||'?');if(a==='batch_inject')return'batch '+(cmd.scripts||[]).length+' scripts';if(a==='create_gui')return'create GUI '+nm;if(a==='get_theme')return'get theme '+(cmd.theme||'nexus_ai');if(a==='apply_theme')return'apply theme '+nm;if(a==='create_shop_script')return'create Shop '+nm;if(a==='create_admin_panel')return'create AdminPanel '+nm;if(a==='create_datastore_script')return'create DataStore '+nm;if(a==='create_leaderstats_script')return'create Leaderstats '+nm;if(a==='create_zombie')return'create Zombie '+nm;if(a==='create_vehicle')return'create Vehicle '+nm;if(a==='create_tycoon_plot')return'create TycoonPlot '+nm;if(a==='create_badge_script')return'create BadgeManager '+nm;if(a==='create_notification_script')return'create NotifSystem '+nm;if(a==='setup_topbar')return'setup Topbar';if(a==='import_module')return'import '+(cmd.module||nm);if(a==='inject_quick_script')return'quick inject '+(cmd.script||nm);if(a==='use_asset_folder_script')return'use asset '+(cmd.name||'');if(a==='read_script')return(curLang==='id'?'baca ':'read ')+nm;if(a==='scan_workspace'||a==='request_scan')return'scan Workspace';if(a==='resolve_mention')return'resolve @'+(cmd.name||cmd.mention||'?');if(a==='play_test'||a==='run_test')return T().testRunning;if(a==='stop_test')return T().testDone;if(a==='none')return null;return a+(nm?' '+nm:'');}
+
+// ── MASTER PARSER ─────────────────────────────────────────────────────────────
+
+function parseAllCommands(text) {
+  var cmds = parseJsonBlocks(text);
+  var callCmds = parseCallBlocks(text);
+
+  // Merge, avoiding duplicates
+  callCmds.forEach(function(cmd) {
+    var exists = cmds.some(function(e) {
+      return e.action === cmd.action && (e.name || '') === (cmd.name || '');
+    });
+    if (!exists) cmds.push(cmd);
+  });
+
+  // Fallback: scan raw text for JSON with "action" key
+  if (cmds.length === 0) {
+    var jsonMatches = text.match(/(\[[\s\S]*?"action"[\s\S]*?\]|\{[\s\S]*?"action"[\s\S]*?\})/g);
+    if (jsonMatches) {
+      jsonMatches.forEach(function(raw) {
+        if (raw.length > 30000) return;
+        var parsed = _tryParseJson(raw.trim());
+        if (!parsed) return;
+        var items = Array.isArray(parsed) ? parsed : [parsed];
+        items.forEach(function(item) {
+          if (!item || !item.action) return;
+          var norm = _normalizeCmd(item);
+          if (norm) {
+            var exists = cmds.some(function(e) {
+              return e.action === norm.action && (e.name || '') === (norm.name || '');
+            });
+            if (!exists) cmds.push(norm);
+          }
+        });
+      });
+    }
+  }
+
+  // Last resort: extract from "commands": [...] pattern
+  if (cmds.length === 0) {
+    var batchMatch = text.match(/"commands"\s*:\s*(\[[\s\S]*?\])/);
+    if (batchMatch) {
+      var batchParsed = _tryParseJson(batchMatch[1]);
+      if (Array.isArray(batchParsed)) {
+        batchParsed.forEach(function(item) {
+          var norm = _normalizeCmd(item);
+          if (norm && !cmds.some(function(e) {
+            return e.action === norm.action && (e.name || '') === (norm.name || '');
+          })) {
+            cmds.push(norm);
+          }
+        });
+      }
+    }
+  }
+
+  return cmds;
+}
+
+// ── SCRIPT DETECTION HELPERS ──────────────────────────────────────────────────
+
+function detectScriptParent(code) {
+  var c = code || '';
+  var first200 = c.slice(0, 200);
+  var trimmed = c.trim();
+  var typeHint = c.match(/--\s*script_type:\s*(\w+)/i);
+  var parentHint = c.match(/--\s*parent:\s*([\w.]+)/i);
+  var type = 'Script', parent = 'ServerScriptService';
+
+  var isModule = (
+    (/^\s*local\s+\w+\s*=\s*\{\s*\}/.test(trimmed) && /\breturn\s+\w+\s*$/.test(trimmed)) ||
+    /^return\s*\{/.test(trimmed) ||
+    /^--\s*@?(module|modulescript)/im.test(first200)
+  );
+
+  if (isModule) {
+    parent = 'ReplicatedStorage';
+    type = 'ModuleScript';
+  } else if (
+    /Players\.LocalPlayer|PlayerGui|LocalUserInputService|UserInputService|StarterPlayerScripts/i.test(c) ||
+    (/ScreenGui|StarterGui/i.test(c) && !/ServerScriptService|DataStoreService|PlayerAdded/i.test(c))
+  ) {
+    if (/ReplicatedFirst|LoadingScreen_Client/i.test(c) || /ReplicatedFirst/i.test(first200)) {
+      parent = 'ReplicatedFirst';
+      type = 'LocalScript';
+    } else if (/StarterCharacterScripts/i.test(c)) {
+      parent = 'StarterCharacterScripts';
+      type = 'LocalScript';
+    } else {
+      parent = 'StarterPlayerScripts';
+      type = 'LocalScript';
+    }
+  } else if (
+    /DataStoreService|PlayerAdded|OnServerEvent|FireClient|ServerStorage|HttpService:GetAsync/i.test(c)
+  ) {
+    parent = 'ServerScriptService';
+    type = 'Script';
+  } else if (/ReplicatedFirst/i.test(first200)) {
+    parent = 'ReplicatedFirst';
+    type = 'LocalScript';
+  } else if (/Players\.LocalPlayer/i.test(first200)) {
+    parent = 'StarterPlayerScripts';
+    type = 'LocalScript';
+  }
+
+  if (typeHint) type = typeHint[1];
+  if (parentHint) parent = parentHint[1];
+  return { parent: parent, type: type };
+}
+
+function makeScriptName(prompt, i, code) {
+  if (code) {
+    var nm = code.match(/--\s*name:\s*([\w_]+)/i);
+    if (nm && nm[1] && nm[1].length > 2) return nm[1];
+  }
+  var l = (prompt || '').toLowerCase();
+  var kw = [
+    ['loading', 'LoadingScreen_Client'],
+    ['shop gui', 'ShopGUI_Client'],
+    ['shop', 'ShopSystem_Server'],
+    ['leaderboard', 'Leaderboard_Server'],
+    ['admin', 'AdminSystem_Server'],
+    ['coin', 'CoinSystem_Server'],
+    ['inventory', 'InventorySystem'],
+    ['npc', 'NPCBehavior_Server'],
+    ['datastore', 'DataStore_Module'],
+    ['zombie', 'ZombieAI_Server'],
+    ['vehicle', 'VehicleSystem'],
+    ['tycoon', 'TycoonPlot'],
+    ['round', 'RoundSystem_Server'],
+    ['hud', 'HUD_Client'],
+    ['gui', 'GUIScript_Client'],
+    ['chat', 'ChatSystem_Client'],
+    ['badge', 'BadgeManager_Server'],
+    ['team', 'TeamSystem_Server'],
+  ];
+  for (var k = 0; k < kw.length; k++) {
+    if (l.includes(kw[k][0])) return kw[k][1] + (i > 0 ? '_' + (i + 1) : '');
+  }
+  return 'GameScript' + (i > 0 ? '_' + (i + 1) : '');
+}
+
+function makeStepLabel(cmd) {
+  var a = cmd.action || '', nm = cmd.name || '';
+  if (a === 'inject_script')        return 'Create ' + (cmd.script_type || 'Script') + ': ' + (nm || '?');
+  if (a === 'create_script')        return 'Create Script: ' + nm;
+  if (a === 'create_local_script')  return 'Create LocalScript: ' + nm;
+  if (a === 'create_module')        return 'Create ModuleScript: ' + nm;
+  if (a === 'edit_script')          return 'Edit Script: ' + nm;
+  if (a === 'batch_inject')         return 'Batch inject (' + (cmd.scripts || []).length + ')';
+  if (a === 'create_gui')           return 'Create GUI: ' + nm;
+  if (a === 'create_frame')         return 'Create Frame: ' + nm;
+  if (a === 'get_theme')            return 'Get theme: ' + (cmd.theme || 'nexus_ai');
+  if (a === 'apply_theme')          return 'Apply theme: ' + nm;
+  if (a === 'create_remote')        return 'Create Remote: ' + nm;
+  if (a === 'set_property')         return 'Set property: ' + nm + '.' + (cmd.property || '');
+  if (a === 'set_service_property') return 'Set service prop: ' + (cmd.service || nm);
+  if (a === 'set_lighting')         return 'Set lighting';
+  if (a === 'fill_terrain')         return 'Fill terrain: ' + (cmd.material || '');
+  if (a === 'create_part')          return 'Create Part: ' + nm;
+  if (a === 'create_npc')           return 'Create NPC: ' + nm;
+  if (a === 'delete_object')        return 'Delete: ' + nm;
+  if (a === 'batch_commands')       return 'Batch (' + (cmd.commands || []).length + ' cmds)';
+  if (a === 'read_script')          return 'Read script: ' + nm;
+  if (a === 'scan_workspace' || a === 'request_scan') return 'Scan workspace';
+  if (a === 'resolve_mention')      return 'Resolve @' + (cmd.name || cmd.mention || '?');
+  if (a === 'play_test' || a === 'run_test') return 'Start play test';
+  if (a === 'stop_test')            return 'Stop play test';
+  if (a === 'none')                 return null;
+  return a + (nm ? ': ' + nm : '');
+}
 
 // ── FETCH HELPERS ─────────────────────────────────────────────────────────────
-function _sleep(ms){return new Promise(function(resolve){setTimeout(resolve,ms);});}
-function _jitter(ms){return ms+Math.floor(Math.random()*ms*0.5);}
-async function fetchRetry(url,opts,tries){
-  tries=tries||3;
-  if(opts&&opts.headers&&typeof opts.headers==='object'&&url&&url.indexOf('/api/control')!==-1){opts.headers['X-Nexus-Nonce']=_csrfNonce;if(isAdmin()||isOwner()){opts.headers['X-Admin-Token']=_adminToken||generateAdminToken();}}
-  for(var i=0;i<tries;i++){
-    try{
-      var ctrl=new AbortController();var tid=setTimeout(function(){ctrl.abort();},12000);
-      var mergedOpts=Object.assign({},opts,{signal:ctrl.signal});
-      var r=await fetch(url,mergedOpts);clearTimeout(tid);
-      if(r.ok)return r;
-      if(r.status===429){toast(curLang==='id'?'Rate limit server, tunggu...':'Server rate limit, waiting...','var(--yellow)');await _sleep(_jitter(3000*(i+1)));}
-      else if(r.status>=500){if(i<tries-1)await _sleep(_jitter(1000*(i+1)));else return r;}
-      else{return r;}
-    }catch(e){
-      if(e&&e.name==='AbortError'){if(opts&&opts.signal&&opts.signal.aborted)throw e;if(i<tries-1){await _sleep(_jitter(800*(i+1)));continue;}throw e;}
-      if(i===tries-1)throw e;
-      await _sleep(_jitter(800*(i+1)));
+
+function _sleep(ms) { return new Promise(function(resolve) { setTimeout(resolve, ms); }); }
+function _jitter(ms) { return ms + Math.floor(Math.random() * ms * 0.4); }
+
+function _isAbortError(e) {
+  return e && (e.name === 'AbortError' || String(e.message).includes('AbortError'));
+}
+
+async function fetchRetry(url, opts, tries) {
+  tries = tries || 3;
+  if (opts && opts.headers && typeof opts.headers === 'object' && url && url.indexOf('/api/control') !== -1) {
+    opts.headers['X-Nexus-Nonce'] = _csrfNonce;
+    if (isAdmin() || isOwner()) {
+      opts.headers['X-Admin-Token'] = _adminToken || generateAdminToken();
+    }
+  }
+  for (var i = 0; i < tries; i++) {
+    try {
+      var ctrl = new AbortController();
+      var tid = setTimeout(function() { ctrl.abort(); }, 12000);
+      var mergedOpts = Object.assign({}, opts, { signal: ctrl.signal });
+      var r = await fetch(url, mergedOpts);
+      clearTimeout(tid);
+      if (r.ok) return r;
+      if (r.status === 429) {
+        var waitMs = _jitter(3000 * (i + 1));
+        toast(curLang === 'id' ? 'Rate limit server, tunggu...' : 'Server rate limit, waiting...', 'var(--yellow)');
+        await _sleep(waitMs);
+      } else if (r.status >= 500) {
+        if (i < tries - 1) await _sleep(_jitter(1000 * (i + 1)));
+        else return r;
+      } else {
+        return r;
+      }
+    } catch (e) {
+      if (_isAbortError(e)) {
+        // If caller's signal is aborted, re-throw; otherwise retry
+        if (opts && opts.signal && opts.signal.aborted) throw e;
+        if (i < tries - 1) { await _sleep(_jitter(800 * (i + 1))); continue; }
+        throw e;
+      }
+      if (i === tries - 1) throw e;
+      await _sleep(_jitter(800 * (i + 1)));
     }
   }
   return null;
 }
-async function safeFetch(bodyData,signal){
-  try{
-    if(bodyData&&bodyData.command&&bodyData.command.source&&bodyData.command.source.length>80000){bodyData=Object.assign({},bodyData,{command:Object.assign({},bodyData.command,{source:bodyData.command.source.slice(0,80000)+'-- [TRUNCATED: script too large]'})});}
-    var opts={method:'POST',headers:{'Content-Type':'application/json','X-Nexus-Nonce':_csrfNonce},body:JSON.stringify(bodyData)};
-    if(signal&&!signal.aborted){opts.signal=signal;}
-    var r=await fetch(API_URL,opts);return r;
-  }catch(e){if(e&&e.name==='AbortError')throw e;console.warn('[NEXUS inject] safeFetch error:',e&&e.message);return null;}
+
+async function safeFetch(bodyData, signal) {
+  try {
+    // Truncate oversized sources to prevent payload bloat
+    if (bodyData && bodyData.command && bodyData.command.source &&
+        bodyData.command.source.length > 80000) {
+      bodyData = Object.assign({}, bodyData, {
+        command: Object.assign({}, bodyData.command, {
+          source: bodyData.command.source.slice(0, 80000) + '\n-- [TRUNCATED: script too large]'
+        })
+      });
+    }
+    var opts = {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'X-Nexus-Nonce': _csrfNonce },
+      body: JSON.stringify(bodyData)
+    };
+    if (signal && !signal.aborted) opts.signal = signal;
+    var r = await fetch(API_URL, opts);
+    return r;
+  } catch (e) {
+    if (_isAbortError(e)) throw e;
+    console.warn('[NEXUS inject] safeFetch error:', e && e.message);
+    return null;
+  }
 }
-async function safeFetchWithRetry(bodyData,signal,maxRetries){
-  maxRetries=maxRetries||2;
-  for(var attempt=0;attempt<=maxRetries;attempt++){
-    if(signal&&signal.aborted)throw new Error('AbortError');
-    try{var r=await safeFetch(bodyData,signal);if(r)return r;if(attempt<maxRetries){await _sleep(_jitter(1000*(attempt+1)));continue;}return null;}
-    catch(e){if(e&&(e.name==='AbortError'||String(e.message).includes('AbortError')))throw e;if(attempt<maxRetries){await _sleep(_jitter(1000*(attempt+1)));continue;}throw e;}
+
+async function safeFetchWithRetry(bodyData, signal, maxRetries) {
+  maxRetries = (maxRetries !== undefined) ? maxRetries : 2;
+  for (var attempt = 0; attempt <= maxRetries; attempt++) {
+    if (signal && signal.aborted) throw new Error('AbortError');
+    try {
+      var r = await safeFetch(bodyData, signal);
+      if (r) return r;
+      if (attempt < maxRetries) {
+        await _sleep(_jitter(1000 * (attempt + 1)));
+        continue;
+      }
+      return null;
+    } catch (e) {
+      if (_isAbortError(e)) throw e;
+      if (attempt < maxRetries) {
+        await _sleep(_jitter(1000 * (attempt + 1)));
+        continue;
+      }
+      throw e;
+    }
   }
   return null;
 }
 
 // ── AUTO INJECT TO STUDIO ─────────────────────────────────────────────────────
-async function autoInjectToStudio(aiResponse,userPrompt){
-  if(!studioConnected)return null;
-  var t=T();var summary=[];var user=(SESSION?SESSION.user.username:'').toLowerCase();
-  var jsonCmds=parseAllCommands(aiResponse);var luaBlocks=parseLuaBlocks(aiResponse);
-  if(jsonCmds.length||luaBlocks.length){console.log('[NEXUS inject] Commands:',jsonCmds.length,'Lua blocks:',luaBlocks.length);}
-  var allCmds=[];
-  jsonCmds.forEach(function(cmd){if(!cmd.action||cmd.action==='none')return;if(cmd.code&&!cmd.source){cmd.source=cmd.code;delete cmd.code;}allCmds.push({type:'json',cmd:cmd});});
-  luaBlocks.forEach(function(code,i){var sanR=sanitizeLuaCode(code);if(!sanR.ok)return;var info=detectScriptParent(sanR.code);var tm=sanR.code.match(/--\s*script_type:\s*(\w+)/i);if(tm)info.type=tm[1];var pm=sanR.code.match(/--\s*parent:\s*([\w.]+)/i);if(pm)info.parent=pm[1];var sName=makeScriptName(userPrompt,i,sanR.code);allCmds.push({type:'lua',code:sanR.code,info:info,name:sName});});
-  if(!allCmds.length){console.warn('[NEXUS inject] Tidak ada command ditemukan di respon AI.');return null;}
-  var hasPlayTest=jsonCmds.some(function(c){return c.action==='play_test'||c.action==='run_test';});
-  var hasStopTest=jsonCmds.some(function(c){return c.action==='stop_test';});
-  if(S.playTestEnabled&&!hasPlayTest&&!hasStopTest){allCmds.push({type:'playtest'});}
-  var planSteps=[];
-  allCmds.forEach(function(item){
-    var lbl,sub,meta;
-    if(item.type==='json'){lbl=makeStepLabel(item.cmd);if(!lbl)return;sub=item.cmd.parent||item.cmd.theme||'';}
-    else if(item.type==='lua'){lbl=(curLang==='id'?'Buat ':'Create ')+item.info.type+': '+item.name;sub=item.info.parent;meta={code:item.code,name:item.name,parent:item.info.parent,type:item.info.type};}
-    else{lbl=t.testRunning;sub='auto play_test';}
-    var sid=addStep(lbl,'pending',sub,meta||undefined);
-    planSteps.push(Object.assign({},item,{sid:sid}));
-  });
-  var cntEl=document.getElementById('stepsCount');if(cntEl)cntEl.textContent='(0/'+planSteps.length+')';
-  var doneCount=0;
-  for(var pi=0;pi<planSteps.length;pi++){
-    var step=planSteps[pi];if(!step.sid)continue;
-    updateStep(step.sid,'running');await _sleep(80);
-    var sig=S.cancelCtrl?S.cancelCtrl.signal:undefined;if(sig&&sig.aborted)break;
-    if(step.type==='lua'){
-      try{
-        var r2=await safeFetchWithRetry({type:'inject_command',command:{action:'inject_script',name:step.name,parent:step.info.parent,script_type:step.info.type,source:step.code},_user:user,_target_user:user},sig,2);
-        if(r2&&r2.ok){var rd2;try{rd2=await r2.json();}catch(je){rd2={};}if(rd2.status==='ok'||rd2.pushed>0){updateStep(step.sid,'done',step.info.type+': '+step.name,step.info.parent);summary.push(step.info.type+': '+step.name);}else{updateStep(step.sid,'error',(rd2.error||rd2.hint||'server rejected').slice(0,60));console.warn('[NEXUS inject] Lua inject rejected:',rd2);}}
-        else if(r2){var errMsg2='HTTP '+r2.status;try{var ed2=await r2.json();if(ed2&&ed2.error)errMsg2=ed2.error.slice(0,60);}catch(e){}updateStep(step.sid,'error',errMsg2);}
-        else{updateStep(step.sid,'error','No response (network error)');}
-      }catch(e){if(e&&(e.name==='AbortError'||String(e.message).includes('AbortError')))return null;updateStep(step.sid,'error',String(e&&e.message||'unknown').slice(0,60));}
-    }else if(step.type==='playtest'){
-      var ptSid=step.sid;
-      try{var ptDur=S.playTestDuration||15;await safeFetchWithRetry({type:'batch_commands',commands:[{action:'play_test',duration:ptDur}],_user:user,_target_user:user},sig,1);await _sleep(5000);updateStep(ptSid,'done',t.testDone);}
-      catch(e){if(e&&(e.name==='AbortError'||String(e.message).includes('AbortError')))return null;updateStep(ptSid,'error',String(e&&e.message||'').slice(0,60));}
-    }else{
-      var cmd=step.cmd;var a=cmd.action||'';var cmdToSend=Object.assign({},cmd);if(cmdToSend.code&&!cmdToSend.source){cmdToSend.source=cmdToSend.code;delete cmdToSend.code;}
-      try{
-        var r4=await safeFetchWithRetry({type:'inject_command',command:cmdToSend,_user:user,_target_user:user},sig,2);
-        if(r4&&r4.ok){var rd4;try{rd4=await r4.json();}catch(je){rd4={};}if(rd4.status==='ok'||rd4.pushed>0){if(a==='play_test'||a==='run_test'){updateStep(step.sid,'running',t.testRunning);_playTestActive=true;}else if(a==='stop_test'){updateStep(step.sid,'done');_playTestActive=false;}else if(a==='read_script'||a==='scan_workspace'||a==='request_scan'){updateStep(step.sid,'info');}else{updateStep(step.sid,'done');var lbl2=makeStepLabel(cmd);if(lbl2)summary.push(lbl2);}}else{updateStep(step.sid,'error',(rd4.error||rd4.hint||'action rejected').slice(0,60));console.warn('[NEXUS inject] JSON cmd rejected:',a,rd4);}}
-        else if(r4){var errTxt='HTTP '+r4.status;try{var ed4=await r4.json();if(ed4&&ed4.error)errTxt=ed4.error.slice(0,60);}catch(e){}updateStep(step.sid,'error',errTxt);}
-        else{updateStep(step.sid,'error','No response (check network)');}
-      }catch(e){if(e&&(e.name==='AbortError'||String(e.message).includes('AbortError')))return null;updateStep(step.sid,'error',String(e&&e.message||'unknown').slice(0,60));}
-    }
-    doneCount++;if(cntEl)cntEl.textContent='('+doneCount+'/'+planSteps.length+')';
-    if(pi<planSteps.length-1)await _sleep(180);
+
+async function autoInjectToStudio(aiResponse, userPrompt) {
+  if (!studioConnected) return null;
+
+  var t = T();
+  var summary = [];
+  var user = (SESSION ? SESSION.user.username : '').toLowerCase();
+
+  var jsonCmds = parseAllCommands(aiResponse);
+  var luaBlocks = parseLuaBlocks(aiResponse);
+
+  if (jsonCmds.length || luaBlocks.length) {
+    console.log('[NEXUS inject] Commands:', jsonCmds.length, 'Lua blocks:', luaBlocks.length);
   }
-  return summary.length>0?summary:null;
+
+  // Build unified command list
+  var allCmds = [];
+
+  jsonCmds.forEach(function(cmd) {
+    if (!cmd.action || cmd.action === 'none') return;
+    allCmds.push({ type: 'json', cmd: cmd });
+  });
+
+  luaBlocks.forEach(function(code, i) {
+    var sanR = sanitizeLuaCode(code);
+    if (!sanR.ok) return;
+    var info = detectScriptParent(sanR.code);
+    // Header overrides
+    var tm = sanR.code.match(/--\s*script_type:\s*(\w+)/i);
+    if (tm) info.type = tm[1];
+    var pm = sanR.code.match(/--\s*parent:\s*([\w.]+)/i);
+    if (pm) info.parent = pm[1];
+    var sName = makeScriptName(userPrompt, i, sanR.code);
+    allCmds.push({ type: 'lua', code: sanR.code, info: info, name: sName });
+  });
+
+  if (!allCmds.length) {
+    console.warn('[NEXUS inject] No commands found in AI response.');
+    return null;
+  }
+
+  // Optionally append a play test step
+  var hasPlayTest = jsonCmds.some(function(c) { return c.action === 'play_test' || c.action === 'run_test'; });
+  var hasStopTest = jsonCmds.some(function(c) { return c.action === 'stop_test'; });
+  if (S.playTestEnabled && !hasPlayTest && !hasStopTest) {
+    allCmds.push({ type: 'playtest' });
+  }
+
+  // Build plan steps in the UI
+  var planSteps = [];
+  allCmds.forEach(function(item) {
+    var lbl, sub, meta;
+    if (item.type === 'json') {
+      lbl = makeStepLabel(item.cmd);
+      if (!lbl) return;
+      sub = item.cmd.parent || item.cmd.theme || '';
+    } else if (item.type === 'lua') {
+      lbl = (curLang === 'id' ? 'Buat ' : 'Create ') + item.info.type + ': ' + item.name;
+      sub = item.info.parent;
+      meta = { code: item.code, name: item.name, parent: item.info.parent, type: item.info.type };
+    } else {
+      lbl = t.testRunning;
+      sub = 'auto play_test';
+    }
+    var sid = addStep(lbl, 'pending', sub, meta || undefined);
+    planSteps.push(Object.assign({}, item, { sid: sid }));
+  });
+
+  // Update step counter in UI
+  var cntEl = document.getElementById('stepsCount');
+  if (cntEl) cntEl.textContent = '(0/' + planSteps.length + ')';
+
+  var doneCount = 0;
+
+  for (var pi = 0; pi < planSteps.length; pi++) {
+    var step = planSteps[pi];
+    if (!step.sid) { doneCount++; continue; }
+
+    updateStep(step.sid, 'running');
+    await _sleep(80);
+
+    // Check for cancellation
+    var sig = S.cancelCtrl ? S.cancelCtrl.signal : undefined;
+    if (sig && sig.aborted) break;
+
+    // ── Lua script injection ───────────────────────────────────────────────
+    if (step.type === 'lua') {
+      try {
+        var r2 = await safeFetchWithRetry({
+          type: 'inject_command',
+          command: {
+            action: 'inject_script',
+            name: step.name,
+            parent: step.info.parent,
+            script_type: step.info.type,
+            source: step.code
+          },
+          _user: user,
+          _target_user: user
+        }, sig, 2);
+
+        if (r2 && r2.ok) {
+          var rd2;
+          try { rd2 = await r2.json(); } catch (je) { rd2 = {}; }
+          if (rd2.status === 'ok' || rd2.pushed > 0) {
+            updateStep(step.sid, 'done', step.info.type + ': ' + step.name, step.info.parent);
+            summary.push(step.info.type + ': ' + step.name);
+          } else {
+            var rejMsg = (rd2.error || rd2.hint || 'server rejected').slice(0, 80);
+            updateStep(step.sid, 'error', rejMsg);
+            console.warn('[NEXUS inject] Lua inject rejected:', rd2);
+          }
+        } else if (r2) {
+          var httpErr = 'HTTP ' + r2.status;
+          try { var ed2 = await r2.json(); if (ed2 && ed2.error) httpErr = ed2.error.slice(0, 80); } catch (e) {}
+          updateStep(step.sid, 'error', httpErr);
+        } else {
+          updateStep(step.sid, 'error', 'No response (network error)');
+        }
+      } catch (e) {
+        if (_isAbortError(e)) return null;
+        updateStep(step.sid, 'error', String(e && e.message || 'unknown').slice(0, 80));
+      }
+
+    // ── Play test step ────────────────────────────────────────────────────
+    } else if (step.type === 'playtest') {
+      try {
+        var ptDur = S.playTestDuration || 15;
+        await safeFetchWithRetry({
+          type: 'batch_commands',
+          commands: [{ action: 'play_test', duration: ptDur }],
+          _user: user,
+          _target_user: user
+        }, sig, 1);
+        await _sleep(5000);
+        updateStep(step.sid, 'done', t.testDone);
+      } catch (e) {
+        if (_isAbortError(e)) return null;
+        updateStep(step.sid, 'error', String(e && e.message || '').slice(0, 80));
+      }
+
+    // ── JSON command step ─────────────────────────────────────────────────
+    } else {
+      var cmd = step.cmd;
+      var a = cmd.action || '';
+      var cmdToSend = Object.assign({}, cmd);
+      // Normalize code -> source
+      if (cmdToSend.code && !cmdToSend.source) {
+        cmdToSend.source = cmdToSend.code;
+        delete cmdToSend.code;
+      }
+
+      try {
+        var r4 = await safeFetchWithRetry({
+          type: 'inject_command',
+          command: cmdToSend,
+          _user: user,
+          _target_user: user
+        }, sig, 2);
+
+        if (r4 && r4.ok) {
+          var rd4;
+          try { rd4 = await r4.json(); } catch (je) { rd4 = {}; }
+          if (rd4.status === 'ok' || rd4.pushed > 0) {
+            if (a === 'play_test' || a === 'run_test') {
+              updateStep(step.sid, 'running', t.testRunning);
+              _playTestActive = true;
+            } else if (a === 'stop_test') {
+              updateStep(step.sid, 'done');
+              _playTestActive = false;
+            } else if (a === 'read_script' || a === 'scan_workspace' || a === 'request_scan') {
+              updateStep(step.sid, 'info');
+            } else {
+              updateStep(step.sid, 'done');
+              var lbl2 = makeStepLabel(cmd);
+              if (lbl2) summary.push(lbl2);
+            }
+          } else {
+            var rejMsg2 = (rd4.error || rd4.hint || 'action rejected').slice(0, 80);
+            updateStep(step.sid, 'error', rejMsg2);
+            console.warn('[NEXUS inject] JSON cmd rejected:', a, rd4);
+          }
+        } else if (r4) {
+          var errTxt = 'HTTP ' + r4.status;
+          try { var ed4 = await r4.json(); if (ed4 && ed4.error) errTxt = ed4.error.slice(0, 80); } catch (e) {}
+          updateStep(step.sid, 'error', errTxt);
+        } else {
+          updateStep(step.sid, 'error', 'No response (check network)');
+        }
+      } catch (e) {
+        if (_isAbortError(e)) return null;
+        updateStep(step.sid, 'error', String(e && e.message || 'unknown').slice(0, 80));
+      }
+    }
+
+    doneCount++;
+    if (cntEl) cntEl.textContent = '(' + doneCount + '/' + planSteps.length + ')';
+    if (pi < planSteps.length - 1) await _sleep(180);
+  }
+
+  return summary.length > 0 ? summary : null;
 }
 
 // ── SYSTEM PROMPT ─────────────────────────────────────────────────────────────
