@@ -24,7 +24,7 @@ const jetbrainsMono = JetBrains_Mono({
    Site constants  (single source of truth)
 ───────────────────────────────────────────────────────────────────────────── */
 const BASE_URL =
-  process.env.NEXT_PUBLIC_BASE_URL ?? "https://nexusai-gg-beta.vercel.app";
+  process.env.NEXT_PUBLIC_BASE_URL ?? "https://nexusai-roblox.vercel.app";
 
 const APP_NAME        = "NEXUS AI";
 const APP_SHORT_NAME  = "NEXUS";
