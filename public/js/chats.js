@@ -164,17 +164,16 @@ var MODEL_LIST=[
 {id:'gemini-3.1-flash-lite',prov:'gemini',cost:0,label:'Gemini 3.1 Flash Lite',icon:'/gemini.png',badge:'FREE'},
 {id:'gemini-3.1-pro-preview',prov:'gemini',cost:8,label:'Gemini 3.1 Pro',icon:'/gemini.png',badge:'BEST'},
 {grp:'StepFun'},
-{id:'stepfun/step-3.5-flash',prov:'openrouter',cost:0,label:'Step 3.5 Flash',icon:'/stepfun.png',badge:'FREE'},
+{id:'stepfun/step-3.7-flash',prov:'openrouter',cost:0,label:'Step 3.7 Flash',icon:'/stepfun.png',badge:'FREE'},
 {grp:'Poolside'},
 {id:'poolside/laguna-m.1:free',prov:'openrouter',cost:0,label:'Laguna M.1',icon:'/laguna.svg',badge:'FREE'},
 {grp:'DeepSeek'},
 {id:'deepseek/deepseek-v4-flash:free',prov:'openrouter',cost:12,label:'DeepSeek V4 Flash',icon:'/deepseek.svg',badge:'BEST'},
-{id:'deepseek/deepseek-v4-flash',prov:'openrouter',cost:22,label:'DeepSeek V4 Pro',icon:'deepseek.svg',badge:'BEST'},
+{id:'deepseek/deepseek-v4-flash',prov:'openrouter',cost:23,label:'DeepSeek V4 Pro',icon:'deepseek.svg',badge:'BEST'},
 {grp:'Anthropic'},
 {id:'anthropic/claude-3.5-haiku',prov:'openrouter',cost:18,label:'Claude Haiku 3.5',icon:'/claude.png',badge:'SMART'},
-{id:'anthropic/claude-3.7-sonnet',prov:'openrouter',cost:20,label:'Claude Sonnet 3.7',icon:'/claude.png',badge:'SMART'},
-{id:'anthropic/claude-sonnet-4-5',prov:'openrouter',cost:33,label:'Claude Sonnet 4.5',icon:'/claude.png',badge:'FAST'},
-{id:'anthropic/claude-opus-4-5',prov:'openrouter',cost:42,label:'Claude Opus 4.5',icon:'/claude.png',badge:'BEST'}
+{id:'anthropic/claude-sonnet-4.6',prov:'openrouter',cost:36,label:'Claude Sonnet 4.6',icon:'/claude.png',badge:'BEST'},
+{id:'anthropic/claude-opus-4.8',prov:'openrouter',cost:42,label:'Claude Opus 4.8',icon:'/claude.png',badge:'BEST'}
 ];
 
 var S={
