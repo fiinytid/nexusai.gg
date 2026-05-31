@@ -33,7 +33,7 @@ const APP_TAGLINE     =
   "Write Lua · Debug Scripts · Build GUIs · Inject into Studio";
 const APP_AUTHOR      = "NEXUS STUDIO";
 const APP_EMAIL       = "support@nexusai.gg";          // update if needed
-const TWITTER_HANDLE  = "@nexusstudio";
+const TWITTER_HANDLE  = "@NexusLabss";
 const DISCORD_URL     = "https://discord.gg/FzAF48mvK5";
 const THEME_COLOR     = "#030312";
 const ACCENT_COLOR    = "#00e5ff";
@@ -295,7 +295,7 @@ const jsonLdSchemas = [
     sameAs: [
       DISCORD_URL,
       `https://twitter.com/${TWITTER_HANDLE.replace("@","")}`,
-      `https://www.youtube.com/@nexusstudio`,
+      `https://www.youtube.com/@NexusLabss`,
       `https://create.roblox.com/store/asset/91870814099475/NEXUS-AI`,
     ],
     contactPoint: {

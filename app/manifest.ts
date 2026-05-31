@@ -43,7 +43,7 @@ export default function manifest(): MetadataRoute.Manifest {
         src:    "/screenshot/mobile.png",
         sizes:  "390x844",
         type:   "image/png",
-        label:  "NEXUS AI Chat on Mobile",
+        label:  "NEXUS AI Chat on Mobile (COMING SOON)",
       },
     ],
     shortcuts: [
@@ -63,7 +63,7 @@ export default function manifest(): MetadataRoute.Manifest {
     related_applications: [
       {
         platform: "web",
-        url:      "https://nexusai-gg-beta.vercel.app",
+        url:      "https://nexusai-rbx.vercel.app",
         id:       "nexusai.gg",
       },
     ],
