@@ -1,12 +1,16 @@
-import { clerkMiddleware } from "@clerk/nextjs/server";
+import { clerkMiddleware, createRouteMatcher } from '@clerk/nextjs/server';
 
-export default clerkMiddleware();
+const isPublicRoute = createRouteMatcher(['/', '/login(.*)']); // sesuaikan dengan rute kamu
+
+export default clerkMiddleware((auth, request) => {
+  if (!isPublicRoute(request)) {
+    auth().protect();
+  }
+});
 
 export const config = {
   matcher: [
-    // Melewati internal Next.js dan semua file statis (seperti gambar, css, dll)
     '/((?!_next|[^?]*\\.[^?]*$).*)',
-    // Selalu jalankan middleware untuk rute API dan TRPC
     '/(api|trpc)(.*)',
   ],
 };
