@@ -50,6 +50,7 @@ const API_SYNC    = '/api/sync'
 const API_CONTROL = '/api/control'
 const RETRY_MAX   = 4
 const RETRY_BASE  = 800
+const PROJECT_NAME_LIMIT = 16
 
 /* ─────────────────────────────────────────────────────────────────────────────
    CSS
@@ -90,9 +91,15 @@ body::before{
 @keyframes shimmer{0%{background-position:-200% 0}100%{background-position:200% 0}}
 @keyframes glow-border{0%,100%{border-color:rgba(0,229,255,.15)}50%{border-color:rgba(0,229,255,.4)}}
 @keyframes float{0%,100%{transform:translateY(0)}50%{transform:translateY(-4px)}}
+@keyframes mobilePulse{0%,100%{box-shadow:0 0 0 0 rgba(255,140,0,.4)}70%{box-shadow:0 0 0 10px rgba(255,140,0,0)}}
+@keyframes scanline{0%{transform:translateY(-100%)}100%{transform:translateY(100vh)}}
+@keyframes desktopEntrance{from{opacity:0;transform:scale(.92) translateY(20px)}to{opacity:1;transform:scale(1) translateY(0)}}
+@keyframes iconFloat{0%,100%{transform:translateY(0) rotate(-2deg)}50%{transform:translateY(-8px) rotate(2deg)}}
 ::-webkit-scrollbar{width:4px;height:4px}
 ::-webkit-scrollbar-thumb{background:var(--b);border-radius:4px}
 ::-webkit-scrollbar-track{background:transparent}
+
+/* ── LOADER ── */
 #dash-loader{position:fixed;inset:0;background:var(--bg);z-index:9999;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:20px;transition:opacity .45s ease;}
 #dash-loader.hide{opacity:0;pointer-events:none;}
 .loader-logo{font-family:"Orbitron",sans-serif;font-size:26px;font-weight:900;background:linear-gradient(135deg,var(--cyan),var(--purple));-webkit-background-clip:text;-webkit-text-fill-color:transparent;letter-spacing:4px;}
@@ -100,15 +107,217 @@ body::before{
 .loader-sub{font-size:9px;color:var(--dim);letter-spacing:2.5px;text-transform:uppercase;}
 .loader-progress{width:160px;height:2px;background:rgba(0,229,255,.08);border-radius:2px;overflow:hidden;}
 .loader-progress-bar{height:100%;width:0%;background:linear-gradient(90deg,var(--cyan),var(--purple));border-radius:2px;transition:width .3s ease;}
+
+/* ── OFFLINE BANNER ── */
 #offlineBanner{position:fixed;top:0;left:0;right:0;z-index:9998;background:rgba(255,140,0,.12);border-bottom:1px solid rgba(255,140,0,.3);padding:7px 20px;display:none;align-items:center;justify-content:center;gap:8px;font-size:10px;color:var(--orange);}
 #offlineBanner.show{display:flex;}
 #offlineBanner svg{width:13px;height:13px;stroke:currentColor;fill:none;stroke-width:2;flex-shrink:0;}
 .retry-btn-offline{padding:3px 10px;border-radius:5px;border:1px solid rgba(255,140,0,.4);background:rgba(255,140,0,.1);color:var(--orange);font-size:9px;cursor:pointer;font-family:"JetBrains Mono",monospace;transition:.15s;margin-left:8px;}
 .retry-btn-offline:hover{background:rgba(255,140,0,.2);}
+
+/* ── SYNC BAR ── */
 #syncBar{position:fixed;bottom:0;left:0;right:0;z-index:300;height:2px;background:transparent;transition:.3s;}
 #syncBar.syncing{background:linear-gradient(90deg,transparent,var(--cyan),var(--purple),transparent);background-size:200% 100%;animation:shimmer 1.5s linear infinite;}
 #syncBar.error{background:var(--pink);}
 #syncBar.ok{background:var(--green);animation:none;}
+
+/* ── MOBILE WARNING POPUP ── */
+.mobile-overlay{
+  position:fixed;inset:0;z-index:99999;
+  background:rgba(3,3,18,.97);
+  display:flex;align-items:center;justify-content:center;
+  padding:20px;
+  backdrop-filter:blur(20px);
+  animation:fadeIn .3s ease;
+}
+.mobile-overlay::before{
+  content:"";position:absolute;inset:0;
+  background:
+    radial-gradient(ellipse at 50% 0%,rgba(255,140,0,.12) 0%,transparent 60%),
+    radial-gradient(ellipse at 50% 100%,rgba(136,0,255,.1) 0%,transparent 50%);
+  pointer-events:none;
+}
+/* scanline effect */
+.mobile-overlay::after{
+  content:"";position:absolute;
+  width:100%;height:2px;
+  background:linear-gradient(90deg,transparent,rgba(255,140,0,.15),transparent);
+  animation:scanline 3s linear infinite;
+  pointer-events:none;
+}
+.mobile-modal{
+  background:linear-gradient(145deg,rgba(13,14,40,.95),rgba(6,7,26,.98));
+  border:1px solid rgba(255,140,0,.3);
+  border-radius:20px;
+  padding:36px 28px 32px;
+  width:100%;max-width:380px;
+  text-align:center;
+  position:relative;
+  box-shadow:
+    0 0 0 1px rgba(255,140,0,.08),
+    0 32px 80px rgba(0,0,0,.95),
+    0 0 60px rgba(255,140,0,.05),
+    inset 0 1px 0 rgba(255,255,255,.04);
+  animation:desktopEntrance .4s cubic-bezier(.34,1.56,.64,1) both;
+}
+.mobile-modal::before{
+  content:"";position:absolute;top:0;left:0;right:0;height:2px;
+  background:linear-gradient(90deg,transparent 5%,var(--orange) 35%,var(--yellow) 65%,transparent 95%);
+  border-radius:20px 20px 0 0;
+}
+.mobile-modal-icon-wrap{
+  width:80px;height:80px;border-radius:20px;
+  background:linear-gradient(135deg,rgba(255,140,0,.12),rgba(255,214,0,.06));
+  border:1px solid rgba(255,140,0,.25);
+  display:flex;align-items:center;justify-content:center;
+  margin:0 auto 22px;
+  position:relative;
+  animation:iconFloat 3s ease-in-out infinite;
+}
+.mobile-modal-icon-wrap::after{
+  content:"";position:absolute;inset:-4px;
+  border-radius:24px;
+  border:1px solid rgba(255,140,0,.1);
+  animation:mobilePulse 2s ease-in-out infinite;
+}
+.mobile-modal-icon-wrap svg{
+  width:36px;height:36px;stroke:var(--orange);fill:none;stroke-width:1.6;
+}
+.mobile-modal-badge{
+  display:inline-flex;align-items:center;gap:5px;
+  background:rgba(255,45,107,.08);
+  border:1px solid rgba(255,45,107,.22);
+  border-radius:20px;
+  padding:4px 12px;
+  font-size:8.5px;color:var(--pink);
+  letter-spacing:1.5px;font-family:"Orbitron",sans-serif;
+  font-weight:700;margin-bottom:14px;
+}
+.mobile-modal-badge svg{width:9px;height:9px;stroke:currentColor;fill:none;stroke-width:2.5;}
+.mobile-modal-title{
+  font-family:"Orbitron",sans-serif;
+  font-size:17px;font-weight:900;
+  color:#fff;margin-bottom:10px;
+  line-height:1.3;letter-spacing:.5px;
+}
+.mobile-modal-title span{
+  background:linear-gradient(135deg,var(--orange),var(--yellow));
+  -webkit-background-clip:text;-webkit-text-fill-color:transparent;
+}
+.mobile-modal-desc{
+  font-size:11px;color:var(--dim2);
+  line-height:1.85;margin-bottom:24px;
+}
+.mobile-modal-desc strong{color:var(--text);}
+.mobile-features{
+  display:flex;flex-direction:column;gap:8px;
+  margin-bottom:24px;text-align:left;
+}
+.mobile-feat-item{
+  display:flex;align-items:center;gap:10px;
+  background:rgba(0,229,255,.03);
+  border:1px solid rgba(0,229,255,.08);
+  border-radius:9px;padding:9px 12px;
+  font-size:10px;color:var(--text);
+}
+.mobile-feat-item svg{
+  width:13px;height:13px;stroke:var(--cyan);
+  fill:none;stroke-width:2;flex-shrink:0;
+}
+.mobile-feat-item span{color:var(--dim2);}
+.mobile-feat-item strong{color:var(--cyan);}
+.mobile-modal-divider{
+  height:1px;background:var(--b);margin:20px 0;
+}
+.mobile-modal-url{
+  background:rgba(0,0,0,.5);
+  border:1px solid var(--b);
+  border-radius:8px;padding:10px 14px;
+  font-size:10px;color:var(--cyan);
+  letter-spacing:.5px;margin-bottom:20px;
+  display:flex;align-items:center;gap:8px;
+  word-break:break-all;text-align:left;
+}
+.mobile-modal-url svg{width:12px;height:12px;stroke:currentColor;fill:none;stroke-width:2;flex-shrink:0;}
+.btn-mobile-continue{
+  width:100%;padding:13px;border-radius:11px;
+  background:linear-gradient(135deg,rgba(255,140,0,.15),rgba(255,214,0,.08));
+  border:1px solid rgba(255,140,0,.35);
+  color:var(--orange);
+  font-family:"Orbitron",sans-serif;
+  font-size:9.5px;font-weight:700;
+  letter-spacing:1px;cursor:pointer;
+  transition:.2s;margin-bottom:10px;
+  display:flex;align-items:center;justify-content:center;gap:8px;
+}
+.btn-mobile-continue:hover{
+  background:linear-gradient(135deg,rgba(255,140,0,.25),rgba(255,214,0,.12));
+  border-color:rgba(255,140,0,.55);
+  transform:translateY(-1px);
+}
+.btn-mobile-continue svg{width:13px;height:13px;stroke:currentColor;fill:none;stroke-width:2.2;}
+.btn-mobile-dismiss{
+  width:100%;padding:10px;border-radius:10px;
+  background:transparent;border:1px solid var(--b);
+  color:var(--dim2);font-size:10px;cursor:pointer;
+  transition:.15s;font-family:"JetBrains Mono",monospace;
+}
+.btn-mobile-dismiss:hover{border-color:rgba(0,229,255,.2);color:var(--text);}
+
+/* ── MOBILE PERSISTENT BANNER ── */
+.mobile-banner{
+  display:flex;align-items:center;gap:10px;
+  background:rgba(255,140,0,.06);
+  border:1px solid rgba(255,140,0,.2);
+  border-radius:10px;padding:10px 14px;
+  margin-bottom:20px;
+  font-size:10px;color:var(--orange);
+}
+.mobile-banner svg{width:13px;height:13px;stroke:currentColor;fill:none;stroke-width:2;flex-shrink:0;}
+.mobile-banner strong{color:var(--yellow);}
+.mobile-banner-text{flex:1;line-height:1.5;}
+.btn-banner-reopen{
+  padding:4px 10px;border-radius:6px;
+  border:1px solid rgba(255,140,0,.3);
+  background:rgba(255,140,0,.07);
+  color:var(--orange);font-size:9px;
+  cursor:pointer;font-family:"JetBrains Mono",monospace;
+  white-space:nowrap;transition:.15s;flex-shrink:0;
+}
+.btn-banner-reopen:hover{background:rgba(255,140,0,.15);}
+
+/* ── MOBILE DISABLED OVERLAY ON CREATE ── */
+.create-mobile-block{
+  position:absolute;inset:0;z-index:10;
+  background:rgba(3,3,18,.72);
+  backdrop-filter:blur(4px);
+  border-radius:14px;
+  display:flex;flex-direction:column;
+  align-items:center;justify-content:center;
+  gap:10px;cursor:not-allowed;
+}
+.create-mobile-block svg{width:28px;height:28px;stroke:var(--orange);fill:none;stroke-width:1.6;}
+.create-mobile-block p{font-size:11px;color:var(--orange);text-align:center;font-family:"Orbitron",sans-serif;font-weight:700;letter-spacing:.5px;}
+.create-mobile-block span{font-size:9.5px;color:var(--dim2);text-align:center;line-height:1.6;padding:0 20px;}
+.create-mobile-block button{
+  padding:8px 18px;border-radius:8px;
+  border:1px solid rgba(255,140,0,.3);
+  background:rgba(255,140,0,.1);color:var(--orange);
+  font-size:10px;cursor:pointer;
+  font-family:"JetBrains Mono",monospace;
+  margin-top:4px;transition:.15s;
+}
+.create-mobile-block button:hover{background:rgba(255,140,0,.2);}
+
+/* ── CHAR COUNTER ── */
+.input-row-wrap{display:flex;flex-direction:column;gap:6px;}
+.char-counter-row{display:flex;align-items:center;justify-content:space-between;padding:0 2px;}
+.char-counter{font-size:9.5px;color:var(--dim2);transition:.2s;}
+.char-counter.warn{color:var(--yellow);}
+.char-counter.limit{color:var(--pink);}
+.char-hint{font-size:9px;color:var(--dim);font-style:italic;}
+
+/* ── NAV ── */
 .dnav{position:sticky;top:0;z-index:200;display:flex;align-items:center;justify-content:space-between;padding:0 32px;height:58px;background:rgba(3,3,18,.95);border-bottom:1px solid var(--b);backdrop-filter:blur(28px);}
 .dnav-logo{font-family:"Orbitron",sans-serif;font-size:14px;font-weight:900;background:linear-gradient(135deg,var(--cyan),var(--purple));-webkit-background-clip:text;-webkit-text-fill-color:transparent;text-decoration:none;letter-spacing:2.5px;display:flex;align-items:center;gap:10px;cursor:pointer;}
 .dnav-logo-icon{width:30px;height:30px;border-radius:8px;overflow:hidden;border:1px solid var(--b);flex-shrink:0;box-shadow:0 0 12px rgba(0,229,255,.15);}
@@ -140,6 +349,8 @@ body::before{
 .ud-item.danger{color:rgba(255,45,107,.7);}
 .ud-item.danger:hover{background:rgba(255,45,107,.07);color:var(--pink);}
 .ud-divider{height:1px;background:var(--b);}
+
+/* ── MAIN ── */
 .dash-main{max-width:1080px;margin:0 auto;padding:44px 24px 80px;position:relative;z-index:1;}
 .page-header{display:flex;align-items:center;justify-content:space-between;gap:20px;margin-bottom:36px;flex-wrap:wrap;}
 .header-left{display:flex;align-items:center;gap:18px;}
@@ -302,6 +513,18 @@ body::before{
 `
 
 /* ─────────────────────────────────────────────────────────────────────────────
+   MOBILE DETECTION
+───────────────────────────────────────────────────────────────────────────── */
+function detectMobile(): boolean {
+  if (typeof window === 'undefined') return false
+  const ua = navigator.userAgent.toLowerCase()
+  const mobileUA = /android|webos|iphone|ipad|ipod|blackberry|iemobile|opera mini|mobile|tablet/i.test(ua)
+  const smallScreen = window.innerWidth < 1024
+  const touchDevice = navigator.maxTouchPoints > 0 && window.innerWidth < 1024
+  return mobileUA || smallScreen || touchDevice
+}
+
+/* ─────────────────────────────────────────────────────────────────────────────
    UTILS
 ───────────────────────────────────────────────────────────────────────────── */
 function esc(s: unknown): string {
@@ -348,11 +571,32 @@ export default function DashboardPage() {
   const [dailyInfo, setDailyInfo] = useState('')
   const [dailyDisabled, setDailyDisabled] = useState(false)
 
+  // ── MOBILE STATES ──
+  const [isMobile, setIsMobile] = useState(false)
+  const [mobilePopupVisible, setMobilePopupVisible] = useState(false)
+  const [mobilePopupDismissed, setMobilePopupDismissed] = useState(false)
+
   const sessionRef = useRef<NexusSession | null>(null)
   const userDataRef = useRef<UserData>({})
 
   useEffect(() => { sessionRef.current = session }, [session])
   useEffect(() => { userDataRef.current = userData }, [userData])
+
+  // ── MOBILE DETECTION EFFECT ──
+  useEffect(() => {
+    const check = () => {
+      const mobile = detectMobile()
+      setIsMobile(mobile)
+      if (mobile) {
+        // show popup after small delay so loader finishes first
+        const t = setTimeout(() => setMobilePopupVisible(true), 600)
+        return () => clearTimeout(t)
+      }
+    }
+    check()
+    window.addEventListener('resize', check)
+    return () => window.removeEventListener('resize', check)
+  }, [])
 
   useEffect(() => {
     document.title = 'NEXUS AI — Dashboard'
@@ -385,12 +629,21 @@ export default function DashboardPage() {
 
   useEffect(() => {
     const h = (e: KeyboardEvent) => {
-      if (e.key === 'Escape') { setSettingsOpen(false); setDeleteModal(null); setLogoutModal(false); setDdOpen(false) }
-      if ((e.ctrlKey || e.metaKey) && e.key === 'n') { e.preventDefault(); document.getElementById('projNameInput')?.focus() }
+      if (e.key === 'Escape') {
+        setSettingsOpen(false)
+        setDeleteModal(null)
+        setLogoutModal(false)
+        setDdOpen(false)
+        setMobilePopupVisible(false)
+      }
+      if ((e.ctrlKey || e.metaKey) && e.key === 'n') {
+        e.preventDefault()
+        if (!isMobile) document.getElementById('projNameInput')?.focus()
+      }
     }
     document.addEventListener('keydown', h)
     return () => document.removeEventListener('keydown', h)
-  }, [])
+  }, [isMobile])
 
   useEffect(() => { initDashboard() }, []) // eslint-disable-line react-hooks/exhaustive-deps
   useEffect(() => { updateDailyStatus(userData) }, [userData])
@@ -620,12 +873,25 @@ export default function DashboardPage() {
     setDailyInfo('Daily credits available!'); setDailyDisabled(false)
   }
 
+  /* ── PROJECT NAME CHANGE with 16-char limit ── */
+  function handleNameChange(val: string) {
+    if (val.length <= PROJECT_NAME_LIMIT) setProjectName(val)
+  }
+
   /* ── CREATE PROJECT ── */
   async function handleCreate() {
+    // Block on mobile
+    if (isMobile) {
+      setMobilePopupVisible(true)
+      return
+    }
     if (!projectName.trim()) {
       const el = document.getElementById('projNameInput') as HTMLInputElement | null
       if (el) { el.style.borderColor = 'rgba(255,45,107,.6)'; setTimeout(() => { el.style.borderColor = '' }, 1800) }
       showToast('Please enter a project name', 'var(--yellow)'); return
+    }
+    if (projectName.trim().length > PROJECT_NAME_LIMIT) {
+      showToast(`Project name max ${PROJECT_NAME_LIMIT} characters`, 'var(--yellow)'); return
     }
     const limit = getLimit(userData)
     if ((userData.projects || []).length >= limit) { showToast('Project limit reached — upgrade to Pro', 'var(--pink)'); return }
@@ -640,14 +906,12 @@ export default function DashboardPage() {
     setCreating(false)
     showToast(saved ? 'Project created — opening chat...' : 'Saved locally — will sync when online', saved ? 'var(--green)' : 'var(--orange)', saved ? 1800 : 2500)
     await notifyPlugin(pid, proj.name)
-    // ✅ UPDATED: menggunakan /chats/[id] bukan /chats?id=
     setTimeout(() => { window.location.href = '/chats/' + encodeURIComponent(pid) }, 900)
   }
 
   /* ── OPEN PROJECT ── */
   async function openProject(id: string, name: string) {
     await notifyPlugin(id, name)
-    // ✅ UPDATED: menggunakan /chats/[id] bukan /chats?id=
     window.location.href = '/chats/' + encodeURIComponent(id)
   }
 
@@ -733,11 +997,21 @@ export default function DashboardPage() {
   const pendingIds = new Set(pendingQueue.flatMap(q => (q.payload?.data?.projects || []).map(p => p.id)))
   const atLimit = allProjects.length >= limit
 
+  // char counter color
+  const charLen = projectName.length
+  const charCls = charLen >= PROJECT_NAME_LIMIT ? 'limit' : charLen >= PROJECT_NAME_LIMIT - 3 ? 'warn' : ''
+
   useEffect(() => {
     if (!saveState) return
     if (saveState.state === 'saved') { const t = setTimeout(() => setSaveState(null), 3000); return () => clearTimeout(t) }
     if (saveState.state === 'error') { const t = setTimeout(() => setSaveState(null), 6000); return () => clearTimeout(t) }
   }, [saveState])
+
+  /* ── DISMISS MOBILE POPUP ── */
+  function dismissMobilePopup() {
+    setMobilePopupVisible(false)
+    setMobilePopupDismissed(true)
+  }
 
   return (
     <>
@@ -748,6 +1022,67 @@ export default function DashboardPage() {
         No network connection — changes are queued locally
         <button className="retry-btn-offline" onClick={() => retryQueue()}>Retry Now</button>
       </div>
+
+      {/* ════════════════════════════════════════
+          MOBILE WARNING POPUP
+      ════════════════════════════════════════ */}
+      {isMobile && mobilePopupVisible && (
+        <div className="mobile-overlay">
+          <div className="mobile-modal">
+            <div className="mobile-modal-icon-wrap">
+              {/* Desktop monitor icon */}
+              <svg viewBox="0 0 24 24">
+                <rect x="2" y="3" width="20" height="14" rx="2"/>
+                <line x1="8" y1="21" x2="16" y2="21"/>
+                <line x1="12" y1="17" x2="12" y2="21"/>
+              </svg>
+            </div>
+            <div className="mobile-modal-badge">
+              <svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>
+              MOBILE DETECTED
+            </div>
+            <div className="mobile-modal-title">
+              Use a <span>Desktop</span><br/>for Best Experience
+            </div>
+            <div className="mobile-modal-desc">
+              NEXUS AI Dashboard is designed for <strong>desktop browsers</strong>. On mobile, the UI may look cramped and <strong>project creation is disabled</strong> to prevent errors.
+            </div>
+            <div className="mobile-features">
+              <div className="mobile-feat-item">
+                <svg viewBox="0 0 24 24"><rect x="2" y="3" width="20" height="14" rx="2"/><line x1="8" y1="21" x2="16" y2="21"/><line x1="12" y1="17" x2="12" y2="21"/></svg>
+                <div><strong>Desktop / Laptop</strong> <span>— Full feature access, project creation enabled</span></div>
+              </div>
+              <div className="mobile-feat-item">
+                <svg viewBox="0 0 24 24"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+                <div><strong style={{color:'var(--pink)'}}>Mobile / Tablet</strong> <span>— View only, project creation disabled</span></div>
+              </div>
+              <div className="mobile-feat-item">
+                <svg viewBox="0 0 24 24"><polyline points="9 11 12 14 22 4"/><path d="M21 12v7a2 2 0 01-2 2H5a2 2 0 01-2-2V5a2 2 0 012-2h11"/></svg>
+                <div><strong>Minimum screen</strong> <span>— 1024px width recommended</span></div>
+              </div>
+            </div>
+            <div className="mobile-modal-divider" />
+            <div style={{ fontSize: 9.5, color: 'var(--dim2)', marginBottom: 10, textAlign: 'center', letterSpacing: '.3px' }}>
+              Open this page on your desktop browser:
+            </div>
+            <div className="mobile-modal-url">
+              <svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/><line x1="2" y1="12" x2="22" y2="12"/><path d="M12 2a15.3 15.3 0 010 20M12 2a15.3 15.3 0 000 20"/></svg>
+              {typeof window !== 'undefined' ? window.location.hostname : 'nexusai.app'}/dashboard
+            </div>
+            <button
+              className="btn-mobile-continue"
+              onClick={() => setMobilePopupVisible(false)}
+            >
+              <svg viewBox="0 0 24 24"><path d="M1 6s2-2 5-2 5 2 5 2M5 4v13"/><path d="M23 6s-2-2-5-2-5 2-5 2M19 4v13"/><path d="M1 20s2-2 5-2 5 2 5 2M23 20s-2-2-5-2-5 2-5 2"/></svg>
+              Continue on Mobile (Limited)
+            </button>
+            <button className="btn-mobile-dismiss" onClick={dismissMobilePopup}>
+              Don&apos;t show this again
+            </button>
+          </div>
+        </div>
+      )}
+
       <div id="dash-loader" className={loaded ? 'hide' : ''}>
         <div className="loader-logo">NEXUS AI</div>
         <div className="loader-ring" />
@@ -848,7 +1183,27 @@ export default function DashboardPage() {
           </div>
         </div>
 
+        {/* ── MOBILE PERSISTENT BANNER (after popup dismissed) ── */}
+        {isMobile && mobilePopupDismissed && (
+          <div className="mobile-banner">
+            <svg viewBox="0 0 24 24"><rect x="2" y="3" width="20" height="14" rx="2"/><line x1="8" y1="21" x2="16" y2="21"/><line x1="12" y1="17" x2="12" y2="21"/></svg>
+            <div className="mobile-banner-text">
+              <strong>Desktop recommended.</strong> Project creation is disabled on mobile. Switch to desktop for full access.
+            </div>
+            <button className="btn-banner-reopen" onClick={() => setMobilePopupVisible(true)}>Info</button>
+          </div>
+        )}
+
         <div className="create-card">
+          {/* ── MOBILE BLOCK OVERLAY on create card ── */}
+          {isMobile && (
+            <div className="create-mobile-block">
+              <svg viewBox="0 0 24 24"><rect x="2" y="3" width="20" height="14" rx="2"/><line x1="8" y1="21" x2="16" y2="21"/><line x1="12" y1="17" x2="12" y2="21"/></svg>
+              <p>Desktop Required</p>
+              <span>Project creation is only available<br/>on desktop browsers (1024px+)</span>
+              <button onClick={() => setMobilePopupVisible(true)}>Learn More</button>
+            </div>
+          )}
           <div className="create-card-top">
             <div className="card-title">
               <svg viewBox="0 0 24 24"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
@@ -860,23 +1215,41 @@ export default function DashboardPage() {
               <span>{unlimited ? '∞' : limit}</span>&nbsp;used
             </div>
           </div>
-          <div className="input-row">
-            <input
-              id="projNameInput"
-              type="text"
-              className="project-input"
-              placeholder="Project name — e.g. Obby Game, Shop System, Simulator..."
-              maxLength={60}
-              value={projectName}
-              disabled={atLimit || creating}
-              onChange={e => setProjectName(e.target.value)}
-              onKeyDown={e => { if (e.key === 'Enter') handleCreate() }}
-            />
-            <button className={`btn-create${creating ? ' loading' : ''}`} disabled={atLimit || creating} onClick={handleCreate}>
-              <div className="btn-spinner" />
-              <span className="btn-lbl">CREATE</span>
-              <svg className="btn-lbl" viewBox="0 0 24 24"><polyline points="9 18 15 12 9 6"/></svg>
-            </button>
+          <div className="input-row-wrap">
+            <div className="input-row">
+              <input
+                id="projNameInput"
+                type="text"
+                className="project-input"
+                placeholder="Project name (max 16 chars)..."
+                maxLength={PROJECT_NAME_LIMIT}
+                value={projectName}
+                disabled={atLimit || creating || isMobile}
+                onChange={e => handleNameChange(e.target.value)}
+                onKeyDown={e => { if (e.key === 'Enter') handleCreate() }}
+              />
+              <button
+                className={`btn-create${creating ? ' loading' : ''}`}
+                disabled={atLimit || creating || isMobile}
+                onClick={handleCreate}
+              >
+                <div className="btn-spinner" />
+                <span className="btn-lbl">CREATE</span>
+                <svg className="btn-lbl" viewBox="0 0 24 24"><polyline points="9 18 15 12 9 6"/></svg>
+              </button>
+            </div>
+            {/* Character counter row */}
+            {!isMobile && (
+              <div className="char-counter-row">
+                <span className="char-hint">
+                  <svg style={{width:9,height:9,stroke:'currentColor',fill:'none',strokeWidth:2,display:'inline',marginRight:4,verticalAlign:'middle'}} viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>
+                  Max {PROJECT_NAME_LIMIT} characters
+                </span>
+                <span className={`char-counter ${charCls}`}>
+                  {charLen} / {PROJECT_NAME_LIMIT}
+                </span>
+              </div>
+            )}
           </div>
           {saveState && (
             <div className={`save-status ${saveState.state}`} style={{ display: 'flex' }}>
@@ -927,11 +1300,23 @@ export default function DashboardPage() {
               <div className="empty-state">
                 <div className="empty-icon"><svg viewBox="0 0 24 24"><path d="M22 19a2 2 0 01-2 2H4a2 2 0 01-2-2V5a2 2 0 012-2h5l2 3h9a2 2 0 012 2z"/></svg></div>
                 <strong>No projects yet</strong>
-                <p>Create a project above to start chatting with NEXUS AI.<br/>Each project has its own isolated AI chat history.</p>
-                <div className="empty-hint">
-                  <svg viewBox="0 0 24 24"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
-                  Type a name above and click CREATE
-                </div>
+                <p>
+                  {isMobile
+                    ? 'Open NEXUS AI on a desktop browser to create your first project.'
+                    : 'Create a project above to start chatting with NEXUS AI.\nEach project has its own isolated AI chat history.'}
+                </p>
+                {!isMobile && (
+                  <div className="empty-hint">
+                    <svg viewBox="0 0 24 24"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+                    Type a name above and click CREATE
+                  </div>
+                )}
+                {isMobile && (
+                  <div className="empty-hint" style={{ color: 'var(--orange)', borderColor: 'rgba(255,140,0,.2)', background: 'rgba(255,140,0,.04)' }}>
+                    <svg viewBox="0 0 24 24" style={{ stroke: 'var(--orange)' }}><rect x="2" y="3" width="20" height="14" rx="2"/><line x1="8" y1="21" x2="16" y2="21"/><line x1="12" y1="17" x2="12" y2="21"/></svg>
+                    Desktop required to create projects
+                  </div>
+                )}
               </div>
             )
           ) : filtered.map((p, i) => (
@@ -1048,6 +1433,21 @@ export default function DashboardPage() {
               <label>NEXUS AI Plugin for Roblox Studio</label>
               <button className="settings-btn" onClick={() => window.open('https://create.roblox.com/store/asset/91870814099475/NEXUS-AI', '_blank')}>Download</button>
             </div>
+          </div>
+          <div className="settings-sec">
+            <div className="settings-sec-title">Device</div>
+            <div className="settings-row">
+              <label>Current device type</label>
+              <span className="s-val" style={{ color: isMobile ? 'var(--orange)' : 'var(--green)', fontSize: 11 }}>
+                {isMobile ? '📱 Mobile / Tablet' : '🖥️ Desktop'}
+              </span>
+            </div>
+            {isMobile && (
+              <div className="settings-row">
+                <label style={{ color: 'var(--dim2)', fontSize: 10 }}>Project creation disabled on mobile</label>
+                <button className="settings-btn" onClick={() => { setSettingsOpen(false); setMobilePopupVisible(true) }}>Details</button>
+              </div>
+            )}
           </div>
           <div className="settings-sec">
             <div className="settings-sec-title" style={{ color: 'var(--pink)', opacity: .9 }}>Danger Zone</div>
