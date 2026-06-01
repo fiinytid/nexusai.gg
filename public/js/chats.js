@@ -169,7 +169,7 @@ var MODEL_LIST=[
 {id:'poolside/laguna-m.1:free',prov:'openrouter',cost:0,label:'Laguna M.1',icon:'/laguna.svg',badge:'FREE'},
 {grp:'DeepSeek'},
 {id:'deepseek/deepseek-v4-flash:free',prov:'openrouter',cost:12,label:'DeepSeek V4 Flash',icon:'/deepseek.svg',badge:'BEST'},
-{id:'deepseek/deepseek-v4-flash',prov:'openrouter',cost:23,label:'DeepSeek V4 Pro',icon:'deepseek.svg',badge:'BEST'},
+{id:'deepseek/deepseek-v4-flash',prov:'openrouter',cost:23,label:'DeepSeek V4 Pro',icon:'/deepseek.svg',badge:'BEST'},
 {grp:'Anthropic'},
 {id:'anthropic/claude-3.5-haiku',prov:'openrouter',cost:18,label:'Claude Haiku 3.5',icon:'/claude.png',badge:'SMART'},
 {id:'anthropic/claude-sonnet-4.6',prov:'openrouter',cost:36,label:'Claude Sonnet 4.6',icon:'/claude.png',badge:'BEST'},
@@ -713,7 +713,7 @@ function mkAv(role){
 
   if(role==='ai'){
     var img=document.createElement('img');
-    img.src='nexusai.png';
+    img.src='/nexusai.png';
     img.alt='N';
     // FIX: store reference to av, use safe null check before accessing
     var _avRef=av;
