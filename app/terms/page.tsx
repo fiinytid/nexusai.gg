@@ -184,7 +184,7 @@ export default function TermsOfService() {
               <a href="mailto:arifiinytid@gmail.com">arifiinytid@gmail.com</a>
               <br />
               🌐 Website:{" "}
-              <a href="https://nexusai-rbx.vercel.app">nexusai-com.vercel.app</a>
+              <a href="https://nexusai-rbx.vercel.app">nexusai-rbx.vercel.app</a>
               <br />
               📺 YouTube: NEXUS STUDIO
             </p>
