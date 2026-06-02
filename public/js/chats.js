@@ -194,8 +194,6 @@ var GUI_THEMES={
 };
 var _curGuiTheme='nexus_ai';
 
-// ── INLINE SVG ICON FALLBACK (replaces missing icon-512.png) ──────────────────
-// This SVG data URI is used as a fallback when PNG icons are not found
 var _NEXUS_ICON_SVG = 'data:image/svg+xml;base64,' + btoa([
   '<svg xmlns="http://www.w3.org/2000/svg" width="512" height="512" viewBox="0 0 512 512">',
   '<rect width="512" height="512" rx="80" fill="#030312"/>',
@@ -211,20 +209,13 @@ var _NEXUS_ICON_SVG = 'data:image/svg+xml;base64,' + btoa([
   '</svg>'
 ].join(''));
 
-// Fix missing icon-512.png by injecting a link element with SVG fallback
 (function _fixManifestIcons(){
-  // Intercept image 404s for icon files
   document.addEventListener('DOMContentLoaded', function(){
-    // Replace any broken icon images
     document.querySelectorAll('img[src*="icon-512"], img[src*="icon-192"]').forEach(function(img){
-      if(!img.complete || img.naturalWidth === 0){
-        img.src = _NEXUS_ICON_SVG;
-      }
+      if(!img.complete || img.naturalWidth === 0){img.src = _NEXUS_ICON_SVG;}
     });
-    // Fix manifest icon link if present
     var manifestLink = document.querySelector('link[rel="manifest"]');
     if(manifestLink){
-      // Patch apple-touch-icon to use SVG fallback
       var appleIcon = document.querySelector('link[rel="apple-touch-icon"]');
       if(appleIcon) appleIcon.href = _NEXUS_ICON_SVG;
     }
@@ -272,23 +263,53 @@ function isPureGreeting(txt){var t=txt.trim().toLowerCase();if(t.length>60)retur
 function isOwner(){if(!SESSION)return false;var plan=(S.plan||SESSION.data&&SESSION.data.plan||'').toLowerCase();if(plan==='owner'||plan==='unlimited')return true;var roles=(SESSION.data&&SESSION.data.roles)||[];if(roles.indexOf('owner')>=0)return true;return OWNER_IDS.indexOf(String(SESSION.user.robloxId||''))>=0;}
 function isAdmin(){if(!SESSION)return false;if(isOwner())return true;var roles=(SESSION.data&&SESSION.data.roles)||[];return roles.indexOf('admin')>=0||ADMIN_IDS.indexOf(String(SESSION.user.robloxId||''))>=0;}
 
-// ── DAILY REWARD ──────────────────────────────────────────────────────────────
+// ══════════════════════════════════════════════════════════════════════════════
+// FIX #1: DAILY REWARD — Tidak auto-claim, hanya update UI
+// ══════════════════════════════════════════════════════════════════════════════
 function checkDailyOnLoad(){
   if(isOwner()||isAdmin())return;
+  // FIX: Hanya update button state, TIDAK auto-claim atau toast
   var t=T();
-  if(!S.lastClaim){toast(t.dailyReady,'var(--green)',5000);return;}
+  var ce=document.getElementById('lastClaimInfo');
+  var cb=document.getElementById('claimDailyBtn');
+  if(!S.lastClaim){
+    if(ce)ce.textContent=t.dailyReady;
+    if(cb)cb.disabled=false;
+    return;
+  }
   var diff=(Date.now()-new Date(S.lastClaim).getTime())/3600000;
-  if(diff>=24){toast(t.dailyReady,'var(--green)',5000);}
+  if(diff>=24){
+    if(ce)ce.textContent=t.dailyReady;
+    if(cb)cb.disabled=false;
+  }else{
+    var hrs=Math.ceil(24-diff);
+    if(ce)ce.textContent=t.dailyNext+hrs+'h';
+    if(cb)cb.disabled=true;
+  }
 }
+
 function checkDailyCredits(){
   if(isOwner()||isAdmin())return;
   var t=T();
-  var ce=document.getElementById('lastClaimInfo'),cb=document.getElementById('claimDailyBtn');
-  if(!S.lastClaim){if(ce)ce.textContent=t.dailyReady;if(cb)cb.disabled=false;return;}
-  var diff=(Date.now()-new Date(S.lastClaim).getTime())/3600000;
-  if(diff>=24){if(ce)ce.textContent=t.dailyReady;if(cb)cb.disabled=false;}
-  else{var hrs=Math.ceil(24-diff);if(ce)ce.textContent=t.dailyNext+hrs+'h';if(cb)cb.disabled=true;}
+  var ce=document.getElementById('lastClaimInfo');
+  var cb=document.getElementById('claimDailyBtn');
+  // FIX: Hanya update UI, tidak auto-claim
+  if(!S.lastClaim){
+    if(ce)ce.textContent=t.dailyReady;
+    if(cb)cb.disabled=false;
+  }else{
+    var diff=(Date.now()-new Date(S.lastClaim).getTime())/3600000;
+    if(diff>=24){
+      if(ce)ce.textContent=t.dailyReady;
+      if(cb)cb.disabled=false;
+    }else{
+      var hrs=Math.ceil(24-diff);
+      if(ce)ce.textContent=t.dailyNext+hrs+'h';
+      if(cb)cb.disabled=true;
+    }
+  }
 }
+
 function claimDaily(){
   if(isOwner()||isAdmin())return;
   var t=T();
@@ -338,7 +359,6 @@ function _debouncedSync(){
   _syncDebounceTimer=setTimeout(function(){_syncDebounceTimer=null;if(!_syncInProgress)syncToServer();},4000);
 }
 
-// ── FIX: syncToServer — robust error handling for 500/401/413 ─────────────────
 async function syncToServer(){
   if(!SESSION)return;
   if(_syncInProgress){
@@ -378,28 +398,14 @@ async function syncToServer(){
       body:JSON.stringify(payload)
     });
     clearTimeout(timeoutId);
-    if(resp.ok){
-      _syncFailCount=0;
-    }else if(resp.status===413){
-      // Payload too large — retry with minimal data
-      _syncFailCount++;
-      console.warn('[NEXUS sync] 413 payload too large, will retry with less data');
-    }else if(resp.status===500){
-      _syncFailCount++;
-      console.warn('[NEXUS sync] 500 server error, will retry later');
-    }else if(resp.status===401||resp.status===403){
-      // Unauthorized — stop trying to sync, session may be invalid
-      _syncFailCount=5;
-      console.warn('[NEXUS sync] 401/403 auth error, sync paused');
-    }else{
-      _syncFailCount++;
-    }
+    if(resp.ok){_syncFailCount=0;}
+    else if(resp.status===413){_syncFailCount++;console.warn('[NEXUS sync] 413 payload too large');}
+    else if(resp.status===500){_syncFailCount++;console.warn('[NEXUS sync] 500 server error');}
+    else if(resp.status===401||resp.status===403){_syncFailCount=5;console.warn('[NEXUS sync] 401/403 auth error, sync paused');}
+    else{_syncFailCount++;}
   }catch(e){
     clearTimeout(timeoutId);
-    if(e&&e.name!=='AbortError'){
-      _syncFailCount++;
-      console.warn('[NEXUS sync] network error:',e&&e.message);
-    }
+    if(e&&e.name!=='AbortError'){_syncFailCount++;console.warn('[NEXUS sync] network error:',e&&e.message);}
   }
   finally{_syncInProgress=false;}
 }
@@ -459,44 +465,27 @@ async function loadKeys(){
         if(wrap)wrap.style.display='block';
         _turnstileWidget=turnstile.render('#cf-turnstile-report',{
           sitekey:K.turnstile,theme:'dark',size:'normal',
-          callback:function(token){
-            var el=document.getElementById('_tsToken');
-            if(el)el.value=token;
-          }
+          callback:function(token){var el=document.getElementById('_tsToken');if(el)el.value=token;}
         });
       }
     }
   }catch(e){console.warn('[NEXUS] loadKeys error:',e&&e.message);}
 }
 
-// ── FIX: loadAdminIds — handle 401 gracefully (non-admin users get 401) ────────
 async function loadAdminIds(){
   try{
     var ctrl=new AbortController();
     var tid=setTimeout(function(){ctrl.abort();},8000);
     var r=await fetch('/api/sync?admin_ids=1',{signal:ctrl.signal});
     clearTimeout(tid);
-    if(r.ok){
-      var d=await r.json();
-      if(d&&d.admin_ids)ADMIN_IDS=d.admin_ids;
-    }
-    // 401 is expected for non-admin users — silently ignore
-  }catch(e){
-    if(e&&e.name!=='AbortError'){
-      console.warn('[NEXUS] loadAdminIds error:',e&&e.message);
-    }
-  }
+    if(r.ok){var d=await r.json();if(d&&d.admin_ids)ADMIN_IDS=d.admin_ids;}
+  }catch(e){if(e&&e.name!=='AbortError'){console.warn('[NEXUS] loadAdminIds error:',e&&e.message);}}
 }
 
 async function loadInboxCount(){
   try{
     var r=await fetch('/api/inbox?count=1&user='+(SESSION?SESSION.user.username:''));
-    if(r.ok){
-      var d=await r.json();
-      S.unreadInbox=d.count||0;
-      var b=document.getElementById('inboxBadge');
-      if(b)b.textContent=S.unreadInbox;
-    }
+    if(r.ok){var d=await r.json();S.unreadInbox=d.count||0;var b=document.getElementById('inboxBadge');if(b)b.textContent=S.unreadInbox;}
   }catch(e){console.warn('[NEXUS] loadInboxCount error:',e&&e.message);}
 }
 
@@ -612,38 +601,9 @@ function _injectSuggChipStyles(){
   s.id='nx-chip-styles';
   s.textContent=
     '.suggestion-chips{display:flex;flex-direction:column;gap:5px;margin-top:10px;margin-bottom:2px;}'+
-    '.suggestion-chip{'+
-      'display:flex;align-items:center;gap:8px;'+
-      'padding:7px 12px 7px 10px;'+
-      'background:rgba(0,229,255,.05);'+
-      'border:1px solid rgba(0,229,255,.16);'+
-      'border-radius:8px;'+
-      'color:var(--fg,#b8cfff);'+
-      'font-size:11.5px;'+
-      'cursor:pointer;'+
-      'text-align:left;'+
-      'transition:background .14s,border-color .14s,color .14s,transform .1s;'+
-      'font-family:inherit;'+
-      'width:fit-content;'+
-      'max-width:100%;'+
-      'line-height:1.4;'+
-    '}'+
-    '.suggestion-chip::before{'+
-      'content:"";'+
-      'display:inline-flex;'+
-      'width:0;height:0;'+
-      'border-top:4.5px solid transparent;'+
-      'border-bottom:4.5px solid transparent;'+
-      'border-left:7px solid var(--cyan,#00e5ff);'+
-      'flex-shrink:0;'+
-      'opacity:.55;'+
-      'transition:opacity .14s,transform .14s;'+
-    '}'+
-    '.suggestion-chip:hover{'+
-      'background:rgba(0,229,255,.12);'+
-      'border-color:rgba(0,229,255,.38);'+
-      'color:var(--cyan,#00e5ff);'+
-    '}'+
+    '.suggestion-chip{display:flex;align-items:center;gap:8px;padding:7px 12px 7px 10px;background:rgba(0,229,255,.05);border:1px solid rgba(0,229,255,.16);border-radius:8px;color:var(--fg,#b8cfff);font-size:11.5px;cursor:pointer;text-align:left;transition:background .14s,border-color .14s,color .14s,transform .1s;font-family:inherit;width:fit-content;max-width:100%;line-height:1.4;}'+
+    '.suggestion-chip::before{content:"";display:inline-flex;width:0;height:0;border-top:4.5px solid transparent;border-bottom:4.5px solid transparent;border-left:7px solid var(--cyan,#00e5ff);flex-shrink:0;opacity:.55;transition:opacity .14s,transform .14s;}'+
+    '.suggestion-chip:hover{background:rgba(0,229,255,.12);border-color:rgba(0,229,255,.38);color:var(--cyan,#00e5ff);}'+
     '.suggestion-chip:hover::before{opacity:1;transform:translateX(2px);}'+
     '.suggestion-chip:active{transform:scale(.97);}'+
     '.suggestion-chip.sending{opacity:.5;pointer-events:none;}'+
@@ -660,9 +620,7 @@ function _processSuggestionChips(bubble){
     var liEls=ul.querySelectorAll('li');
     var count=liEls.length;
     if(count<2||count>12)return;
-    var allShort=Array.from(liEls).every(function(li){
-      return li.textContent.trim().length<=100&&li.querySelectorAll('ul,ol,p,pre').length===0;
-    });
+    var allShort=Array.from(liEls).every(function(li){return li.textContent.trim().length<=100&&li.querySelectorAll('ul,ol,p,pre').length===0;});
     if(!allShort)return;
     var wrap=document.createElement('div');
     wrap.className='suggestion-chips';
@@ -694,29 +652,23 @@ function _processSuggestionChips(bubble){
 function safeMarked(md){try{if(typeof marked==='undefined')return esc(md);var raw=marked.parse(String(md||''));return sanitizeHtml(raw);}catch(e){return esc(md);}}
 function renderMsgs(msgs){var c=document.getElementById('msgs');if(!c)return;var w=document.getElementById('welcome');if(!msgs||!msgs.length){if(w)w.style.display='flex';c.querySelectorAll('.msg,.steps-wrap').forEach(function(el){el.remove();});return;}if(w)w.style.display='none';c.querySelectorAll('.msg,.steps-wrap').forEach(function(el){el.remove();});msgs.forEach(function(m){appendMsg(m,true);});c.scrollTop=c.scrollHeight;}
 
-// ── FIX: mkAv — safe null checks in img.onerror to prevent TypeError ──────────
 function mkAv(role){
   var av=document.createElement('div');
   av.className='av';
-
-  function _setAvatarFallback(container, letter){
-    // Safe: check container still exists and is connected
+  function _setAvatarFallback(container,letter){
     if(!container)return;
     container.style.cssText='display:flex;align-items:center;justify-content:center;font-size:12px;font-weight:700;color:var(--cyan);background:rgba(0,229,255,.1);border-radius:50%;';
     container.textContent=letter||'?';
   }
-
   if(role==='ai'){
     var img=document.createElement('img');
     img.src='/nexusai.png';
     img.alt='N';
-    // FIX: store reference to av, use safe null check before accessing
     var _avRef=av;
     img.onerror=function(){
       try{
         if(_avRef){
           _avRef.style.cssText='display:flex;align-items:center;justify-content:center;font-size:12px;font-weight:700;color:var(--cyan);background:linear-gradient(135deg,rgba(0,229,255,.2),rgba(136,0,255,.2));border-radius:50%;';
-          // Remove broken img before setting text
           if(this.parentNode===_avRef){_avRef.removeChild(this);}
           _avRef.textContent='N';
         }
@@ -732,16 +684,15 @@ function mkAv(role){
     img2.onerror=function(){
       try{
         if(_avRef2){
-          // Remove broken img before setting fallback
           if(this.parentNode===_avRef2){_avRef2.removeChild(this);}
-          _setAvatarFallback(_avRef2, _fallbackLetter);
+          _setAvatarFallback(_avRef2,_fallbackLetter);
         }
       }catch(ex){console.warn('[NEXUS] user avatar onerror:',ex&&ex.message);}
     };
     av.appendChild(img2);
   }else{
     var _fallback=(SESSION&&SESSION.user&&SESSION.user.username)?SESSION.user.username.charAt(0).toUpperCase():'U';
-    _setAvatarFallback(av, _fallback);
+    _setAvatarFallback(av,_fallback);
   }
   return av;
 }
@@ -836,7 +787,7 @@ function setStepTitle(txt){var el=document.getElementById('stepsTxt');if(el)el.t
 function cancelGen(){if(S.cancelCtrl)S.cancelCtrl.abort();S.gen=false;S.cancelCtrl=null;_playTestActive=false;removeStepsCard();var sb=document.getElementById('sendBtn'),cb=document.getElementById('cancelBtn');if(sb)sb.classList.remove('hidden');if(cb)cb.classList.add('hidden');toast(T().cancelToast,'var(--yellow)');}
 
 // ══════════════════════════════════════════════════════════════════════════════
-// NEXUS AI — Inject Pipeline v10.1
+// NEXUS AI — Inject Pipeline v10.2 (FIXED)
 // ══════════════════════════════════════════════════════════════════════════════
 
 // ── JSON PARSING PIPELINE ─────────────────────────────────────────────────────
@@ -914,6 +865,29 @@ function _tryParseJson(raw){
   var jm=stripped.match(/(\[[\s\S]+\]|\{[\s\S]+\})/);
   if(jm){try{return JSON.parse(jm[1]);}catch(e){}try{return JSON.parse(_jsonRepair(jm[1]));}catch(e){}}
   else{var jm2=raw.match(/(\[[\s\S]+\]|\{[\s\S]+\})/);if(jm2){try{return JSON.parse(_jsonRepair(jm2[1]));}catch(e){}}}
+  return null;
+}
+
+// ══════════════════════════════════════════════════════════════════════════════
+// FIX #2: _parseBareArgs — Parse bare argument syntax
+// Handles: create_gui(name:"X", class:"Y", parent:"Z", enabled:false)
+// ══════════════════════════════════════════════════════════════════════════════
+function _parseBareArgs(argsStr){
+  if(!argsStr||!argsStr.trim())return null;
+  try{
+    // Wrap in braces to make it JSON-like
+    var json='{'+argsStr.trim()+'}';
+    // Quote unquoted keys (key: → "key":)
+    json=json.replace(/([{,]\s*)([a-zA-Z_][a-zA-Z0-9_]*)(\s*:)/g,'$1"$2"$3');
+    // Replace single-quoted string values with double-quoted
+    json=json.replace(/:\s*'([^'\\]*(?:\\.[^'\\]*)*)'/g,':"$1"');
+    // Strip Lua expressions
+    json=_stripLuaExpressions(json);
+    var result=_tryParseJson(json);
+    if(result&&typeof result==='object'&&!Array.isArray(result))return result;
+    var result2=_tryParseJson(_jsonRepair(json));
+    if(result2&&typeof result2==='object'&&!Array.isArray(result2))return result2;
+  }catch(e){}
   return null;
 }
 
@@ -1004,35 +978,139 @@ function _extractActionsFromLuaBlock(blockCode){
   return cmds;
 }
 
-// ── CALL BLOCK PARSER ─────────────────────────────────────────────────────────
+// ══════════════════════════════════════════════════════════════════════════════
+// FIX #3: parseCallBlocks — Enhanced dengan bare-args dan create_* detection
+// ══════════════════════════════════════════════════════════════════════════════
+// List semua action functions yang dikenal NEXUS
+var _NEXUS_ACTION_FNS=[
+  'create_gui','create_frame','create_remote','inject_script','create_script',
+  'create_local_script','create_module','edit_script','set_property','batch_commands',
+  'create_part','create_npc','create_text_label','set_lighting','inject_quick_script',
+  'apply_theme','get_theme','create_text_button','fill_terrain','delete_object',
+  'create_billboard_gui','set_service_property','batch_inject','scan_workspace',
+  'request_scan','play_test','run_test','stop_test','read_script','resolve_mention',
+  'create_ui_corner','create_ui_padding','create_ui_gradient','create_ui_stroke',
+  'create_ui_list_layout','create_scroll_frame','create_viewport_frame'
+];
+var _NEXUS_ACTION_FNS_SET=new Set(_NEXUS_ACTION_FNS);
+
 function parseCallBlocks(text){
   var cmds=[],luaActionText='';
   var SKIP_FNS=new Set(['function','require','print','warn','error','typeof','instanceof','Object','Array','String','Number','Boolean','Math','JSON','Promise','fetch','console','setTimeout','setInterval','parseInt','parseFloat','task','game','workspace','script','Instance','pcall','xpcall']);
+
+  // 1) Extract action calls from Lua code blocks
   var reLua=/```(?:lua|luau)\s*([\s\S]*?)```/gi,mLua;
-  while((mLua=reLua.exec(text))!==null){var block=mLua[1].trim();if(isActionCallBlock(block)){var extracted=_extractActionsFromLuaBlock(block);extracted.forEach(function(cmd){cmds.push(cmd);});luaActionText+='\n'+block;}}
+  while((mLua=reLua.exec(text))!==null){
+    var block=mLua[1].trim();
+    if(isActionCallBlock(block)){
+      var extracted=_extractActionsFromLuaBlock(block);
+      extracted.forEach(function(cmd){cmds.push(cmd);});
+      luaActionText+='\n'+block;
+    }
+  }
+
   var textNoBlocks=text.replace(/```[\s\S]*?```/g,''),searchText=textNoBlocks+'\n'+luaActionText;
+
+  // 2) call:action({...}) pattern
   var re1=/call:([a-z_]+)\(\s*(\{[\s\S]+?\})\s*\)/g,m;
-  while((m=re1.exec(searchText))!==null){var params=_tryParseJson(_stripLuaExpressions(m[2]));if(m[1]&&params){var cmd=Object.assign({action:m[1]},params);var norm=_normalizeCmd(cmd);if(norm)cmds.push(norm);}}
+  while((m=re1.exec(searchText))!==null){
+    var params=_tryParseJson(_stripLuaExpressions(m[2]));
+    if(m[1]&&params){
+      var cmd=Object.assign({action:m[1]},params);
+      var norm=_normalizeCmd(cmd);
+      if(norm)cmds.push(norm);
+    }
+  }
+
+  // 3) function_name({...}) pattern — JSON braces
   var re2=/\b([a-z_][a-z0-9_]{2,49})\s*\(\s*(\{[\s\S]*?\})\s*\)/g;
   while((m=re2.exec(textNoBlocks))!==null){
     var fnName=m[1];if(SKIP_FNS.has(fnName))continue;
     var bodyStr=_stripLuaExpressions(m[2]),params2=_tryParseJson(bodyStr);
     if(!params2||typeof params2!=='object')continue;
-    if(fnName==='batch_commands'){var batchCmds=params2.commands||params2.actions||(Array.isArray(params2)?params2:null);if(Array.isArray(batchCmds)){batchCmds.forEach(function(sub){var norm=_normalizeCmd(sub);if(norm)cmds.push(norm);});}}
-    else{var cmd2=Object.assign({action:fnName},Array.isArray(params2)?{}:params2);var norm2=_normalizeCmd(cmd2);if(norm2)cmds.push(norm2);}
+    if(fnName==='batch_commands'){
+      var batchCmds=params2.commands||params2.actions||(Array.isArray(params2)?params2:null);
+      if(Array.isArray(batchCmds)){batchCmds.forEach(function(sub){var norm=_normalizeCmd(sub);if(norm)cmds.push(norm);});}
+    }else{
+      var cmd2=Object.assign({action:fnName},Array.isArray(params2)?{}:params2);
+      var norm2=_normalizeCmd(cmd2);if(norm2)cmds.push(norm2);
+    }
   }
-  var seen={};return cmds.filter(function(cmd){var key=(cmd.action||'')+'|'+(cmd.name||'')+'|'+(cmd.parent||'');if(seen[key])return false;seen[key]=true;return true;});
+
+  // ══════════════════════════════════════════════════════════════════════════
+  // FIX: Pattern 4 — Bare args: create_gui(name:"X", class:"Y", ...)
+  // Ini adalah format yang digunakan AI saat tidak pakai JSON braces
+  // ══════════════════════════════════════════════════════════════════════════
+  var reBare=new RegExp('\\b('+_NEXUS_ACTION_FNS.join('|')+')\\s*\\(([^)]{0,3000})\\)','g');
+  while((m=reBare.exec(textNoBlocks))!==null){
+    var fnNameBare=m[1];
+    var argsRaw=m[2].trim();
+    // Skip if already handled by re2 (has braces)
+    if(argsRaw.startsWith('{'))continue;
+    // Skip very short args
+    if(argsRaw.length<4)continue;
+    var paramsBare=_parseBareArgs(argsRaw);
+    if(!paramsBare||typeof paramsBare!=='object')continue;
+    var cmdBare=Object.assign({action:fnNameBare},paramsBare);
+    var normBare=_normalizeCmd(cmdBare);
+    if(normBare){
+      var isDupeBare=cmds.some(function(c){return c.action===normBare.action&&(c.name||'')===(normBare.name||'');});
+      if(!isDupeBare)cmds.push(normBare);
+    }
+  }
+
+  // Deduplicate
+  var seen={};
+  return cmds.filter(function(cmd){
+    var key=(cmd.action||'')+'|'+(cmd.name||'')+'|'+(cmd.parent||'');
+    if(seen[key])return false;
+    seen[key]=true;
+    return true;
+  });
 }
 
-// ── MASTER PARSER ─────────────────────────────────────────────────────────────
+// ══════════════════════════════════════════════════════════════════════════════
+// FIX #4: parseAllCommands — More robust fallback detection
+// ══════════════════════════════════════════════════════════════════════════════
 function parseAllCommands(text){
-  var cmds=parseJsonBlocks(text),callCmds=parseCallBlocks(text);
-  callCmds.forEach(function(cmd){var exists=cmds.some(function(e){return e.action===cmd.action&&(e.name||'')===(cmd.name||'');});if(!exists)cmds.push(cmd);});
+  var cmds=parseJsonBlocks(text);
+  var callCmds=parseCallBlocks(text);
+  callCmds.forEach(function(cmd){
+    var exists=cmds.some(function(e){return e.action===cmd.action&&(e.name||'')===(cmd.name||'');});
+    if(!exists)cmds.push(cmd);
+  });
+
+  // Fallback 1: Search for raw JSON with "action" field anywhere in text
   if(cmds.length===0){
     var jsonMatches=text.match(/(\[[\s\S]*?"action"[\s\S]*?\]|\{[\s\S]*?"action"[\s\S]*?\})/g);
     if(jsonMatches){jsonMatches.forEach(function(raw){if(raw.length>30000)return;var parsed=_tryParseJson(raw.trim());if(!parsed)return;var items=Array.isArray(parsed)?parsed:[parsed];items.forEach(function(item){if(!item||!item.action)return;var norm=_normalizeCmd(item);if(norm){var exists=cmds.some(function(e){return e.action===norm.action&&(e.name||'')===(norm.name||'');});if(!exists)cmds.push(norm);}});});}
   }
-  if(cmds.length===0){var batchMatch=text.match(/"commands"\s*:\s*(\[[\s\S]*?\])/);if(batchMatch){var batchParsed=_tryParseJson(batchMatch[1]);if(Array.isArray(batchParsed)){batchParsed.forEach(function(item){var norm=_normalizeCmd(item);if(norm&&!cmds.some(function(e){return e.action===norm.action&&(e.name||'')===(norm.name||'');}))cmds.push(norm);});}}}
+
+  // Fallback 2: Search for "commands": [...] batch format
+  if(cmds.length===0){
+    var batchMatch=text.match(/"commands"\s*:\s*(\[[\s\S]*?\])/);
+    if(batchMatch){var batchParsed=_tryParseJson(batchMatch[1]);if(Array.isArray(batchParsed)){batchParsed.forEach(function(item){var norm=_normalizeCmd(item);if(norm&&!cmds.some(function(e){return e.action===norm.action&&(e.name||'')===(norm.name||'');}))cmds.push(norm);});}}
+  }
+
+  // Fallback 3: Look for known action function names in plain text (inline bare calls)
+  if(cmds.length===0){
+    var inlineRe=new RegExp('\\b('+_NEXUS_ACTION_FNS.join('|')+')\\s*\\(([\\s\\S]{0,500}?)\\)','g');
+    var mInline;
+    while((mInline=inlineRe.exec(text))!==null){
+      var fnInline=mInline[1],argsInline=mInline[2].trim();
+      var parsed3=null;
+      if(argsInline.startsWith('{')){parsed3=_tryParseJson(_stripLuaExpressions(argsInline));}
+      else{parsed3=_parseBareArgs(argsInline);}
+      if(parsed3&&typeof parsed3==='object'){
+        var cmdInline=Object.assign({action:fnInline},parsed3);
+        var normInline=_normalizeCmd(cmdInline);
+        if(normInline&&!cmds.some(function(e){return e.action===normInline.action&&(e.name||'')===(normInline.name||'');})){
+          cmds.push(normInline);
+        }
+      }
+    }
+  }
+
   return cmds;
 }
 
@@ -1360,23 +1438,78 @@ function generateGuiCode(){var t=T();var els=Object.values(guiElements);if(!els.
 function copyGuiCode(){var p=document.getElementById('guiCodeOutput');if(p)navigator.clipboard.writeText(p.textContent).then(function(){toast(T().copiedToast);});}
 function downloadGuiCode(){var p=document.getElementById('guiCodeOutput');if(!p)return;var a=document.createElement('a');a.href='data:text/plain;charset=utf-8,'+encodeURIComponent(p.textContent);a.download='NexusGUI.lua';a.click();}
 function openGuiAIChat(){document.getElementById('guiAIChatModal').classList.add('show');}
+
+// ══════════════════════════════════════════════════════════════════════════════
+// FIX #5: generateGuiFromAI — Better AI prompt dan JSON parsing
+// ══════════════════════════════════════════════════════════════════════════════
 async function generateGuiFromAI(){
-  var t=T();var prompt=document.getElementById('guiAIPrompt');if(!prompt||!prompt.value.trim())return;
-  var themeSel=document.getElementById('guiAiThemeSelect');var theme=themeSel?themeSel.value:'nexus_ai';
-  closeModal('guiAIChatModal');var loading=document.getElementById('guiLoading');if(loading)loading.classList.add('show');
+  var t=T();
+  var prompt=document.getElementById('guiAIPrompt');
+  if(!prompt||!prompt.value.trim())return;
+  var themeSel=document.getElementById('guiAiThemeSelect');
+  var theme=themeSel?themeSel.value:'nexus_ai';
+  closeModal('guiAIChatModal');
+  var loading=document.getElementById('guiLoading');
+  if(loading)loading.classList.add('show');
   var th=GUI_THEMES[theme]||GUI_THEMES.nexus_ai;
   try{
-    var sysMsg='Output ONLY a valid JSON array. No markdown, no extra text.\nEach item: {"type":"Frame|TextLabel|TextButton|TextBox|ImageLabel|ScrollingFrame","name":"string","x":number,"y":number,"w":number,"h":number,"bgColor":"hex or transparent","textColor":"hex","text":"string","fontSize":number,"cornerRadius":number}\nTheme: '+theme+'. Colors: bg='+th.bg+' panel='+th.panel+' accent='+th.accent+' text='+th.text+'. Canvas: 800x600.';
-    var body={provider:S.guiModel.prov||'gemini',model:S.guiModel.id,system:sysMsg,messages:[{role:'user',content:'Create professional Roblox GUI for: '+prompt.value}],max_tokens:3000};
+    // Explicit system prompt for clean JSON output
+    var sysMsg='You are a Roblox GUI JSON generator. Output ONLY a valid JSON array. No markdown, no extra text, no explanation.\n\n'+
+      'Format: [{"type":"Frame|TextLabel|TextButton|TextBox|ImageLabel|ScrollingFrame","name":"ElementName","x":0,"y":0,"w":200,"h":100,"bgColor":"#hexcolor or transparent","textColor":"#hexcolor","text":"label text","fontSize":14,"cornerRadius":8}]\n\n'+
+      'Canvas: 800x600px. Theme: '+theme+'\n'+
+      'Background: '+th.bg+' Panel: '+th.panel+' Accent: '+th.accent+' Text: '+th.text+'\n'+
+      'IMPORTANT: Return ONLY the JSON array, nothing else.';
+    var body={
+      provider:S.guiModel.prov||'gemini',
+      model:S.guiModel.id,
+      system:sysMsg,
+      messages:[{role:'user',content:'Create: '+prompt.value}],
+      max_tokens:3000
+    };
     var r=await fetch('/api/ai',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)});
-    if(r.ok){var d=await r.json();var content=(d.content||'').replace(/```json\n?/gi,'').replace(/```\n?/g,'').trim();
+    if(r.ok){
+      var d=await r.json();
+      var content=(d.content||'').replace(/```json\n?/gi,'').replace(/```\n?/g,'').trim();
+      // Try to find JSON array in response
       var jm=content.match(/\[[\s\S]+\]/);
-      if(jm){try{var parsed=JSON.parse(jm[0]);clearCanvas();_curGuiTheme=theme;var gts=document.getElementById('guiThemeSelect');if(gts)gts.value=theme;parsed.forEach(function(el){guiElCounter++;var id='el'+guiElCounter;guiElements[id]=Object.assign({id:id,cornerRadius:0,fontSize:14,text:'',bgColor:th.panel,textColor:th.text},el,{w:Math.max(el.w||200,60),h:Math.max(el.h||100,24)});renderGuiEl(id);});var empt=document.getElementById('guiEmpty');if(empt)empt.style.display='none';updateLayerList();toast(curLang==='id'?'UI berhasil dibuat!':'UI built!','var(--green)');}catch(e){toast(t.aiResponseInvalid,'var(--yellow)');}}
-      else toast(t.aiResponseInvalid,'var(--yellow)');
+      if(jm){
+        try{
+          var parsed=JSON.parse(jm[0]);
+          clearCanvas();
+          _curGuiTheme=theme;
+          var gts=document.getElementById('guiThemeSelect');
+          if(gts)gts.value=theme;
+          parsed.forEach(function(el){
+            if(!el.type)return;
+            guiElCounter++;
+            var id='el'+guiElCounter;
+            guiElements[id]=Object.assign({id:id,cornerRadius:0,fontSize:14,text:'',bgColor:th.panel,textColor:th.text},el,{
+              w:Math.max(el.w||200,40),
+              h:Math.max(el.h||40,20),
+              x:Math.max(el.x||0,0),
+              y:Math.max(el.y||0,0)
+            });
+            renderGuiEl(id);
+          });
+          var empt=document.getElementById('guiEmpty');
+          if(empt)empt.style.display='none';
+          updateLayerList();
+          toast(curLang==='id'?'UI berhasil dibuat!':'UI built successfully!','var(--green)',2500);
+        }catch(e){
+          toast(t.aiResponseInvalid,'var(--yellow)');
+        }
+      }else{
+        toast(t.aiResponseInvalid,'var(--yellow)');
+      }
+    }else{
+      toast('API error: '+r.status,'var(--pink)');
     }
-  }catch(e){toast('Error: '+(e&&e.message||''),'var(--pink)');}
+  }catch(e){
+    toast('Error: '+(e&&e.message||'unknown'),'var(--pink)');
+  }
   if(loading)loading.classList.remove('show');
 }
+
 async function sendGuiToPlace(){
   var t=T();if(!studioConnected){toast(t.guiNotConnectedToast,'var(--pink)');return;}
   var els=Object.values(guiElements);if(!els.length){toast(t.addElementFirst,'var(--yellow)');return;}
@@ -1431,14 +1564,8 @@ async function initApp(){
   }
   updateProjectUI();
   var u=SESSION.user;
-  // FIX: safe null check for sidebar avatar
   var av=document.getElementById('sbAv');
-  if(av){
-    av.src=u.avatar||_NEXUS_ICON_SVG;
-    av.onerror=function(){
-      try{this.src=_NEXUS_ICON_SVG;}catch(ex){}
-    };
-  }
+  if(av){av.src=u.avatar||_NEXUS_ICON_SVG;av.onerror=function(){try{this.src=_NEXUS_ICON_SVG;}catch(ex){};};}
   var unEl=document.getElementById('sbUn');if(unEl)unEl.textContent='@'+(u.username||'-');
   var suEl=document.getElementById('settingsUsername');if(suEl)suEl.textContent='@'+(u.username||'-');
   updateRoleDisplay();updateCreds();updatePlayTestUI();
@@ -1456,6 +1583,7 @@ async function initApp(){
   if(S.curConv&&S.convs.some(function(x){return x.id===S.curConv;})){loadConv(S.curConv);}
   else if(S.convs.length>0){var latest=S.convs.reduce(function(a,b){return(b.time||0)>(a.time||0)?b:a;});S.curConv=latest.id;loadConv(S.curConv);}
   else{newChat();}
+  // FIX: checkDailyCredits FIRST (update UI), then checkDailyOnLoad (no auto-claim)
   checkDailyCredits();
   checkDailyOnLoad();
   initThemePicker();
