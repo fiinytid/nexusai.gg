@@ -1,9 +1,5 @@
 'use strict';
 var PLUGIN_VER='null';
-const isBrowser = typeof window !== 'undefined';
-
-var curLang = isBrowser ? (localStorage.getItem('nexus_lang') || 'id') : 'id';
-var playTestEnabled = isBrowser ? localStorage.getItem('nexus_play_test') : false;
 
 // ── SECURITY ─────────────────────────────────────────────────────────────────
 var _csrfNonce=(function(){try{return Array.from(crypto.getRandomValues(new Uint8Array(20))).map(function(b){return b.toString(16).padStart(2,'0');}).join('');}catch(e){return Math.random().toString(36).slice(2)+Date.now().toString(36);}})();
