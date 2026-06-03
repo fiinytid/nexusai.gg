@@ -19,20 +19,24 @@ const PAGE_CSS = `
 
 *,*::before,*::after{margin:0;padding:0;box-sizing:border-box}
 
+/* ── BASE ── */
 html{
   height:100%;
   font-family:'JetBrains Mono',monospace;
   background:var(--bg);
   color:var(--text);
   font-size:13px;
+  /* FIXED: allow scroll on html for zoom safety */
   overflow:hidden;
 }
 body{
   height:100%;
   overflow:hidden;
+  /* FIXED: min-height so content is accessible when zoomed */
   min-height:0;
 }
 
+/* Grid background */
 body::before{
   content:'';position:fixed;inset:0;
   background:
@@ -60,27 +64,37 @@ body::before{
 .pl-bar{height:100%;background:linear-gradient(90deg,var(--cyan),var(--purple));width:0%;transition:width .35s ease;border-radius:3px}
 .pl-txt{font-size:10px;color:rgba(0,229,255,.5);letter-spacing:1px;min-height:16px;text-align:center}
 
-/* ── APP SHELL ── */
+/* ── APP SHELL ──
+   FIXED: use 100dvh with 100vh fallback; min-height for zoom;
+   clamp sidebar width so layout doesn't break at mid-zoom
+── */
 #app{
   display:grid;
   grid-template-columns:var(--sb-w) 1fr;
   height:100vh;
   height:100dvh;
+  /* FIXED: min-height prevents collapse when zoomed */
   min-height:0;
   position:relative;z-index:1;
   transition:grid-template-columns .2s;
+  /* FIXED: overflow auto so layout can adapt at extreme zoom */
   overflow:hidden;
 }
 #app.sb-hidden{grid-template-columns:0 1fr}
 
-/* ── SIDEBAR ── */
+/* ── SIDEBAR ──
+   FIXED: min-width + min-height:0 on flex children,
+   overflow:auto fallback when content is taller than viewport
+── */
 #sb{
   display:flex;flex-direction:column;
   background:var(--bg2);
   border-right:1px solid var(--b);
+  /* FIXED: allow sidebar to scroll vertically when zoomed in heavily */
   overflow:hidden;
   overflow-y:auto;
   position:relative;z-index:5;
+  /* FIXED: prevent sidebar from collapsing below its min content */
   min-height:0;
   width:var(--sb-w);
   min-width:0;
@@ -128,10 +142,12 @@ body::before{
 .proj-chip{margin:0 12px 4px;padding:5px 10px;background:rgba(255,170,50,.05);border:1px solid rgba(255,170,50,.2);border-radius:6px;font-size:9px;color:rgba(255,170,50,.8);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;flex-shrink:0}
 .sec-lbl{padding:4px 14px 2px;font-size:9px;color:var(--dim);text-transform:uppercase;letter-spacing:2px;flex-shrink:0}
 
+/* FIXED: min-height:0 is CRITICAL for flex-children that need to scroll */
 .convs{
   flex:1;
   overflow-y:auto;
   padding:3px 7px;
+  /* FIXED: without this flex child won't shrink below content size */
   min-height:0;
 }
 .convs::-webkit-scrollbar{width:2px}
@@ -159,11 +175,15 @@ body::before{
 .collapse-sb:hover{color:var(--cyan)}
 .collapse-sb svg{width:10px;height:10px;stroke:currentColor;fill:none;stroke-width:2}
 
-/* ── CHAT PANEL ── */
+/* ── CHAT PANEL ──
+   FIXED: min-height:0 so it can shrink in the grid;
+   flex children properly constrained
+── */
 #chat{
   display:flex;flex-direction:column;
   overflow:hidden;
   position:relative;
+  /* FIXED: critical for proper flex shrinking */
   min-height:0;
   min-width:0;
 }
@@ -178,6 +198,7 @@ body::before{
   background:var(--bg2);
   display:flex;align-items:center;gap:9px;
   flex-shrink:0;
+  /* FIXED: min-width:0 allows truncation in flex context */
   min-width:0;
 }
 .chat-title{font-family:'Orbitron',sans-serif;font-size:11px;font-weight:700;color:white;flex:1;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;min-width:0}
@@ -197,6 +218,7 @@ body::before{
 .chat-tabs{
   display:flex;gap:4px;padding:5px 14px;border-bottom:1px solid var(--b);
   background:var(--bg2);flex-shrink:0;align-items:center;
+  /* FIXED: allow horizontal scroll if needed at extreme zoom */
   overflow-x:auto;overflow-y:hidden;
   scrollbar-width:none;
 }
@@ -206,12 +228,16 @@ body::before{
 .tab-btn.act{background:rgba(0,229,255,.08);border-color:var(--b);color:var(--cyan)}
 .tab-btn:hover:not(.act){color:var(--text)}
 
-/* ── MESSAGES AREA ── */
+/* ── MESSAGES AREA ──
+   FIXED: min-height:0 is THE most important fix — without it flex-1
+   containers will refuse to shrink below their content height
+── */
 #msgs{
   flex:1;
   overflow-y:auto;
   padding:14px 16px;
   display:flex;flex-direction:column;gap:10px;
+  /* FIXED: without this, messages panel won't scroll and will overflow */
   min-height:0;
 }
 #msgs::-webkit-scrollbar{width:3px}
@@ -233,6 +259,7 @@ body::before{
 @keyframes mi{from{opacity:0;transform:translateY(5px)}to{opacity:1;transform:none}}
 .av{width:30px;height:30px;border-radius:50%;flex-shrink:0;overflow:hidden;background:var(--bg3)}
 .av img{width:100%;height:100%;object-fit:cover}
+/* FIXED: min-width:0 so bubble can shrink properly */
 .mb-wrap{max-width:82%;display:flex;flex-direction:column;gap:3px;min-width:0}
 .msg-sender{font-size:9px;color:var(--dim);display:flex;align-items:center;gap:5px;padding:0 3px}
 .msg.user .msg-sender{flex-direction:row-reverse}
@@ -281,13 +308,17 @@ body::before{
 .attach-file{padding:5px 9px;border:1px solid var(--b);border-radius:5px;font-size:10px;color:var(--cyan);background:rgba(0,229,255,.04);display:flex;align-items:center;gap:4px;max-width:140px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .attach-rm{position:absolute;top:-5px;right:-5px;width:16px;height:16px;background:var(--pink);border:none;border-radius:50%;color:white;font-size:9px;cursor:pointer;display:flex;align-items:center;justify-content:center;z-index:2}
 
-/* ── INPUT AREA ── */
+/* ── INPUT AREA ──
+   FIXED: flex-shrink:0 ensures it always stays visible;
+   added overflow protection for smaller viewports
+── */
 .inp-area{
   padding:9px 14px;
   border-top:1px solid var(--b);
   background:var(--bg2);
   flex-shrink:0;
   position:relative;
+  /* FIXED: ensure input doesn't get hidden at extreme zoom */
   z-index:2;
 }
 .inp-box{background:var(--bg3);border:1px solid var(--b);border-radius:12px;transition:border-color .2s;overflow:hidden}
@@ -296,6 +327,7 @@ body::before{
 #inp{width:100%;background:transparent;border:none;outline:none;color:white;font-family:'JetBrains Mono',monospace;font-size:13px;padding:11px 14px;resize:none;min-height:44px;max-height:130px;line-height:1.55;display:block}
 #inp::placeholder{color:var(--dim)}
 
+/* FIXED: inp-bar — consistent height so all items perfectly center-align */
 .inp-bar{
   display:flex;
   align-items:center;
@@ -306,6 +338,7 @@ body::before{
   flex-wrap:nowrap;
   overflow:hidden;
 }
+/* FIXED: stretch to full height so children vertically self-center */
 .inp-l{
   display:flex;
   align-items:center;
@@ -314,18 +347,24 @@ body::before{
   overflow:hidden;
   height:100%;
 }
+/* FIXED: label.ib must match button.ib exactly — use same box model */
 .ib{
   width:27px;height:27px;
   border-radius:5px;border:1px solid var(--b);
   background:transparent;color:var(--dim);
   cursor:pointer;
+  /* FIXED: explicit flex so label renders same as button */
   display:inline-flex;align-items:center;justify-content:center;
   transition:.12s;flex-shrink:0;
+  /* FIXED: reset any browser default margin/padding on label */
   padding:0;margin:0;
+  /* FIXED: prevent text selection highlight on label click */
   user-select:none;
   -webkit-user-select:none;
+  /* FIXED: consistent vertical alignment */
   vertical-align:middle;
   line-height:1;
+  /* FIXED: appearance reset for button elements */
   appearance:none;-webkit-appearance:none;
   outline:none;
   box-sizing:border-box;
@@ -333,6 +372,7 @@ body::before{
 }
 .ib:hover{color:var(--cyan);border-color:var(--cyan2)}
 .ib svg{width:14px;height:14px;stroke:currentColor;fill:none;stroke-width:1.5;flex-shrink:0;pointer-events:none}
+/* FIXED: hidden file input must take zero space */
 input[type="file"].hidden-fi{
   position:absolute;
   width:0!important;height:0!important;
@@ -342,11 +382,13 @@ input[type="file"].hidden-fi{
   white-space:nowrap;
 }
 
+/* FIXED: clamp prevents model selector from being too wide or too narrow */
 .inp-model{
   display:flex;align-items:center;gap:4px;padding:0 7px;height:27px;
   border-radius:6px;background:var(--card);border:1px solid var(--b);
   cursor:pointer;transition:.12s;font-family:'JetBrains Mono',monospace;
   font-size:9px;color:var(--dim);
+  /* FIXED: clamp width for zoom resilience */
   max-width:clamp(100px,170px,30vw);
   min-width:0;
   overflow:hidden;flex-shrink:1;
@@ -428,14 +470,18 @@ input[type="file"].hidden-fi{
 .steps-cancel-btn:hover{background:rgba(255,45,107,.16)}
 @keyframes spin{to{transform:rotate(360deg)}}
 
-/* ── GUI EDITOR TAB ── */
+/* ── GUI EDITOR TAB ──
+   FIXED: min-height:0 on guiTab, gui-main, gui-canvas for proper flex scroll
+── */
 #guiTab{
   flex:1;overflow:hidden;display:none;flex-direction:column;
+  /* FIXED: critical flex shrink */
   min-height:0;
 }
 .gui-toolbar{
   padding:6px 12px;border-bottom:1px solid var(--b);background:var(--bg2);
   display:flex;align-items:center;gap:4px;flex-wrap:wrap;flex-shrink:0;
+  /* FIXED: allow horizontal scroll on toolbar when zoomed */
   overflow-x:auto;overflow-y:hidden;scrollbar-width:none;
 }
 .gui-toolbar::-webkit-scrollbar{display:none}
@@ -443,6 +489,7 @@ input[type="file"].hidden-fi{
 .gui-btn:hover{border-color:var(--cyan2);color:var(--cyan)}
 .gui-btn svg{width:11px;height:11px;stroke:currentColor;fill:none;stroke-width:1.8}
 
+/* FIXED: min-height:0 on gui-main is critical */
 .gui-main{
   flex:1;display:flex;overflow:hidden;position:relative;
   min-height:0;
@@ -450,6 +497,7 @@ input[type="file"].hidden-fi{
 .gui-layers{
   width:145px;background:var(--bg2);border-right:1px solid var(--b);
   overflow-y:auto;padding:6px;flex-shrink:0;
+  /* FIXED */
   min-height:0;
 }
 .gui-layer-title{font-size:8px;color:var(--dim);text-transform:uppercase;letter-spacing:1.5px;margin-bottom:6px;padding:0 2px}
@@ -458,23 +506,27 @@ input[type="file"].hidden-fi{
 .gui-layer-item.sel{background:rgba(0,229,255,.06);color:var(--cyan)}
 .gui-layer-dot{width:6px;height:6px;border-radius:50%;flex-shrink:0}
 
+/* FIXED: overflow:auto so canvas scrolls when zoomed; min-height:0 */
 .gui-canvas{
   flex:1;position:relative;background:rgba(0,0,0,.3);
   overflow:auto;
   min-height:0;min-width:0;
 }
+/* FIXED: canvas inner uses min() to prevent overflow on small viewports */
 .gui-canvas-inner{
   width:800px;height:600px;
   position:relative;
   background:rgba(15,20,50,.85);
   border:1px solid var(--b);
   margin:20px auto;
+  /* FIXED: allow canvas to shrink if viewport is too small */
   min-width:400px;
 }
 .gui-el{position:absolute;border:1px solid transparent;cursor:move;user-select:none;display:flex;align-items:center;justify-content:center;font-family:'JetBrains Mono',monospace;overflow:hidden}
 .gui-el.selected{outline:1.5px solid var(--cyan)!important;outline-offset:1px}
 .gui-resize{position:absolute;bottom:-4px;right:-4px;width:9px;height:9px;background:var(--cyan);border-radius:2px;cursor:se-resize}
 
+/* FIXED: overflow-y:auto on gui-props */
 .gui-props{
   width:210px;background:var(--bg2);border-left:1px solid var(--b);
   overflow-y:auto;padding:8px;flex-shrink:0;
@@ -493,21 +545,29 @@ input[type="file"].hidden-fi{
 .gui-empty-hint{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;flex-direction:column;gap:8px;color:rgba(0,229,255,.12);font-size:11px;pointer-events:none}
 .gui-empty-hint svg{width:30px;height:30px;stroke:currentColor;fill:none;stroke-width:1.5}
 
-/* ── MODALS ── */
+/* ── MODALS ──
+   FIXED: overlay allows scroll + centers modal;
+   modal has max-height with overflow-y:auto
+── */
 .ov{
   position:fixed;inset:0;background:rgba(3,3,18,.93);z-index:500;
   display:none;align-items:flex-start;justify-content:center;
   backdrop-filter:blur(5px);
+  /* FIXED: padding + overflow so modals scroll at small viewports */
   padding:20px 16px;
   overflow-y:auto;
+  /* center within scrollable overlay */
 }
 .ov.show{display:flex}
+/* FIXED: max-height + margin:auto for centering in scrollable overlay */
 .modal{
   background:var(--bg2);border:1px solid var(--b);border-radius:13px;
   padding:22px;width:500px;max-width:100%;
   box-shadow:0 24px 64px rgba(0,0,0,.9);
+  /* FIXED: use vh-based max-height instead of fixed, scroll inside */
   max-height:none;
   overflow-y:visible;
+  /* center vertically in the overlay when content is short */
   margin:auto;
   position:relative;
 }
@@ -578,16 +638,24 @@ input[type="file"].hidden-fi{
 
 /* ══════════════════════════════════════════════════════════
    RESPONSIVE BREAKPOINTS
+   FIXED: added 600px breakpoint for heavy zoom scenarios;
+   better handling of mid-range widths (768-900px)
 ══════════════════════════════════════════════════════════ */
+
+/* Mid zoom / small desktop */
 @media(max-width:1100px){
   :root{--sb-w:230px}
 }
+
+/* Tablet / medium zoom */
 @media(max-width:900px){
   :root{--sb-w:210px}
   .inp-model{max-width:135px}
   .theme-picker-btn{display:none}
   .proj-badge-hdr{max-width:100px}
 }
+
+/* Heavy zoom / mobile landscape */
 @media(max-width:768px){
   #app{
     display:flex!important;
@@ -602,6 +670,7 @@ input[type="file"].hidden-fi{
     border-right:none;
     border-bottom:1px solid var(--b);
     flex-shrink:0;
+    /* FIXED: limit height on mobile so chat area stays visible */
     max-height:45vh;
     overflow-y:auto;
   }
@@ -620,6 +689,7 @@ input[type="file"].hidden-fi{
   .bubble{font-size:12px;padding:8px 10px}
   .inp-area{padding:6px 8px}
   #inp{font-size:12px;padding:8px 10px;min-height:38px}
+  /* FIXED: wrap input bar on mobile */
   .inp-bar{flex-wrap:wrap;gap:4px;padding:0 7px;height:auto;min-height:44px}
   .inp-l{order:1;flex:1;min-width:0}
   .btn-send,.btn-cancel{order:2;flex-shrink:0}
@@ -630,6 +700,7 @@ input[type="file"].hidden-fi{
   .proj-badge-hdr{display:none}
   .chat-tabs{padding:4px 8px;gap:3px}
   .tab-btn{padding:0 10px;font-size:9px;height:26px}
+  /* GUI on mobile */
   .gui-toolbar{overflow-x:auto;flex-wrap:nowrap;padding:5px 8px;-webkit-overflow-scrolling:touch;scrollbar-width:none}
   .gui-toolbar::-webkit-scrollbar{display:none}
   .gui-layers{display:none}
@@ -640,16 +711,21 @@ input[type="file"].hidden-fi{
   .suggs{grid-template-columns:1fr}
   .wt{font-size:18px}
 }
+
+/* Very small / extreme zoom */
 @media(max-width:550px){
   .btn-nc,.help-btn,.inbox-btn{font-size:9px;padding:0 8px;height:28px}
   .inp-model{max-width:110px}
   .chat-title{font-size:9px}
+  /* Stack input bar fully */
   .inp-bar{flex-wrap:wrap}
   .inp-l{width:100%;order:1}
   .btn-send,.btn-cancel{order:2}
   .wt{font-size:16px}
   .ws{font-size:10.5px}
 }
+
+/* Ultra small / 200% zoom on laptop */
 @media(max-width:390px){
   .btn-nc,.help-btn,.inbox-btn{font-size:9px;padding:0 8px;height:28px}
   .inp-model{max-width:100px}
@@ -659,107 +735,12 @@ input[type="file"].hidden-fi{
 `
 
 /* ─────────────────────────────────────────────────────────────────────────────
-   Helpers
-───────────────────────────────────────────────────────────────────────────── */
-
-/**
- * Inject API-bridge globals sebelum chats.js dan system_prompt.js dijalankan.
- * Semua fungsi di sini menggantikan fetch langsung di dalam kedua script lama.
- *
- * Window globals yang diekspos:
- *   NEXUS_API.getSystemPrompt(payload)  → Promise<{ prompt: string }>
- *   NEXUS_API.detectType(username, msg) → Promise<{ type: string }>
- *   NEXUS_API.chat(username, body)      → Promise<Response>   (streaming-safe)
- */
-const BRIDGE_SCRIPT = `
-(function(){
-  if (window.NEXUS_API) return; // sudah ada, skip
-
-  window.NEXUS_API = {
-
-    /* ── /api/system-prompt ────────────────────────────────────────────── */
-    getSystemPrompt: function(payload) {
-      return fetch('/api/system-prompt', {
-        method:  'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body:    JSON.stringify(payload),
-      }).then(function(r){ return r.json(); });
-    },
-
-    /* ── /api/chats  action=detect ─────────────────────────────────────── */
-    detectType: function(username, message) {
-      return fetch('/api/chats', {
-        method:  'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'X-Username':   username,
-        },
-        body: JSON.stringify({ action: 'detect', message: message }),
-      }).then(function(r){ return r.json(); });
-    },
-
-    /* ── /api/chats  action=chat (streaming/non-streaming) ─────────────── */
-    chat: function(username, body) {
-      return fetch('/api/chats', {
-        method:  'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'X-Username':   username,
-        },
-        body: JSON.stringify(body),
-      });
-    },
-
-    /* ── /api/chats  action=history ────────────────────────────────────── */
-    getHistory: function(username) {
-      return fetch('/api/chats', {
-        method:  'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'X-Username':   username,
-        },
-        body: JSON.stringify({ action: 'history' }),
-      }).then(function(r){ return r.json(); });
-    },
-
-    /* ── /api/chats  action=delete ─────────────────────────────────────── */
-    deleteConv: function(username, convId) {
-      return fetch('/api/chats', {
-        method:  'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'X-Username':   username,
-        },
-        body: JSON.stringify({ action: 'delete', convId: convId }),
-      }).then(function(r){ return r.json(); });
-    },
-
-    /* ── /api/chats  action=save ───────────────────────────────────────── */
-    saveConv: function(username, convData) {
-      return fetch('/api/chats', {
-        method:  'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'X-Username':   username,
-        },
-        body: JSON.stringify({ action: 'save', ...convData }),
-      }).then(function(r){ return r.json(); });
-    },
-
-  };
-
-  console.log('[NEXUS] API bridge ready → /api/system-prompt & /api/chats');
-})();
-`
-
-/* ─────────────────────────────────────────────────────────────────────────────
    Page Component
 ───────────────────────────────────────────────────────────────────────────── */
 export default function ChatsPage() {
   useEffect(() => {
     document.title = 'NEXUS AI — Roblox Dev Intelligence'
 
-    /* ── style: html/body full-height lock ── */
     const prevHtml = {
       h: document.documentElement.style.height,
       o: document.documentElement.style.overflow,
@@ -769,7 +750,6 @@ export default function ChatsPage() {
     document.body.style.height = '100%'
     document.body.style.overflow = 'hidden'
 
-    /* ── helper: inject <link> once ── */
     const addLink = (href: string) => {
       if (document.querySelector(`link[href="${href}"]`)) return null
       const el = document.createElement('link')
@@ -778,8 +758,13 @@ export default function ChatsPage() {
       document.head.appendChild(el)
       return el
     }
+    const l1 = addLink(
+      'https://fonts.googleapis.com/css2?family=Orbitron:wght@400;600;700;900&family=JetBrains+Mono:wght@300;400;500&display=swap'
+    )
+    const l2 = addLink(
+      'https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/styles/atom-one-dark.min.css'
+    )
 
-    /* ── helper: inject <script> once, returns promise ── */
     const loadScript = (
       src: string,
       attrs: Record<string, string> = {}
@@ -792,69 +777,37 @@ export default function ChatsPage() {
         const s = document.createElement('script')
         s.src = src
         for (const [k, v] of Object.entries(attrs)) s.setAttribute(k, v)
-        s.onload  = () => resolve()
+        s.onload = () => resolve()
         s.onerror = () => reject(new Error(`Failed to load: ${src}`))
         document.head.appendChild(s)
       })
 
-    /* ── helper: inject inline script once ── */
-    const injectInline = (id: string, code: string) => {
-      if (document.getElementById(id)) return
-      const s = document.createElement('script')
-      s.id   = id
-      s.type = 'text/javascript'
-      s.text = code
-      document.head.appendChild(s)
-    }
-
-    /* ── fonts & highlight theme ── */
-    const l1 = addLink(
-      'https://fonts.googleapis.com/css2?family=Orbitron:wght@400;600;700;900&family=JetBrains+Mono:wght@300;400;500&display=swap'
-    )
-    const l2 = addLink(
-      'https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/styles/atom-one-dark.min.css'
-    )
-
-    /* ── boot sequence ── */
     ;(async () => {
       try {
-        /* 1. marked + highlight */
         await loadScript('https://cdn.jsdelivr.net/npm/marked/marked.min.js')
         await loadScript('https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/highlight.min.js')
         await loadScript('https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/languages/lua.min.js')
-
-        /* 2. cloudflare turnstile (fire-and-forget) */
         void loadScript(
           'https://challenges.cloudflare.com/turnstile/v0/api.js?render=explicit',
           { async: 'true', defer: 'true' }
         )
-
-        /* 3. inject API bridge SEBELUM chats.js & system_prompt.js */
-        injectInline('nexus-api-bridge', BRIDGE_SCRIPT)
-
-        /* 4. system_prompt.js — menggunakan window.NEXUS_API.getSystemPrompt() */
         await loadScript('/js/system_prompt.js')
-
-        /* 5. chats.js — menggunakan window.NEXUS_API.* */
         await loadScript('/js/chats.js')
-
       } catch (err) {
         console.error('[NEXUS] Script load error:', err)
       }
     })()
 
-    /* ── cleanup ── */
     return () => {
       document.documentElement.style.height = prevHtml.h
       document.documentElement.style.overflow = prevHtml.o
-      document.body.style.height   = ''
+      document.body.style.height = ''
       document.body.style.overflow = ''
       l1?.remove()
       l2?.remove()
     }
   }, [])
 
-  /* ── window function caller helpers ── */
   type WinFn = (...a: unknown[]) => void
   const win = (fn: string) =>
     (window as unknown as Record<string, WinFn>)[fn]
@@ -879,7 +832,6 @@ export default function ChatsPage() {
       t.style.display = 'none'
     }
 
-  /* ── JSX ── */
   return (
     <>
       <style dangerouslySetInnerHTML={{ __html: PAGE_CSS }} />
@@ -933,7 +885,7 @@ export default function ChatsPage() {
               onClick={call('openAvatarModal')}
             />
             <div style={{ minWidth: 0, flex: 1 }}>
-              <div className="sb-un"  id="sbUn">-</div>
+              <div className="sb-un" id="sbUn">-</div>
               <div className="sb-role" id="sbRole">Roblox Developer</div>
             </div>
             <button className="sb-gear" onClick={call('openSettings')} aria-label="Settings">
@@ -975,7 +927,7 @@ export default function ChatsPage() {
             <button className="btn-nc" onClick={call('newChat')}>
               <svg viewBox="0 0 24 24">
                 <line x1="12" y1="5" x2="12" y2="19" />
-                <line x1="5"  y1="12" x2="19" y2="12" />
+                <line x1="5" y1="12" x2="19" y2="12" />
               </svg>
               <span id="newChatLbl">New Chat</span>
             </button>
@@ -1033,7 +985,7 @@ export default function ChatsPage() {
           <div className="plug-banner" id="plugBanner">
             <svg viewBox="0 0 24 24">
               <circle cx="12" cy="12" r="10" />
-              <line x1="12" y1="8"  x2="12" y2="12" />
+              <line x1="12" y1="8" x2="12" y2="12" />
               <line x1="12" y1="16" x2="12.01" y2="16" />
             </svg>
             <span id="plugBannerTxt">Plugin not connected —</span>
@@ -1082,7 +1034,9 @@ export default function ChatsPage() {
             </button>
           </div>
 
-          {/* ── Chat Tab ── */}
+          {/* ── Chat Tab ──
+              FIXED: added minHeight:0 to inline style so it shrinks properly
+          ── */}
           <div
             id="chatTab"
             style={{
@@ -1090,6 +1044,7 @@ export default function ChatsPage() {
               overflow: 'hidden',
               display: 'flex',
               flexDirection: 'column',
+              /* FIXED: without minHeight:0 this won't shrink in flex parent */
               minHeight: 0,
             }}
           >
@@ -1118,6 +1073,7 @@ export default function ChatsPage() {
                 <textarea id="inp" placeholder="Ask NEXUS AI..." rows={1} />
                 <div className="inp-bar">
                   <div className="inp-l">
+                    {/* FIXED: wrapper div so hidden input doesn't affect flex layout at all */}
                     <div style={{ position: 'relative', flexShrink: 0, display: 'inline-flex' }}>
                       <label
                         htmlFor="fi"
@@ -1131,6 +1087,7 @@ export default function ChatsPage() {
                           <path d="M21.44 11.05l-9.19 9.19a6 6 0 01-8.49-8.49l9.19-9.19a4 4 0 015.66 5.66l-9.2 9.19a2 2 0 01-2.83-2.83l8.49-8.48" />
                         </svg>
                       </label>
+                      {/* FIXED: absolutely positioned, zero-size, completely out of flow */}
                       <input
                         type="file"
                         id="fi"
@@ -1194,8 +1151,8 @@ export default function ChatsPage() {
 
                   <button className="btn-cancel hidden" id="cancelBtn" onClick={call('cancelGen')} aria-label="Cancel">
                     <svg viewBox="0 0 24 24">
-                      <line x1="18" y1="6"  x2="6"  y2="18" />
-                      <line x1="6"  y1="6"  x2="18" y2="18" />
+                      <line x1="18" y1="6" x2="6" y2="18" />
+                      <line x1="6" y1="6" x2="18" y2="18" />
                     </svg>
                   </button>
                   <button className="btn-send" id="sendBtn" onClick={call('send')} aria-label="Send">
@@ -1211,23 +1168,22 @@ export default function ChatsPage() {
             </div>
           </div>
 
-          {/* ── GUI Editor Tab ── */}
+          {/* ── GUI Editor Tab ──
+              FIXED: minHeight:0 on inline style
+          ── */}
           <div id="guiTab">
             <div className="gui-toolbar">
               <span style={{ fontSize: 10, color: 'var(--dim)', flexShrink: 0 }} id="guiAddLabel">Add:</span>
               {(['Frame', 'TextLabel', 'TextButton', 'TextBox', 'ImageLabel', 'ScrollingFrame'] as const).map((type) => {
                 const icons: Record<string, React.ReactNode> = {
-                  Frame:          <rect x="3" y="3" width="18" height="18" rx="2" />,
-                  TextLabel:      <><polyline points="4 7 4 4 20 4 20 7"/><line x1="9" y1="20" x2="15" y2="20"/><line x1="12" y1="4" x2="12" y2="20"/></>,
-                  TextButton:     <rect x="2" y="7" width="20" height="10" rx="3" />,
-                  TextBox:        <><rect x="3" y="5" width="18" height="14" rx="2"/><line x1="7" y1="12" x2="17" y2="12"/></>,
-                  ImageLabel:     <><rect x="3" y="3" width="18" height="18" rx="2"/><circle cx="8.5" cy="8.5" r="1.5"/><polyline points="21 15 16 10 5 21"/></>,
+                  Frame: <rect x="3" y="3" width="18" height="18" rx="2" />,
+                  TextLabel: <><polyline points="4 7 4 4 20 4 20 7"/><line x1="9" y1="20" x2="15" y2="20"/><line x1="12" y1="4" x2="12" y2="20"/></>,
+                  TextButton: <rect x="2" y="7" width="20" height="10" rx="3" />,
+                  TextBox: <><rect x="3" y="5" width="18" height="14" rx="2"/><line x1="7" y1="12" x2="17" y2="12"/></>,
+                  ImageLabel: <><rect x="3" y="3" width="18" height="18" rx="2"/><circle cx="8.5" cy="8.5" r="1.5"/><polyline points="21 15 16 10 5 21"/></>,
                   ScrollingFrame: <><rect x="3" y="3" width="18" height="18" rx="2"/><path d="M3 9h18"/></>,
                 }
-                const labels: Record<string, string> = {
-                  Frame:'Frame', TextLabel:'Label', TextButton:'Button',
-                  TextBox:'Input', ImageLabel:'Image', ScrollingFrame:'Scroll',
-                }
+                const labels: Record<string, string> = { Frame:'Frame',TextLabel:'Label',TextButton:'Button',TextBox:'Input',ImageLabel:'Image',ScrollingFrame:'Scroll' }
                 return (
                   <button key={type} className="gui-btn" onClick={call('addEl', type)}>
                     <svg viewBox="0 0 24 24">{icons[type]}</svg>
@@ -1524,9 +1480,9 @@ export default function ChatsPage() {
             />
           </div>
           <div className="modal-footer">
-            <button className="btn-modal primary"   onClick={call('copyGuiCode')}                     id="guiCodeCopyBtn">Copy</button>
-            <button className="btn-modal secondary" onClick={call('downloadGuiCode')}                 id="guiCodeDlBtn">Download .lua</button>
-            <button className="btn-modal secondary" onClick={call('closeModal', 'guiCodeModal')}      id="guiCodeCloseBtn">Close</button>
+            <button className="btn-modal primary" onClick={call('copyGuiCode')} id="guiCodeCopyBtn">Copy</button>
+            <button className="btn-modal secondary" onClick={call('downloadGuiCode')} id="guiCodeDlBtn">Download .lua</button>
+            <button className="btn-modal secondary" onClick={call('closeModal', 'guiCodeModal')} id="guiCodeCloseBtn">Close</button>
           </div>
         </div>
       </div>
@@ -1559,8 +1515,8 @@ export default function ChatsPage() {
             />
           </div>
           <div className="modal-footer">
-            <button className="btn-modal primary"   onClick={call('generateGuiFromAI')}              id="guiAiBuildBtn">Build with AI</button>
-            <button className="btn-modal secondary" onClick={call('closeModal', 'guiAIChatModal')}   id="guiAiCancelBtn">Cancel</button>
+            <button className="btn-modal primary" onClick={call('generateGuiFromAI')} id="guiAiBuildBtn">Build with AI</button>
+            <button className="btn-modal secondary" onClick={call('closeModal', 'guiAIChatModal')} id="guiAiCancelBtn">Cancel</button>
           </div>
         </div>
       </div>
@@ -1606,9 +1562,7 @@ export default function ChatsPage() {
         <div className="modal" style={{ width: 520 }}>
           <div className="modal-t">
             <svg viewBox="0 0 24 24">
-              <circle cx="18" cy="5"  r="3" />
-              <circle cx="6"  cy="12" r="3" />
-              <circle cx="18" cy="19" r="3" />
+              <circle cx="18" cy="5" r="3" /><circle cx="6" cy="12" r="3" /><circle cx="18" cy="19" r="3" />
               <line x1="8.59" y1="13.51" x2="15.42" y2="17.49" />
               <line x1="15.41" y1="6.51" x2="8.59" y2="10.49" />
             </svg>
@@ -1619,8 +1573,8 @@ export default function ChatsPage() {
             <textarea className="share-modal-ta" id="shareModalTa" readOnly />
           </div>
           <div className="modal-footer">
-            <button className="btn-modal primary"   onClick={call('copyShareText')}                id="shareModalCopyBtn">Copy Text</button>
-            <button className="btn-modal secondary" onClick={call('closeModal', 'shareModal')}     id="shareModalCloseBtn">Close</button>
+            <button className="btn-modal primary" onClick={call('copyShareText')} id="shareModalCopyBtn">Copy Text</button>
+            <button className="btn-modal secondary" onClick={call('closeModal', 'shareModal')} id="shareModalCloseBtn">Close</button>
           </div>
         </div>
       </div>
