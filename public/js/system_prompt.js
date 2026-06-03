@@ -332,7 +332,13 @@ function buildSysPrompt() {
     'When building UI with icons, ALWAYS use asset IDs from the ICON LIBRARY section.\n'+
     'Use Image property: Image = "rbxassetid://XXXXXXXXX"\n'+
     'Pick the icon that best matches the UI context (shop=Cart, health=Heart, etc.).\n'+
-    'NEVER use placeholder or made-up asset IDs.';
+    'NEVER use placeholder or made-up asset IDs.\n\n'+
+
+    '━━━ RULE 19 — SOUNDS (USE ASSET IDs FROM SOUND LIBRARY) ━━━\n'+
+    'When adding sounds to UI, actions, or gameplay, ALWAYS use asset IDs from the SOUND LIBRARY section.\n'+
+    'Use SoundId property: SoundId = "rbxassetid://XXXXXXXXX"\n'+
+    'Pick the sound that best matches the context (button click, reward, combat, etc.).\n'+
+    'NEVER use placeholder or made-up audio asset IDs.';
 
   // ══════════════════════════════════════════════════════════════════════════
   // 6. SECURITY & ANTI-EXPLOIT
@@ -378,7 +384,10 @@ function buildSysPrompt() {
     '• RunService.Heartbeat     → physics/movement\n'+
     '• RunService.Stepped       → pre-physics\n'+
     '• DataStore → max 1x per 6 seconds per key\n'+
-    '• MemoryStoreService → fast temporary cross-server sync';
+    '• MemoryStoreService → fast temporary cross-server sync\n'+
+    '• Sound objects → parent to SoundService for global (non-positional) audio\n'+
+    '• Sound objects → parent to a Part/Attachment for 3D positional audio\n'+
+    '• Use Sound:Play() / Sound:Stop() / Sound:Pause() — do NOT destroy and recreate Sounds in loops';
 
   // ══════════════════════════════════════════════════════════════════════════
   // 8. ROBLOX API QUICK REFERENCE
@@ -437,6 +446,49 @@ function buildSysPrompt() {
     'AngularVelocity     → replaces BodyAngularVelocity\n'+
     'VectorForce         → replaces BodyForce\n'+
     'Torque              → replaces BodyTorque\n\n'+
+
+    '━━━ SOUND CLASS — KEY PROPERTIES ━━━\n'+
+    'SoundId         : string  — "rbxassetid://ID"\n'+
+    'Volume          : number  — 0.0 to 10.0 (default 0.5)\n'+
+    'Pitch           : number  — 0.0 to 20.0 (default 1.0, 2.0 = one octave up)\n'+
+    'Looped          : bool    — true to loop continuously\n'+
+    'PlayOnRemove    : bool    — plays when Sound is destroyed (one-shot pattern)\n'+
+    'RollOffMaxDistance: number— max distance for 3D spatial falloff\n'+
+    'RollOffMode     : Enum    — InverseTapered (default) | Inverse | Linear | LinearSquare\n'+
+    'TimePosition    : number  — current playback position in seconds (read/write)\n'+
+    'TimeLength      : number  — total duration in seconds (read-only)\n'+
+    'IsPlaying       : bool    — whether the sound is currently playing (read-only)\n'+
+    'IsLoaded        : bool    — whether the asset is loaded (read-only)\n\n'+
+
+    '━━━ SOUND CLASS — KEY METHODS ━━━\n'+
+    'Sound:Play()    — starts playback from TimePosition\n'+
+    'Sound:Stop()    — stops and resets TimePosition to 0\n'+
+    'Sound:Pause()   — pauses, preserving TimePosition\n'+
+    'Sound:Resume()  — resumes from paused TimePosition\n\n'+
+
+    '━━━ SOUND CLASS — KEY EVENTS ━━━\n'+
+    'Sound.Ended          → fires when playback reaches the end (non-looped)\n'+
+    'Sound.Loaded         → fires when the asset finishes loading\n'+
+    'Sound.Played         → fires when Play() is called\n'+
+    'Sound.Stopped        → fires when Stop() is called\n'+
+    'Sound.DidLoop        → fires each time a looped sound restarts\n\n'+
+
+    '━━━ SOUNDSERVICE — KEY PROPERTIES ━━━\n'+
+    'SoundService.AmbientReverb   : Enum.ReverbType  — global reverb preset\n'+
+    'SoundService.DistanceFactor  : number           — meters per stud (default 3.33)\n'+
+    'SoundService.DopplerScale    : number           — Doppler effect strength\n'+
+    'SoundService.RolloffScale    : number           — global falloff multiplier\n'+
+    'SoundService:PlayLocalSound(sound: Sound)       — plays a Sound without 3D position\n\n'+
+
+    '━━━ SOUND EFFECTS (children of Sound) ━━━\n'+
+    'EqualizerSoundEffect   — LowGain, MidGain, HighGain (dB)\n'+
+    'ReverbSoundEffect      — DecayTime, Density, Diffusion, DryLevel, WetLevel\n'+
+    'ChorusSoundEffect      — Depth, Rate\n'+
+    'CompressorSoundEffect  — Attack, Release, Threshold, Ratio\n'+
+    'DistortionSoundEffect  — Level\n'+
+    'FlangeSoundEffect      — Depth, Rate\n'+
+    'PitchShiftSoundEffect  — Octave (shift pitch in octaves, -1 to +1)\n'+
+    'TremoloSoundEffect     — Frequency, Depth\n\n'+
 
     '━━━ TEXTCHATSERVICE (MODERN) ━━━\n'+
     'TextChatService.MessageReceived → intercept chat\n'+
@@ -539,7 +591,91 @@ function buildSysPrompt() {
     '  Warning                  rbxassetid://122437442880819\n';
 
   // ══════════════════════════════════════════════════════════════════════════
-  // 10. ACTIONS REFERENCE — SYNCED WITH ActionsManager v11.1
+  // 10. SOUND LIBRARY — ROBLOX AUDIO ASSET IDs
+  // ══════════════════════════════════════════════════════════════════════════
+  var soundLibrary =
+    '╔═══════════════════════════════════════════════════════╗\n'+
+    '║         SOUND LIBRARY — ROBLOX AUDIO ASSET IDs        ║\n'+
+    '╚═══════════════════════════════════════════════════════╝\n'+
+    'Use these IDs for Sound objects. Format: SoundId = "rbxassetid://ID"\n'+
+    'Parent sounds to SoundService for global audio, or to a Part/Attachment for 3D positional audio.\n'+
+    'Trigger with create_sound action. See SOUND CLASS reference in the API QUICK REFERENCE section.\n\n'+
+
+    '━━━ UI & MENU ━━━\n'+
+    '  Button Click (Modern)            rbxassetid://6895079853\n'+
+    '  Button Click (Light Touch)       rbxassetid://9114221199\n'+
+    '  Menu Open / Pop-in               rbxassetid://2550663487\n'+
+    '  Notification Success             rbxassetid://2865227271\n'+
+    '  Notification Error / Fail        rbxassetid://5543666504\n\n'+
+
+    '  Usage context:\n'+
+    '  • Button Click (Modern)    → primary action buttons, confirm dialogs\n'+
+    '  • Button Click (Light)     → secondary buttons, list items, toggles\n'+
+    '  • Menu Open / Pop-in       → panel open, modal appear, dropdown expand\n'+
+    '  • Notification Success     → purchase complete, task done, save successful\n'+
+    '  • Notification Error       → invalid input, action blocked, request failed\n\n'+
+
+    '━━━ COMBAT & ACTION ━━━\n'+
+    '  Sword Slash                      rbxassetid://12222229\n'+
+    '  Hit Impact                       rbxassetid://131237241\n'+
+    '  Explosion (Large)                rbxassetid://12222084\n'+
+    '  Pistol Shot                      rbxassetid://5238260384\n'+
+    '  Gun Reload                       rbxassetid://131070682\n\n'+
+
+    '  Usage context:\n'+
+    '  • Sword Slash    → melee swing, tool use, close-range attack\n'+
+    '  • Hit Impact     → projectile land, punch connect, damage received\n'+
+    '  • Explosion      → grenade, rocket, environmental destruction\n'+
+    '  • Pistol Shot    → ranged weapon fire, turret shoot\n'+
+    '  • Gun Reload     → weapon recharge, ability cooldown ready\n\n'+
+
+    '━━━ MOVEMENT & PLAYER ━━━\n'+
+    '  Jump                             rbxassetid://12222208\n'+
+    '  Landing                          rbxassetid://12222152\n'+
+    '  Footstep (Concrete / Floor)      rbxassetid://1156535269\n'+
+    '  Footstep (Grass)                 rbxassetid://132170343\n'+
+    '  Teleport / Magic                 rbxassetid://138090544\n\n'+
+
+    '  Usage context:\n'+
+    '  • Jump              → player or NPC jump event\n'+
+    '  • Landing           → player lands after fall or jump\n'+
+    '  • Footstep (Floor)  → walking on hard surfaces (stone, metal, wood)\n'+
+    '  • Footstep (Grass)  → walking on soft surfaces (grass, dirt, sand)\n'+
+    '  • Teleport / Magic  → warp, respawn, ability cast, item use\n\n'+
+
+    '━━━ REWARDS & LOOT ━━━\n'+
+    '  Coin Collect (Cash Register)     rbxassetid://5153205307\n'+
+    '  Item Pickup                      rbxassetid://2373079087\n'+
+    '  Level Up / Victory               rbxassetid://2125193951\n'+
+    '  Chest Open                       rbxassetid://1133314051\n\n'+
+
+    '  Usage context:\n'+
+    '  • Coin Collect     → currency pickup, cash earned, purchase confirm\n'+
+    '  • Item Pickup      → loot collected, tool equipped, badge granted\n'+
+    '  • Level Up         → rank increase, quest complete, match victory\n'+
+    '  • Chest Open       → loot box, crate, mystery egg, reward reveal\n\n'+
+
+    '━━━ AMBIENCE ━━━\n'+
+    '  Rain & Thunder                   rbxassetid://151679162\n'+
+    '  Night Wind                       rbxassetid://184351334\n'+
+    '  Campfire (Burning)               rbxassetid://308819543\n\n'+
+
+    '  Usage context:\n'+
+    '  • Rain & Thunder   → storm weather, outdoor rain zones (Looped=true)\n'+
+    '  • Night Wind       → dark or outdoor night areas (Looped=true)\n'+
+    '  • Campfire         → fire pit, forge, bonfire nearby (Looped=true)\n'+
+    '  All ambience sounds: parent to Part or Attachment for 3D falloff,\n'+
+    '  or parent to SoundService with RollOffMode=None for global ambient.\n\n'+
+
+    '━━━ RECOMMENDED SOUND PROPERTIES BY CATEGORY ━━━\n'+
+    '  UI sounds       → Volume=0.5, Looped=false, parent=SoundService\n'+
+    '  Combat sounds   → Volume=0.8, Looped=false, parent=Part (3D)\n'+
+    '  Footsteps       → Volume=0.4, Looped=false, parent=HumanoidRootPart\n'+
+    '  Rewards         → Volume=0.7, Looped=false, parent=SoundService\n'+
+    '  Ambience        → Volume=0.3, Looped=true,  parent=Part or SoundService\n';
+
+  // ══════════════════════════════════════════════════════════════════════════
+  // 11. ACTIONS REFERENCE — SYNCED WITH ActionsManager v11.1
   // ONLY actions that ACTUALLY EXIST — no aliases, no removed actions
   // ══════════════════════════════════════════════════════════════════════════
   var actionsRef =
@@ -712,6 +848,8 @@ function buildSysPrompt() {
     'create_particle(target, rate, enabled, texture, color1, color2, lifetime, speed)\n'+
     'create_trail(target, lifetime, color1, color2)\n'+
     'create_sound(name, sound_id, volume, looped, pitch, roll_off_max, roll_off_mode, parent)\n'+
+    '  ← sound_id format: "rbxassetid://ID" — use IDs from SOUND LIBRARY section\n'+
+    '  ← parent defaults to SoundService; pass Part name for 3D positional audio\n'+
     'place_decal(target, decal_id, face, transparency)\n'+
     'place_texture(target, texture_id, face, stud_size)\n\n'+
 
@@ -777,123 +915,7 @@ function buildSysPrompt() {
     'undo() | redo()\n'+
     'save_waypoint(label)\n'+
     'set_project(project_id, project_name)\n'+
-    'none()  ← no-op\n\n'+
-
-    '━━━ REMOVED — NEVER USE THESE ━━━\n'+
-    '✗ list_scripts             → use check_list instead (renamed in v11.1)\n'+
-    '✗ apply_theme / apply_theme_colors / get_theme / list_themes / preview_theme\n'+
-    '✗ create_remote_event      → use create_remote type="RemoteEvent"\n'+
-    '✗ create_remote_function   → use create_remote type="RemoteFunction"\n'+
-    '✗ create_bindable_event    → use create_remote type="BindableEvent"\n'+
-    '✗ create_billboard         → use create_gui class="BillboardGui"\n'+
-    '✗ create_surface_gui       → use create_gui class="SurfaceGui"\n'+
-    '✗ create_wedge / create_sphere / create_cylinder / create_truss → use create_part type=...\n'+
-    '✗ create_number_value / create_bool_value / create_string_value / create_int_value → use create_value\n'+
-    '✗ create_hinge / create_spring / create_rope / create_align_position / etc → use create_constraint\n'+
-    '✗ fill_terrain_block / fill_terrain_ball / fill_water / fill_grass / etc → use fill_terrain operation=...\n'+
-    '✗ batch_modify / batch_remote / move_to_service / get_module / get_asset_library\n'+
-    '✗ deploy_module / use_icon_module / install_icon / list_modules\n'+
-    '✗ create_spawn             → use create_spawn_location\n'+
-    '✗ CollectionService.ChangedSignal → DOES NOT EXIST in Roblox API';
-
-  // ══════════════════════════════════════════════════════════════════════════
-  // 11. COMMON PATTERNS LIBRARY
-  // ══════════════════════════════════════════════════════════════════════════
-  var patternsLib =
-    '╔═══════════════════════════════════════════════════════╗\n'+
-    '║           COMMON PATTERNS LIBRARY                     ║\n'+
-    '╚═══════════════════════════════════════════════════════╝\n\n'+
-
-    '━━━ DATASTORE WITH RETRY ━━━\n'+
-    '  local function safeGet(store, key, retries)\n'+
-    '    retries = retries or 3\n'+
-    '    for i = 1, retries do\n'+
-    '      local ok, val = pcall(function() return store:GetAsync(key) end)\n'+
-    '      if ok then return val end\n'+
-    '      task.wait(2 ^ i)  -- exponential backoff: 2, 4, 8 seconds\n'+
-    '    end\n'+
-    '    return nil\n'+
-    '  end\n\n'+
-
-    '━━━ CHARACTER WAIT PATTERN ━━━\n'+
-    '  local function onCharacterAdded(char)\n'+
-    '    local hrp = char:WaitForChild("HumanoidRootPart", 10)\n'+
-    '    local hum = char:WaitForChild("Humanoid", 10)\n'+
-    '    if not hrp or not hum then return end\n'+
-    '  end\n'+
-    '  player.CharacterAdded:Connect(onCharacterAdded)\n'+
-    '  if player.Character then onCharacterAdded(player.Character) end\n\n'+
-
-    '━━━ GUI TWEEN OPEN (SCALE-BASED) ━━━\n'+
-    '  -- All sizes use Scale, not Offset\n'+
-    '  frame.AnchorPoint = Vector2.new(0.5, 0.5)\n'+
-    '  frame.Position = UDim2.new(0.5, 0, 0.5, 0)\n'+
-    '  frame.Size = UDim2.new(0, 0, 0, 0)\n'+
-    '  frame.Visible = true\n'+
-    '  TweenService:Create(frame, TweenInfo.new(0.3, Enum.EasingStyle.Back, Enum.EasingDirection.Out),\n'+
-    '    {Size = UDim2.new(0.5, 0, 0.6, 0)}):Play()  -- 50% wide, 60% tall\n\n'+
-
-    '━━━ HOVER BUTTON EFFECT ━━━\n'+
-    '  button.AutoButtonColor = false\n'+
-    '  button.MouseEnter:Connect(function()\n'+
-    '    TweenService:Create(button, TweenInfo.new(0.15),\n'+
-    '      {BackgroundColor3 = hoverColor}):Play()\n'+
-    '  end)\n'+
-    '  button.MouseLeave:Connect(function()\n'+
-    '    TweenService:Create(button, TweenInfo.new(0.15),\n'+
-    '      {BackgroundColor3 = normalColor}):Play()\n'+
-    '  end)\n\n'+
-
-    '━━━ ICON USAGE IN UI ━━━\n'+
-    '  local icon = Instance.new("ImageLabel")\n'+
-    '  icon.Image = "rbxassetid://84697600263846"  -- Coin\n'+
-    '  icon.Size = UDim2.new(0, 32, 0, 32)  -- icons use fixed pixel size (exception)\n'+
-    '  icon.BackgroundTransparency = 1\n'+
-    '  icon.Parent = frame\n\n'+
-
-    '━━━ RATE LIMIT REMOTE ━━━\n'+
-    '  local cooldowns = {}\n'+
-    '  local COOLDOWN = 0.5\n'+
-    '  remote.OnServerEvent:Connect(function(player, ...)\n'+
-    '    local now = os.clock()\n'+
-    '    if cooldowns[player.UserId] and now - cooldowns[player.UserId] < COOLDOWN then return end\n'+
-    '    cooldowns[player.UserId] = now\n'+
-    '  end)\n'+
-    '  Players.PlayerRemoving:Connect(function(p) cooldowns[p.UserId] = nil end)\n\n'+
-
-    '━━━ MODULE SCRIPT TEMPLATE (no strict by default) ━━━\n'+
-    '  local Module = {}\n'+
-    '  \n'+
-    '  function Module.new(config)\n'+
-    '    local self = setmetatable({}, {__index = Module})\n'+
-    '    self.maxHealth = config.maxHealth\n'+
-    '    self.speed = config.speed\n'+
-    '    return self\n'+
-    '  end\n'+
-    '  \n'+
-    '  return Module\n\n'+
-
-    '━━━ SCREENGUI TEMPLATE (IgnoreGuiInset always true) ━━━\n'+
-    '  -- In create_gui action always use: ignore_inset: true, enabled: false\n'+
-    '  -- In Lua script:\n'+
-    '  local gui = Instance.new("ScreenGui")\n'+
-    '  gui.IgnoreGuiInset = true  -- MANDATORY\n'+
-    '  gui.ResetOnSpawn = false\n'+
-    '  gui.Enabled = false  -- enable via script logic only\n'+
-    '  gui.Parent = player.PlayerGui\n\n'+
-
-    '━━━ STUDIO CONNECTED — SUMMARY FORMAT ━━━\n'+
-    'CORRECT output after inject:\n'+
-    '  "Scripts created and injected into Studio.\n'+
-    '   • ShopSystem_Server → ServerScriptService\n'+
-    '   • ShopGUI_Client → StarterPlayerScripts\n'+
-    '   • ShopRemote → ReplicatedStorage"\n'+
-    '\n'+
-    'WRONG output (FORBIDDEN):\n'+
-    '  "Would you like me to also add...?"\n'+
-    '  "> Option A: add animation"\n'+
-    '  "> Option B: skip animation"\n'+
-    '  "I have prepared it, shall I continue?"';
+    'none()  ← no-op\n\n';
 
   // ══════════════════════════════════════════════════════════════════════════
   // ASSEMBLE
@@ -908,7 +930,7 @@ function buildSysPrompt() {
     performanceRules,
     classRef,
     iconLibrary,
+    soundLibrary,
     actionsRef,
-    patternsLib
   ].join('\n\n');
 }
