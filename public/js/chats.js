@@ -3015,7 +3015,6 @@ function initThemePicker() {
 async function initApp() {
     if (!SESSION) return;
     var t = T();
-    _injectSuggChipStyles();
     updateLoader(8, t.loaderInit);
     S.currentProjectId = getProjectIdFromUrl();
     updateLoader(22, t.loaderLoadData);
