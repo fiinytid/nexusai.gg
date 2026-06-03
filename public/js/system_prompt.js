@@ -12,7 +12,7 @@ function buildSysPrompt() {
   var ptEnabled    = _S.playTestEnabled !== false;
   var ptDur        = _S.playTestDuration || 15;
   var curLangLocal = (typeof curLang !== 'undefined') ? curLang : 'en';
-  var PLUGIN_VER_L = (typeof PLUGIN_VER !== 'undefined') ? PLUGIN_VER : 'V1.2.142';
+  var PLUGIN_VER_L = (typeof PLUGIN_VER !== 'undefined') ? PLUGIN_VER : 'V1.3.12';
 
   var selectedTheme = _S.selectedTheme || 'nexus_ai';
   var isCustomTheme = selectedTheme === 'custom';
