@@ -90,20 +90,124 @@ function buildSysPrompt() {
   var codeRules =
     '## CODE RULES\n\n'+
 
+    '# MANDATORY SCRIPT STRUCTURE — ALWAYS WRITE IN THIS EXACT ORDER\n'+
+    'Every Script and LocalScript MUST follow this top-to-bottom order without exception:\n'+
+    '\n'+
+    '  BLOCK 1 — Services\n'+
+    '    Cache all services at the very top, never inside loops or functions.\n'+
+    '    local Players       = game:GetService("Players")\n'+
+    '    local TweenService  = game:GetService("TweenService")\n'+
+    '    local RunService    = game:GetService("RunService")\n'+
+    '    -- etc.\n'+
+    '\n'+
+    '  BLOCK 2 — Constants & Configuration\n'+
+    '    All fixed values, colors, sizes, durations. No function calls here.\n'+
+    '    local TWEEN_TIME = 0.25\n'+
+    '    local ACCENT     = Color3.fromRGB(0,210,255)\n'+
+    '\n'+
+    '  BLOCK 3 — Remote / Module references\n'+
+    '    local RS     = game:GetService("ReplicatedStorage")\n'+
+    '    local remote = RS:WaitForChild("MyRemote", 10)\n'+
+    '    local module = require(RS:WaitForChild("MyModule", 10))\n'+
+    '\n'+
+    '  BLOCK 4 — UI / Object references\n'+
+    '    Resolve all WaitForChild references here. Nil-check every result.\n'+
+    '    local gui   = script.Parent\n'+
+    '    local frame = gui:WaitForChild("MainFrame", 10)\n'+
+    '    if not frame then warn("MainFrame missing") return end\n'+
+    '\n'+
+    '  BLOCK 5 — State variables\n'+
+    '    All mutable variables and forward declarations.\n'+
+    '    local isOpen   = false\n'+
+    '    local debounce = false\n'+
+    '    local toggle   -- forward declare if needed for mutual calls\n'+
+    '\n'+
+    '  BLOCK 6 — Helper / Utility functions\n'+
+    '    Small pure functions: tween helpers, formatters, validators.\n'+
+    '    These MUST NOT call any function from Block 7 or 8.\n'+
+    '    local function makeTween(obj, info, props)\n'+
+    '      return TweenService:Create(obj, info, props)\n'+
+    '    end\n'+
+    '\n'+
+    '  BLOCK 7 — Core logic functions\n'+
+    '    open(), close(), refresh(), update(), show(), hide(), etc.\n'+
+    '    EVERY function here must be FULLY defined before any call to it.\n'+
+    '    local function close()   -- define close BEFORE open if open calls close\n'+
+    '      frame.Visible = false\n'+
+    '    end\n'+
+    '    local function open()\n'+
+    '      frame.Visible = true\n'+
+    '    end\n'+
+    '    toggle = function()      -- assign forward-declared toggle here\n'+
+    '      if isOpen then close() else open() end\n'+
+    '    end\n'+
+    '\n'+
+    '  BLOCK 8 — Event connections\n'+
+    '    Connect ALL signals here, after every handler function is defined.\n'+
+    '    button.MouseButton1Click:Connect(toggle)\n'+
+    '    remote.OnClientEvent:Connect(onRemoteReceived)\n'+
+    '\n'+
+    '  BLOCK 9 — Initialization (runs once, at the very bottom)\n'+
+    '    Any startup logic: first data load, initial UI state, etc.\n'+
+    '    close()   -- set initial state\n'+
+    '    loadData()\n'+
+    '\n'+
+
+    '# FUNCTION CALL ORDER — NON-NEGOTIABLE\n'+
+    '• EVERY local function MUST be fully written ABOVE the first line that calls it.\n'+
+    '• Lua evaluates scripts top-to-bottom. A local function does not exist until its definition line is reached.\n'+
+    '• If function A calls function B internally, function B must be defined above function A.\n'+
+    '• For mutual recursion, use a forward declaration: declare the variable first, assign the function body later.\n'+
+    '\n'+
+    'WRONG — this crashes immediately:\n'+
+    '  open()                        -- ERROR: open is nil here\n'+
+    '  local function open()\n'+
+    '    frame.Visible = true\n'+
+    '  end\n'+
+    '\n'+
+    'WRONG — event connected before handler exists:\n'+
+    '  btn.MouseButton1Click:Connect(onClicked)  -- ERROR: onClicked is nil\n'+
+    '  local function onClicked() ... end\n'+
+    '\n'+
+    'CORRECT:\n'+
+    '  local function open()\n'+
+    '    frame.Visible = true\n'+
+    '  end\n'+
+    '  open()                        -- safe: open is defined above\n'+
+    '\n'+
+    'CORRECT — mutual dependency with forward declaration:\n'+
+    '  local toggle                  -- forward declare\n'+
+    '  local function open()\n'+
+    '    isOpen = true\n'+
+    '    frame.Visible = true\n'+
+    '  end\n'+
+    '  local function close()\n'+
+    '    isOpen = false\n'+
+    '    frame.Visible = false\n'+
+    '  end\n'+
+    '  toggle = function()           -- assign after both open and close exist\n'+
+    '    if isOpen then close() else open() end\n'+
+    '  end\n'+
+    '  btn.MouseButton1Click:Connect(toggle)  -- connect after toggle is assigned\n'+
+    '\n'+
+
     '# REQUIRED SYNTAX\n'+
     '• task.wait() not wait() | task.spawn() not spawn() | task.delay() not delay()\n'+
     '• WeldConstraint not ManualWeld\n'+
     '• :WaitForChild("Name", 10) — NEVER direct-index (workspace.Name or RS.Name)\n'+
     '• Always nil-check after WaitForChild() or FindFirstChild()\n'+
     '• Cache services at TOP of script — never inside loops or functions\n'+
-    '• Define functions BEFORE any code that calls them\n'+
     '• game.CreatorId for owner check — NEVER hardcode a UserId\n'+
     '• pcall() required for DataStore, HTTP, RemoteFunction, InsertService\n'+
     '• DataStore pattern: pcall + retry max 3x + AutoSave 60-120s + PlayerRemoving + game:BindToClose()\n'+
     '• NEVER add --!strict unless user explicitly asks for it\n'+
     '• Write clean, readable Lua — no over-engineering unless the task requires it\n\n'+
 
-    '# FORBIDDEN — THESE CAUSE ERRORS\n'+
+    '# FORBIDDEN — THESE CAUSE ERRORS OR CRASHES\n'+
+    '• NEVER call a local function before its definition line in the file\n'+
+    '• NEVER connect an event (MouseButton1Click, OnClientEvent, etc.) before the handler function is fully defined\n'+
+    '• NEVER call open(), close(), init(), setup(), refresh(), update(), or any other local function at the top of the script before defining it\n'+
+    '• NEVER leave forward-declared variables unassigned — always assign the function body before any connection or call\n'+
     '• NEVER CollectionService.ChangedSignal — does not exist\n'+
     '• NEVER FireClient() from a LocalScript — server only\n'+
     '• NEVER FireServer() from a Script — client only\n'+
