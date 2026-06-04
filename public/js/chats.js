@@ -1,6 +1,10 @@
 'use strict';
 var PLUGIN_VER = 'null';
 
+// ══════════════════════════════════════════════════════════════════════════════
+// PART 1 — SECURITY, CSRF, RATE LIMIT, CORE UTILITIES
+// ══════════════════════════════════════════════════════════════════════════════
+
 // ── CSRF NONCE ────────────────────────────────────────────────────────────────
 var _csrfNonce = (function () {
   try {
@@ -156,8 +160,9 @@ function cleanAIResponse(text) {
 
 function isPureGreeting(txt) {
   var t = txt.trim().toLowerCase();
-  if (t.length > 80) return false;
-  return /^(halo|hai|hi|hello|hey|selamat\s*(pagi|siang|sore|malam)|good\s*(morning|afternoon|evening|night)|apa\s*kabar|how\s*are\s*you|nexus|ping|hei|yo|sup)[\s?!.,]*$/.test(t);
+  if (t.length > 100) return false;
+  // Pattern: greeting words saja, boleh ada tanda baca
+  return /^(halo|hai|hi|hello|hey|selamat\s*(pagi|siang|sore|malam)|good\s*(morning|afternoon|evening|night)|apa\s*kabar|how\s*are\s*you|nexus|ping|hei|yo|sup|test|tes|coba|ok|oke|siap|ready|mantap|bagus|keren|nice|thanks|makasih|thank\s*you|terima\s*kasih)[\s?!.,]*$/.test(t);
 }
 
 function isOwner() {
@@ -188,6 +193,9 @@ function safeMarked(md) {
     return sanitizeHtml(raw);
   } catch (e) { return esc(md); }
 }
+// ══════════════════════════════════════════════════════════════════════════════
+// PART 2 — LANGUAGE, MODELS, CONSTANTS, SESSION
+// ══════════════════════════════════════════════════════════════════════════════
 
 // ── ROBLOX DOCS & TOOLBOX ─────────────────────────────────────────────────────
 var _docsCache = {};
@@ -510,6 +518,9 @@ function _migrateModelId(modelObj) {
   }
   return modelObj;
 }
+// ══════════════════════════════════════════════════════════════════════════════
+// PART 3 — SAVE / LOAD / SYNC, DAILY REWARD, CREDITS, STUDIO POLL
+// ══════════════════════════════════════════════════════════════════════════════
 
 // ── SAVE / LOAD / SYNC ────────────────────────────────────────────────────────
 function getStoreConvs() {
@@ -911,6 +922,10 @@ async function retryStudio() {
   toast(T().reconnectToast);
   await checkStudio();
 }
+// ══════════════════════════════════════════════════════════════════════════════
+// PART 4 — JSON PARSING PIPELINE (CORE FIX)
+// Fix: Lebih robust dalam detect & parse commands dari AI response
+// ══════════════════════════════════════════════════════════════════════════════
 
 // ── LUA EXPRESSION STRIPPER ───────────────────────────────────────────────────
 function _stripLuaExpressions(str) {
@@ -1463,6 +1478,10 @@ function makeStepLabel(cmd) {
   if (a === 'none') return null;
   return a + (nm ? ': ' + nm : '');
 }
+// ══════════════════════════════════════════════════════════════════════════════
+// PART 5 — FETCH HELPERS + AUTO INJECT PIPELINE
+// Fix: Retry logic, state cleanup saat new chat, no double abort
+// ══════════════════════════════════════════════════════════════════════════════
 
 // ── FETCH WITH RETRY ──────────────────────────────────────────────────────────
 async function fetchRetry(url, opts, tries) {
@@ -1634,10 +1653,10 @@ async function autoInjectToStudio(aiResponse, userPrompt) {
     if (!step.sid) { doneCount++; continue; }
 
     updateStep(step.sid, 'running');
-    await _sleep(60); // Small yield for UI
+    // FIXED: Yield lebih besar agar UI update sebelum kirim
+    await _sleep(120);
 
     if (step.type === 'lua') {
-      // FIX: Clean source field
       var cmdPayload = {
         action: 'inject_script',
         name: step.name,
@@ -1649,10 +1668,13 @@ async function autoInjectToStudio(aiResponse, userPrompt) {
       if (res.ok) {
         updateStep(step.sid, 'done', step.info.type + ': ' + step.name, step.info.parent);
         summary.push(step.info.type + ': ' + step.name);
+        // FIXED: Tunggu server benar-benar proses sebelum lanjut ke action berikutnya
+        await _sleep(600);
       } else {
-        // FIX: Don't treat as fatal, keep going
         updateStep(step.sid, 'error', String(res.error || 'inject failed').slice(0, 100));
         console.warn('[NEXUS inject] Step failed:', res.error);
+        // Tetap tunggu meski error agar server tidak overwhelmed
+        await _sleep(400);
       }
     } else if (step.type === 'playtest') {
       try {
@@ -1684,21 +1706,29 @@ async function autoInjectToStudio(aiResponse, userPrompt) {
           _playTestActive = false;
         } else if (a === 'read_script' || a === 'scan_workspace' || a === 'request_scan') {
           updateStep(step.sid, 'info');
+          await _sleep(300);
         } else {
           updateStep(step.sid, 'done');
           var lbl2 = makeStepLabel(cmd);
           if (lbl2) summary.push(lbl2);
+          // FIXED: Tunggu server selesai proses sebelum action berikutnya
+          // set_property butuh parent-nya sudah ada → tunggu lebih lama
+          var _postDelay = (a === 'set_property' || a === 'set_service_property') ? 800
+            : (a === 'create_gui' || a === 'create_frame' || a === 'create_script' ||
+               a === 'create_local_script' || a === 'create_module' || a === 'inject_script') ? 700
+            : 400;
+          await _sleep(_postDelay);
         }
       } else {
-        // FIX: Don't treat single step failure as fatal
         updateStep(step.sid, 'error', String(res2.error || 'rejected').slice(0, 100));
         console.warn('[NEXUS inject] JSON cmd failed:', res2.error);
+        await _sleep(400);
       }
     }
 
     doneCount++;
     if (cntEl) cntEl.textContent = '(' + doneCount + '/' + planSteps.length + ')';
-    if (pi < planSteps.length - 1 && S.gen) await _sleep(160);
+    // FIXED: Hapus delay tambahan di sini karena sudah ada delay di setiap step di atas
   }
 
   return summary.length > 0 ? summary : null;
@@ -1745,6 +1775,13 @@ function detectType(txt) {
   if (/test|play|jalankan|run/i.test(l)) return 'test';
   return 'normal';
 }
+// ══════════════════════════════════════════════════════════════════════════════
+// PART 6 — SEND FUNCTION (CRITICAL FIXES)
+// Fix 1: Model busy → auto-retry dengan exponential backoff
+// Fix 2: Long text → split context agar tidak overflow
+// Fix 3: New chat mid-gen → proper state cleanup
+// Fix 4: Gemini error → lebih informatif + fallback
+// ══════════════════════════════════════════════════════════════════════════════
 
 // ── RESET GEN STATE ───────────────────────────────────────────────────────────
 // FIX: Fungsi terpusat untuk reset semua gen state (dipanggil di new chat, cancel, dll)
@@ -1897,11 +1934,14 @@ async function send() {
   var t = T();
   if (!checkClientRateLimit('send', 20)) return;
 
-  // Credit check
+  // Credit check - greeting/simple text lebih longgar
   if (!isOwner() && !isAdmin()) {
     var _mc = S.model.cost || 0;
-    if (S.credits <= 0 && _mc > 0) { toast(t.creditsExhausted, 'var(--pink)'); return; }
-    if (_mc > 0 && S.credits < _mc) {
+    var _isGreeting = isPureGreeting(txt);
+    if (S.credits <= 0 && _mc > 0 && !_isGreeting) { toast(t.creditsExhausted, 'var(--pink)'); return; }
+    // Greeting: cukup punya >= 1 CR (atau 0 jika model gratis)
+    // Non-greeting: harus punya >= full model cost
+    if (!_isGreeting && _mc > 0 && S.credits < _mc) {
       toast((curLang === 'id' ? 'Butuh minimal ' : 'Need at least ') + _mc + ' CR untuk model ini', 'var(--yellow)');
       return;
     }
@@ -2073,32 +2113,64 @@ async function send() {
 
   var hasError = aiText && (aiText.startsWith('**Gagal') || aiText.startsWith('**Failed'));
 
-  // Deduct credits
+  // FIXED: Credit deduction yang adil
+  // - Greeting/pure text: hanya base cost 1x
+  // - Inject actions: base + sedikit per action tambahan (bukan 0.1x yang bikin meledak)
   if (!isOwner() && !isAdmin() && aiText && !hasError) {
-    var _cmds = parseAllCommands(aiText), _luas = parseLuaBlocks(aiText);
-    var _numActions = Math.max(1, _cmds.length + _luas.length);
     var _baseCost = S.model.cost || 0;
-    var _totalCost = parseFloat((_baseCost * (1 + (_numActions - 1) * 0.1)).toFixed(2));
-    S.credits = parseFloat(Math.max(0, S.credits - _totalCost).toFixed(2));
-    updateCreds();
+    var _totalCost = 0;
+    if (_baseCost > 0) {
+      if (isPureGreeting(lastPrompt)) {
+        // Greeting/halo = 0 cost (tidak inject apa-apa)
+        _totalCost = 0;
+      } else {
+        var _cmds = parseAllCommands(aiText), _luas = parseLuaBlocks(aiText);
+        var _numActions = _cmds.length + _luas.length;
+        if (_numActions === 0) {
+          // Pure text response (tidak ada inject) = base cost saja
+          _totalCost = _baseCost;
+        } else {
+          // Ada inject: base cost + 0.5 per action tambahan (lebih wajar dari 0.1x)
+          // Contoh: DeepSeek 16CR, 5 actions = 16 + (4 * 0.5) = 18 CR, bukan 16 * 1.4 = 22 CR
+          _totalCost = parseFloat((_baseCost + Math.max(0, _numActions - 1) * 0.5).toFixed(2));
+        }
+      }
+    }
+    if (_totalCost > 0) {
+      S.credits = parseFloat(Math.max(0, S.credits - _totalCost).toFixed(2));
+      updateCreds();
+    }
   }
 
   // ── INJECT TO STUDIO ───────────────────────────────────────────────────────
   var studioSummary = null, displayText = '';
 
   if (studioConnected && !hasError) {
-    if (showThinking) { clearSteps(); setStepTitle(t.buildingInStudio); }
-
     var _preCmds = parseAllCommands(aiText), _preLuas = parseLuaBlocks(aiText);
     var _hasAnything = (_preCmds.length > 0 || _preLuas.length > 0);
 
     if (_hasAnything) {
+      var _totalActions = _preCmds.length + _preLuas.length;
+      if (showThinking) {
+        clearSteps();
+        // Step baru: tampilkan summary berapa action yang akan dijalankan
+        var _injectSummaryStep = addStep(
+          (curLang === 'id'
+            ? 'Mengirim ' + _totalActions + ' action ke Studio...'
+            : 'Sending ' + _totalActions + ' action(s) to Studio...'),
+          'running',
+          (curLang === 'id' ? 'Satu per satu, tunggu sebentar' : 'One by one, please wait')
+        );
+        setStepTitle(t.buildingInStudio);
+        await _sleep(200);
+        if (_injectSummaryStep) updateStep(_injectSummaryStep, 'done');
+      }
+
       studioSummary = await autoInjectToStudio(aiText, lastPrompt);
 
-      // FIX: Check again if cancelled during inject
+      // Check if cancelled during inject
       if (!S.gen || (_localCancelSignal && _localCancelSignal.aborted)) {
         _resetGenState();
-        // Still save what we have
         var cancelMsg = { role: 'ai', content: curLang === 'id' ? 'Proses dibatalkan.' : 'Process cancelled.', time: Date.now() };
         cv.msgs.push(cancelMsg);
         appendMsg(cancelMsg);
@@ -2162,6 +2234,9 @@ async function send() {
   _resetGenState();
   saveS();
 }
+// ══════════════════════════════════════════════════════════════════════════════
+// PART 7 — CONVERSATIONS, RENDER MESSAGES, STEPS CARD, MENTION, MODEL UI
+// ══════════════════════════════════════════════════════════════════════════════
 
 // ── LANGUAGE ──────────────────────────────────────────────────────────────────
 function renderSuggestions() {
@@ -2456,7 +2531,13 @@ function _injectSuggChipStyles() {
     '.suggestion-chip:hover::before{opacity:1;transform:translateX(2px);}' +
     '.suggestion-chip:active{transform:scale(.97);}' +
     '.suggestion-chip.sending{opacity:.5;pointer-events:none;}' +
-    '.suggestion-chips-label{font-size:9.5px;color:var(--dim,#4a5568);letter-spacing:.05em;margin-bottom:4px;text-transform:uppercase;}';
+    '.suggestion-chips-label{font-size:9.5px;color:var(--dim,#4a5568);letter-spacing:.05em;margin-bottom:4px;text-transform:uppercase;}' +
+    // Steps header flex untuk tombol toggle
+    '.steps-hdr{display:flex;align-items:center;gap:5px;flex-wrap:nowrap;}' +
+    '#stepsToggle:hover{opacity:1 !important;}' +
+    // Sum toggle button
+    '.sum-toggle-btn:hover{opacity:1 !important;text-decoration:underline;}' +
+    '.studio-summary-items{transition:all .2s ease;}';
   document.head.appendChild(s);
 }
 
@@ -2655,17 +2736,51 @@ function appendMsg(m, skipScroll) {
     }
   });
 
-  // Studio summary box
+  // Studio summary box with collapse/expand
   if (m.studioSummary && m.studioSummary.length) {
     var sumDiv = document.createElement('div');
     sumDiv.className = 'studio-summary-box';
-    sumDiv.innerHTML =
-      '<div class="studio-summary-title"><svg width="10" height="10" viewBox="0 0 24 24" stroke="currentColor" fill="none" stroke-width="2.5"><polyline points="20 6 9 17 4 12"/></svg>' +
-      (curLang === 'id' ? 'Dibangun di Studio' : 'Built in Studio') + '</div>' +
-      m.studioSummary.map(function (it) {
+    var _sumItems = m.studioSummary;
+    var _sumCollapsed = _sumItems.length > 4; // collapse jika lebih dari 4 item
+    var _sumId = 'sum_' + Date.now() + '_' + Math.random().toString(36).slice(2);
+    var _lblShowAll = curLang === 'id' ? 'Lihat Semua (' + _sumItems.length + ')' : 'Show All (' + _sumItems.length + ')';
+    var _lblShowLess = curLang === 'id' ? 'Lihat Sedikit' : 'Show Less';
+
+    function _renderSumItems(collapsed) {
+      var items = collapsed ? _sumItems.slice(0, 4) : _sumItems;
+      return items.map(function (it) {
         return '<div class="studio-summary-item"><span class="studio-summary-dot"></span>' + esc(it) + '</div>';
       }).join('');
+    }
+
+    sumDiv.innerHTML =
+      '<div class="studio-summary-title">' +
+        '<svg width="10" height="10" viewBox="0 0 24 24" stroke="currentColor" fill="none" stroke-width="2.5"><polyline points="20 6 9 17 4 12"/></svg>' +
+        (curLang === 'id' ? 'Dibangun di Studio' : 'Built in Studio') +
+        ' <span style="color:var(--dim);font-size:9px;">(' + _sumItems.length + ')</span>' +
+      '</div>' +
+      '<div id="' + _sumId + '" class="studio-summary-items">' + _renderSumItems(_sumCollapsed) + '</div>' +
+      (_sumItems.length > 4
+        ? '<button id="btn_' + _sumId + '" class="sum-toggle-btn" style="margin-top:5px;background:none;border:none;color:var(--cyan);font-size:9.5px;cursor:pointer;padding:2px 0;opacity:.8;">' +
+          (_sumCollapsed ? _lblShowAll : _lblShowLess) + '</button>'
+        : '');
+
     bubble.appendChild(sumDiv);
+
+    // Attach toggle event after appended to DOM
+    if (_sumItems.length > 4) {
+      setTimeout(function () {
+        var toggleBtn = document.getElementById('btn_' + _sumId);
+        var itemsEl = document.getElementById(_sumId);
+        if (!toggleBtn || !itemsEl) return;
+        var collapsed = _sumCollapsed;
+        toggleBtn.addEventListener('click', function () {
+          collapsed = !collapsed;
+          itemsEl.innerHTML = _renderSumItems(collapsed);
+          toggleBtn.textContent = collapsed ? _lblShowAll : _lblShowLess;
+        });
+      }, 0);
+    }
   }
 
   mbWrap.appendChild(bubble);
@@ -2747,7 +2862,21 @@ function createStepsCard() {
   hdrTxt.textContent = T().workingOn;
   var hdrCount = document.createElement('span'); hdrCount.className = 'steps-hdr-count'; hdrCount.id = 'stepsCount';
   hdrCount.textContent = '(0/0)';
-  hdr.appendChild(spinner); hdr.appendChild(hdrTxt); hdr.appendChild(hdrCount);
+  // Tombol lihat semua / lihat sedikit
+  var hdrToggle = document.createElement('button');
+  hdrToggle.id = 'stepsToggle';
+  hdrToggle.style.cssText = 'margin-left:auto;background:none;border:none;color:var(--cyan);font-size:9px;cursor:pointer;padding:2px 6px;opacity:.75;white-space:nowrap;flex-shrink:0;';
+  hdrToggle.textContent = curLang === 'id' ? 'Lihat Sedikit' : 'Show Less';
+  var _stepsExpanded = true;
+  hdrToggle.onclick = function () {
+    _stepsExpanded = !_stepsExpanded;
+    var sl = document.getElementById('stepsList');
+    if (sl) sl.style.display = _stepsExpanded ? '' : 'none';
+    hdrToggle.textContent = _stepsExpanded
+      ? (curLang === 'id' ? 'Lihat Sedikit' : 'Show Less')
+      : (curLang === 'id' ? 'Lihat Semua' : 'Show All');
+  };
+  hdr.appendChild(spinner); hdr.appendChild(hdrTxt); hdr.appendChild(hdrCount); hdr.appendChild(hdrToggle);
   box.appendChild(hdr);
   var list = document.createElement('div'); list.className = 'steps-list'; list.id = 'stepsList';
   box.appendChild(list);
@@ -2964,6 +3093,9 @@ function selectCurrentMention() {
   if (!sel) return false;
   sel.click(); return true;
 }
+// ══════════════════════════════════════════════════════════════════════════════
+// PART 8 — FILE HANDLING, UI ACTIONS, GUI EDITOR, THEME PICKER, INIT, EVENTS
+// ══════════════════════════════════════════════════════════════════════════════
 
 // ── FILE HANDLING ─────────────────────────────────────────────────────────────
 function handleFile(e) {
