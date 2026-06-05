@@ -1240,15 +1240,69 @@ function _extractActionsFromLuaBlock(blockCode) {
 }
 
 // ── ALL KNOWN NEXUS ACTION FUNCTIONS ─────────────────────────────────────────
+// Action list — sinkron dengan ActionsManager v11.2 Lua plugin
 var _NEXUS_ACTION_FNS = [
-  'create_gui', 'create_frame', 'create_remote', 'inject_script', 'create_script',
-  'create_local_script', 'create_module', 'edit_script', 'set_property', 'batch_commands',
-  'create_part', 'create_npc', 'create_text_label', 'set_lighting', 'inject_quick_script',
-  'apply_theme', 'get_theme', 'create_text_button', 'fill_terrain', 'delete_object',
-  'create_billboard_gui', 'set_service_property', 'batch_inject', 'scan_workspace',
-  'request_scan', 'play_test', 'run_test', 'stop_test', 'read_script', 'resolve_mention',
-  'create_ui_corner', 'create_ui_padding', 'create_ui_gradient', 'create_ui_stroke',
-  'create_ui_list_layout', 'create_scroll_frame', 'create_viewport_frame'
+  // Scripts
+  'create_script', 'create_local_script', 'create_module', 'inject_script', 'edit_script',
+  'read_script', 'read_script_lines', 'rename_script', 'duplicate_script',
+  'disable_script', 'enable_script', 'batch_inject', 'check_list',
+  // Remotes (semua type plugin support)
+  'create_remote',
+  // Properties
+  'set_property', 'set_properties', 'batch_set_property', 'get_properties',
+  'set_service_property', 'get_service_properties',
+  // Object management
+  'delete', 'clone_object', 'rename_object', 'batch_rename', 'parent_to', 'batch_parent',
+  'select_object', 'select_multiple', 'lock_object', 'unlock_object',
+  'set_visible', 'toggle_visible', 'toggle_anchored', 'set_primary_part',
+  'copy_properties', 'replace_all',
+  // Collection
+  'add_collection_tag', 'remove_collection_tag', 'get_tags', 'find_tagged',
+  // Instances & values
+  'create_folder', 'create_instance', 'create_value', 'create_configuration',
+  // Parts & geometry
+  'create_part', 'create_model', 'move_object', 'rotate_object', 'resize_object',
+  'group_parts', 'ungroup_model', 'align_objects', 'snap_to_grid', 'randomize_colors',
+  'batch_create', 'weld_model', 'scale_model', 'anchor_model', 'unanchor_model',
+  'anchor_all', 'unanchor_all', 'break_joints',
+  // GUI
+  'create_gui', 'create_frame', 'create_scrolling_frame', 'create_canvas_group',
+  'create_text_label', 'create_text_button', 'create_text_box',
+  'create_image_label', 'create_image_button',
+  'create_proximity_prompt', 'create_click_detector',
+  'create_ui_list_layout', 'create_ui_grid_layout',
+  'create_ui_padding', 'create_ui_corner', 'create_ui_stroke', 'create_ui_gradient',
+  'create_ui_size_constraint', 'create_ui_aspect_ratio', 'create_ui_scale',
+  'add_highlight', 'remove_highlight', 'add_drag_detector',
+  // Lighting & environment
+  'set_lighting', 'create_sky', 'create_atmosphere', 'add_effect', 'remove_effect',
+  'change_baseplate', 'set_gravity', 'set_camera',
+  // Terrain
+  'fill_terrain', 'replace_terrain', 'clear_terrain',
+  'terraform_flat', 'terraform_hills', 'terraform_island', 'terraform_mountain', 'create_river',
+  // Effects & sound
+  'create_fire', 'remove_fire', 'create_smoke', 'remove_smoke', 'create_sparkles',
+  'create_light', 'create_explosion', 'create_force_field', 'create_particle', 'create_trail',
+  'create_sound', 'place_decal', 'place_texture',
+  // Constraints
+  'create_weld', 'create_attachment', 'create_motor6d', 'create_constraint',
+  // Game objects
+  'create_spawn_location', 'create_seat', 'create_team', 'create_animation',
+  'create_animation_controller', 'create_tool', 'create_npc',
+  'create_wall', 'create_platform', 'create_tree', 'create_tycoon_plot', 'create_checkpoint',
+  // Insert
+  'insert_model',
+  // Play test
+  'play_test', 'stop_test', 'run_test',
+  // Workspace tools
+  'scan_workspace', 'workspace_stats', 'get_descendants', 'list_children',
+  'find_by_class', 'count_instances', 'search_instances', 'resolve_mention',
+  'batch_commands', 'get_place_info', 'get_studio_theme', 'print_output',
+  'ping', 'get_info', 'request_scan', 'clear_workspace', 'undo', 'redo',
+  'save_waypoint', 'get_all_actions', 'set_project', 'run_lua', 'none',
+  // Alias lama (backward compat)
+  'create_billboard_gui', 'create_scroll_frame', 'create_viewport_frame',
+  'delete_object', 'apply_theme', 'get_theme', 'inject_quick_script', 'set_service_property'
 ];
 var _NEXUS_ACTION_FNS_SET = new Set(_NEXUS_ACTION_FNS);
 
@@ -1451,30 +1505,128 @@ function makeScriptName(prompt, i, code) {
 
 function makeStepLabel(cmd) {
   var a = cmd.action || '', nm = cmd.name || '';
+  // Scripts
   if (a === 'inject_script') return 'Create ' + (cmd.script_type || 'Script') + ': ' + (nm || '?');
   if (a === 'create_script') return 'Create Script: ' + nm;
   if (a === 'create_local_script') return 'Create LocalScript: ' + nm;
   if (a === 'create_module') return 'Create ModuleScript: ' + nm;
   if (a === 'edit_script') return 'Edit Script: ' + nm;
+  if (a === 'read_script' || a === 'read_script_lines') return 'Read script: ' + nm;
+  if (a === 'rename_script') return 'Rename script: ' + nm + ' → ' + (cmd.new_name || '?');
+  if (a === 'duplicate_script') return 'Duplicate script: ' + nm;
+  if (a === 'disable_script') return 'Disable script: ' + nm;
+  if (a === 'enable_script') return 'Enable script: ' + nm;
   if (a === 'batch_inject') return 'Batch inject (' + (cmd.scripts || []).length + ')';
+  if (a === 'check_list') return 'Check script list';
+  // Remotes — tampilkan type
+  if (a === 'create_remote') {
+    var rtype = cmd.type || cmd.remote_type || 'RemoteEvent';
+    return 'Create ' + rtype + ': ' + nm;
+  }
+  // Properties
+  if (a === 'set_property' || a === 'set_properties') return 'Set property: ' + nm + (cmd.property ? '.' + cmd.property : '');
+  if (a === 'set_service_property' || a === 'batch_set_property') return 'Set service prop: ' + (cmd.service || nm);
+  if (a === 'get_properties' || a === 'get_service_properties') return 'Get properties: ' + nm;
+  // Object management
+  if (a === 'delete' || a === 'delete_object') return 'Delete: ' + nm;
+  if (a === 'clone_object') return 'Clone: ' + nm;
+  if (a === 'rename_object') return 'Rename: ' + nm + ' → ' + (cmd.new_name || '?');
+  if (a === 'parent_to') return 'Parent: ' + nm + ' → ' + (cmd.parent || '?');
+  if (a === 'select_object' || a === 'select_multiple') return 'Select: ' + nm;
+  if (a === 'lock_object') return 'Lock: ' + nm;
+  if (a === 'unlock_object') return 'Unlock: ' + nm;
+  if (a === 'copy_properties') return 'Copy props: ' + (cmd.source || nm) + ' → ' + (cmd.target || '?');
+  if (a === 'add_highlight') return 'Highlight: ' + nm;
+  if (a === 'add_drag_detector') return 'Add DragDetector: ' + nm;
+  // GUI
   if (a === 'create_gui') return 'Create GUI: ' + nm;
   if (a === 'create_frame') return 'Create Frame: ' + nm;
+  if (a === 'create_scrolling_frame') return 'Create ScrollingFrame: ' + nm;
+  if (a === 'create_canvas_group') return 'Create CanvasGroup: ' + nm;
+  if (a === 'create_text_label') return 'Create TextLabel: ' + nm;
+  if (a === 'create_text_button') return 'Create TextButton: ' + nm;
+  if (a === 'create_text_box') return 'Create TextBox: ' + nm;
+  if (a === 'create_image_label') return 'Create ImageLabel: ' + nm;
+  if (a === 'create_image_button') return 'Create ImageButton: ' + nm;
+  if (a === 'create_proximity_prompt') return 'Create ProximityPrompt: ' + nm;
+  if (a === 'create_click_detector') return 'Create ClickDetector: ' + nm;
+  if (a === 'create_ui_list_layout') return 'UIListLayout → ' + (cmd.parent || nm);
+  if (a === 'create_ui_grid_layout') return 'UIGridLayout → ' + (cmd.parent || nm);
+  if (a === 'create_ui_padding') return 'UIPadding → ' + (cmd.parent || nm);
+  if (a === 'create_ui_corner') return 'UICorner → ' + (cmd.parent || nm);
+  if (a === 'create_ui_stroke') return 'UIStroke → ' + (cmd.parent || nm);
+  if (a === 'create_ui_gradient') return 'UIGradient → ' + (cmd.parent || nm);
+  // Themes (legacy)
   if (a === 'get_theme') return 'Get theme: ' + (cmd.theme || 'nexus_ai');
   if (a === 'apply_theme') return 'Apply theme: ' + nm;
-  if (a === 'create_remote') return 'Create Remote: ' + nm;
-  if (a === 'set_property') return 'Set property: ' + nm + '.' + (cmd.property || '');
-  if (a === 'set_service_property') return 'Set service prop: ' + (cmd.service || nm);
+  // Lighting & environment
   if (a === 'set_lighting') return 'Set lighting';
+  if (a === 'create_sky') return 'Create Sky';
+  if (a === 'create_atmosphere') return 'Create Atmosphere';
+  if (a === 'add_effect') return 'Add effect: ' + (cmd.effect_type || nm);
+  if (a === 'change_baseplate') return 'Change Baseplate';
+  if (a === 'set_gravity') return 'Set gravity: ' + (cmd.gravity || '');
+  // Terrain
   if (a === 'fill_terrain') return 'Fill terrain: ' + (cmd.material || '');
+  if (a === 'replace_terrain') return 'Replace terrain: ' + (cmd.from || '') + ' → ' + (cmd.to || '');
+  if (a === 'clear_terrain') return 'Clear terrain';
+  if (a === 'terraform_flat') return 'Terraform: flat';
+  if (a === 'terraform_hills') return 'Terraform: hills';
+  if (a === 'terraform_island') return 'Terraform: island';
+  if (a === 'terraform_mountain') return 'Terraform: mountain';
+  if (a === 'create_river') return 'Create river';
+  // Effects
+  if (a === 'create_fire') return 'Create Fire: ' + nm;
+  if (a === 'create_smoke') return 'Create Smoke: ' + nm;
+  if (a === 'create_sparkles') return 'Create Sparkles: ' + nm;
+  if (a === 'create_light') return 'Create Light: ' + (cmd.type || '') + ' ' + nm;
+  if (a === 'create_explosion') return 'Create Explosion';
+  if (a === 'create_particle') return 'Create Particle: ' + nm;
+  if (a === 'create_trail') return 'Create Trail: ' + nm;
+  if (a === 'create_sound') return 'Create Sound: ' + nm;
+  if (a === 'place_decal') return 'Place Decal → ' + nm;
+  // Constraints
+  if (a === 'create_weld') return 'Weld: ' + (cmd.part0 || nm) + ' ↔ ' + (cmd.part1 || '?');
+  if (a === 'create_constraint') return 'Create Constraint: ' + (cmd.type || nm);
+  // Parts
   if (a === 'create_part') return 'Create Part: ' + nm;
+  if (a === 'create_model') return 'Create Model: ' + nm;
+  if (a === 'weld_model') return 'Weld Model: ' + nm;
+  if (a === 'scale_model') return 'Scale Model: ' + nm + ' x' + (cmd.scale || cmd.factor || '?');
+  if (a === 'anchor_model') return 'Anchor Model: ' + nm;
+  if (a === 'batch_create') return 'Batch create ' + ((cmd.parts || []).length) + ' parts';
+  if (a === 'insert_model') return 'Insert asset: ' + (cmd.asset_id || nm);
+  // Game objects
   if (a === 'create_npc') return 'Create NPC: ' + nm;
-  if (a === 'delete_object') return 'Delete: ' + nm;
-  if (a === 'batch_commands') return 'Batch (' + (cmd.commands || []).length + ' cmds)';
-  if (a === 'read_script') return 'Read script: ' + nm;
+  if (a === 'create_tool') return 'Create Tool: ' + nm;
+  if (a === 'create_spawn_location') return 'Create SpawnLocation: ' + nm;
+  if (a === 'create_team') return 'Create Team: ' + nm;
+  if (a === 'create_tycoon_plot') return 'Create TycoonPlot: ' + nm;
+  if (a === 'create_tree') return 'Create Tree: ' + nm;
+  if (a === 'create_wall') return 'Create Wall: ' + nm;
+  if (a === 'create_platform') return 'Create Platform: ' + nm;
+  if (a === 'create_checkpoint') return 'Create Checkpoint: ' + nm;
+  // Workspace tools
   if (a === 'scan_workspace' || a === 'request_scan') return 'Scan workspace';
+  if (a === 'workspace_stats') return 'Workspace stats';
+  if (a === 'clear_workspace') return 'Clear workspace';
+  if (a === 'find_by_class') return 'Find by class: ' + (cmd.class || nm);
+  if (a === 'search_instances') return 'Search: ' + (cmd.query || nm);
+  if (a === 'add_collection_tag') return 'Add tag: ' + (cmd.tag || '') + ' → ' + nm;
+  if (a === 'create_folder') return 'Create Folder: ' + nm;
+  if (a === 'create_instance') return 'Create ' + (cmd.class_name || nm);
+  if (a === 'create_value') return 'Create Value: ' + nm;
+  if (a === 'create_configuration') return 'Create Config: ' + nm;
+  if (a === 'run_lua') return 'Run Lua code';
+  if (a === 'print_output') return 'Print: ' + (String(cmd.message || '').slice(0, 30));
+  // Batch & control
+  if (a === 'batch_commands') return 'Batch (' + (cmd.commands || []).length + ' cmds)';
   if (a === 'resolve_mention') return 'Resolve @' + (cmd.name || cmd.mention || '?');
   if (a === 'play_test' || a === 'run_test') return 'Start play test';
   if (a === 'stop_test') return 'Stop play test';
+  if (a === 'undo') return 'Undo';
+  if (a === 'redo') return 'Redo';
+  if (a === 'ping') return 'Ping';
   if (a === 'none') return null;
   return a + (nm ? ': ' + nm : '');
 }
@@ -1711,12 +1863,30 @@ async function autoInjectToStudio(aiResponse, userPrompt) {
           updateStep(step.sid, 'done');
           var lbl2 = makeStepLabel(cmd);
           if (lbl2) summary.push(lbl2);
-          // FIXED: Tunggu server selesai proses sebelum action berikutnya
-          // set_property butuh parent-nya sudah ada → tunggu lebih lama
-          var _postDelay = (a === 'set_property' || a === 'set_service_property') ? 800
-            : (a === 'create_gui' || a === 'create_frame' || a === 'create_script' ||
-               a === 'create_local_script' || a === 'create_module' || a === 'inject_script') ? 700
-            : 400;
+          // Delay pasca-action: parent harus sudah ada sebelum child action berikutnya
+          var _postDelay;
+          if (a === 'set_property' || a === 'set_properties' || a === 'batch_set_property' ||
+              a === 'set_service_property') {
+            // set_property butuh instance parent sudah exist → tunggu paling lama
+            _postDelay = 900;
+          } else if (a === 'create_gui' || a === 'create_frame' || a === 'create_scrolling_frame' ||
+                     a === 'create_canvas_group' || a === 'create_script' ||
+                     a === 'create_local_script' || a === 'create_module' || a === 'inject_script' ||
+                     a === 'create_text_label' || a === 'create_text_button' || a === 'create_text_box' ||
+                     a === 'create_image_label' || a === 'create_image_button' ||
+                     a === 'create_remote' || a === 'create_folder' || a === 'create_instance') {
+            // Objek baru dibuat → tunggu cukup lama sebelum UI layout / property set
+            _postDelay = 750;
+          } else if (a === 'create_ui_corner' || a === 'create_ui_padding' ||
+                     a === 'create_ui_gradient' || a === 'create_ui_stroke' ||
+                     a === 'create_ui_list_layout' || a === 'create_ui_grid_layout' ||
+                     a === 'create_ui_size_constraint' || a === 'create_ui_aspect_ratio' ||
+                     a === 'create_ui_scale') {
+            // UI layout objects — butuh parent sudah terender
+            _postDelay = 600;
+          } else {
+            _postDelay = 400;
+          }
           await _sleep(_postDelay);
         }
       } else {
@@ -1934,14 +2104,12 @@ async function send() {
   var t = T();
   if (!checkClientRateLimit('send', 20)) return;
 
-  // Credit check - greeting/simple text lebih longgar
+  // Credit check — wajib punya >= model cost, apapun jenis pesan
+  // Deduction berbeda (greeting hemat), tapi CHECK tetap strict
   if (!isOwner() && !isAdmin()) {
     var _mc = S.model.cost || 0;
-    var _isGreeting = isPureGreeting(txt);
-    if (S.credits <= 0 && _mc > 0 && !_isGreeting) { toast(t.creditsExhausted, 'var(--pink)'); return; }
-    // Greeting: cukup punya >= 1 CR (atau 0 jika model gratis)
-    // Non-greeting: harus punya >= full model cost
-    if (!_isGreeting && _mc > 0 && S.credits < _mc) {
+    if (_mc > 0 && S.credits <= 0) { toast(t.creditsExhausted, 'var(--pink)'); return; }
+    if (_mc > 0 && S.credits < _mc) {
       toast((curLang === 'id' ? 'Butuh minimal ' : 'Need at least ') + _mc + ' CR untuk model ini', 'var(--yellow)');
       return;
     }
@@ -2115,23 +2283,31 @@ async function send() {
 
   // FIXED: Credit deduction yang adil
   // - Greeting/pure text: hanya base cost 1x
-  // - Inject actions: base + sedikit per action tambahan (bukan 0.1x yang bikin meledak)
+  // CREDIT DEDUCTION
+  // CHECK (sebelum kirim) = selalu >= model cost penuh.
+  // DEDUCTION (setelah respon) berdasarkan jenis & jumlah action:
+  //   • Greeting / pure chat (tidak inject) = 1 CR flat (bukan full base cost)
+  //   • Text response tanpa inject           = base cost (normal)
+  //   • Dengan inject: base + 0.5 per action tambahan
+  //   Contoh DeepSeek 16CR:
+  //     "halo"                → potong 1 CR
+  //     "jelasin datastore"   → potong 16 CR
+  //     "buat loading screen" (3 script) → potong 16 + 2×0.5 = 17 CR
   if (!isOwner() && !isAdmin() && aiText && !hasError) {
     var _baseCost = S.model.cost || 0;
     var _totalCost = 0;
     if (_baseCost > 0) {
       if (isPureGreeting(lastPrompt)) {
-        // Greeting/halo = 0 cost (tidak inject apa-apa)
-        _totalCost = 0;
+        // Greeting: biaya sangat kecil = 1 CR flat (bukan gratis, bukan full)
+        _totalCost = 1;
       } else {
         var _cmds = parseAllCommands(aiText), _luas = parseLuaBlocks(aiText);
         var _numActions = _cmds.length + _luas.length;
         if (_numActions === 0) {
-          // Pure text response (tidak ada inject) = base cost saja
+          // Jawaban text biasa, tidak inject = base cost penuh
           _totalCost = _baseCost;
         } else {
-          // Ada inject: base cost + 0.5 per action tambahan (lebih wajar dari 0.1x)
-          // Contoh: DeepSeek 16CR, 5 actions = 16 + (4 * 0.5) = 18 CR, bukan 16 * 1.4 = 22 CR
+          // Ada inject: base + 0.5 CR per action tambahan setelah pertama
           _totalCost = parseFloat((_baseCost + Math.max(0, _numActions - 1) * 0.5).toFixed(2));
         }
       }
