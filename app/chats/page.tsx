@@ -482,9 +482,28 @@ body::before{
 `
 
 // ─────────────────────────────────────────────────────────────────────────────
-// SVG icon shortcuts
+// Types
 // ─────────────────────────────────────────────────────────────────────────────
-const Icon = {
+type WinFn = (...a: unknown[]) => void
+
+type GuiType =
+  | 'Frame'
+  | 'TextLabel'
+  | 'TextButton'
+  | 'TextBox'
+  | 'ImageLabel'
+  | 'ScrollingFrame'
+
+interface GuiTypeConfig {
+  type: GuiType
+  label: string
+  icon: React.ReactNode
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// SVG icon shortcuts  (defined at module level — React import required)
+// ─────────────────────────────────────────────────────────────────────────────
+const Icon: Record<string, React.ReactElement> = {
   settings: (
     <svg viewBox="0 0 24 24" width={15} height={15} stroke="currentColor" fill="none" strokeWidth={2}>
       <circle cx="12" cy="12" r="3"/>
@@ -517,7 +536,7 @@ const Icon = {
     </svg>
   ),
   chevronDown: (
-    <svg width={8} height={8} viewBox="0 0 24 24" stroke="currentColor" fill="none" strokeWidth={2} style={{color:'var(--dim)',flexShrink:0}}>
+    <svg width={8} height={8} viewBox="0 0 24 24" stroke="currentColor" fill="none" strokeWidth={2} style={{ color: 'var(--dim)', flexShrink: 0 }}>
       <polyline points="6 9 12 15 18 9"/>
     </svg>
   ),
@@ -578,28 +597,33 @@ export default function ChatsPage() {
     document.body.style.height = '100%'
     document.body.style.overflow = 'hidden'
 
-    const addLink = (href: string) => {
+    const addLink = (href: string): HTMLLinkElement | null => {
       if (document.querySelector(`link[href="${href}"]`)) return null
       const el = document.createElement('link')
-      el.rel = 'stylesheet'; el.href = href
+      el.rel = 'stylesheet'
+      el.href = href
       document.head.appendChild(el)
       return el
     }
-    const l1 = addLink('https://fonts.googleapis.com/css2?family=Orbitron:wght@400;600;700;900&family=JetBrains+Mono:wght@300;400;500&display=swap')
-    const l2 = addLink('https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/styles/atom-one-dark.min.css')
 
     const loadScript = (src: string, attrs: Record<string, string> = {}): Promise<void> =>
       new Promise((resolve, reject) => {
-        if (document.querySelector(`script[src="${src}"]`)) { resolve(); return }
+        if (document.querySelector(`script[src="${src}"]`)) {
+          resolve()
+          return
+        }
         const s = document.createElement('script')
         s.src = src
         Object.entries(attrs).forEach(([k, v]) => s.setAttribute(k, v))
         s.onload = () => resolve()
-        s.onerror = () => reject(new Error(`Failed: ${src}`))
+        s.onerror = () => reject(new Error(`Failed to load: ${src}`))
         document.head.appendChild(s)
       })
 
-    ;(async () => {
+    const l1 = addLink('https://fonts.googleapis.com/css2?family=Orbitron:wght@400;600;700;900&family=JetBrains+Mono:wght@300;400;500&display=swap')
+    const l2 = addLink('https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/styles/atom-one-dark.min.css')
+
+    void (async () => {
       try {
         await loadScript('https://cdn.jsdelivr.net/npm/marked/marked.min.js')
         await loadScript('https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/highlight.min.js')
@@ -617,33 +641,103 @@ export default function ChatsPage() {
       document.documentElement.style.overflow = ''
       document.body.style.height = ''
       document.body.style.overflow = ''
-      l1?.remove(); l2?.remove()
+      l1?.remove()
+      l2?.remove()
     }
   }, [])
 
-  // Helper to call window functions
-  type WinFn = (...a: unknown[]) => void
-  const w = (fn: string) => (window as unknown as Record<string, WinFn>)[fn]
-  const call = (fn: string, ...args: unknown[]): React.MouseEventHandler =>
-    () => w(fn)?.(...args)
-  const callE = (fn: string, ...args: unknown[]): React.MouseEventHandler =>
-    (e) => { e.stopPropagation(); w(fn)?.(e, ...args) }
+  // ── Helpers to call window-registered functions ──
+  const w = (fn: string): WinFn | undefined =>
+    (window as unknown as Record<string, WinFn>)[fn]
 
-  const imgErr = (e: React.SyntheticEvent<HTMLImageElement>) =>
-    (e.currentTarget.style.display = 'none')
+  const call =
+    (fn: string, ...args: unknown[]): React.MouseEventHandler<HTMLElement> =>
+    () =>
+      w(fn)?.(...args)
 
-  // GUI element type config
-  type GuiType = 'Frame' | 'TextLabel' | 'TextButton' | 'TextBox' | 'ImageLabel' | 'ScrollingFrame'
-  const guiTypes: { type: GuiType; label: string; icon: React.ReactNode }[] = [
-    { type: 'Frame', label: 'Frame', icon: <rect x="3" y="3" width="18" height="18" rx="2"/> },
-    { type: 'TextLabel', label: 'Label', icon: <><polyline points="4 7 4 4 20 4 20 7"/><line x1="9" y1="20" x2="15" y2="20"/><line x1="12" y1="4" x2="12" y2="20"/></> },
-    { type: 'TextButton', label: 'Button', icon: <rect x="2" y="7" width="20" height="10" rx="3"/> },
-    { type: 'TextBox', label: 'Input', icon: <><rect x="3" y="5" width="18" height="14" rx="2"/><line x1="7" y1="12" x2="17" y2="12"/></> },
-    { type: 'ImageLabel', label: 'Image', icon: <><rect x="3" y="3" width="18" height="18" rx="2"/><circle cx="8.5" cy="8.5" r="1.5"/><polyline points="21 15 16 10 5 21"/></> },
-    { type: 'ScrollingFrame', label: 'Scroll', icon: <><rect x="3" y="3" width="18" height="18" rx="2"/><path d="M3 9h18"/></> },
+  const callE =
+    (fn: string, ...args: unknown[]): React.MouseEventHandler<HTMLElement> =>
+    (e) => {
+      e.stopPropagation()
+      w(fn)?.(e, ...args)
+    }
+
+  const imgErr = (e: React.SyntheticEvent<HTMLImageElement>): void => {
+    e.currentTarget.style.display = 'none'
+  }
+
+  const logoErr = (e: React.SyntheticEvent<HTMLImageElement>): void => {
+    const parent = e.currentTarget.parentElement
+    if (parent) parent.style.background = 'linear-gradient(135deg,#00e5ff,#8800ff)'
+    e.currentTarget.style.display = 'none'
+  }
+
+  // ── GUI element type config ──
+  const guiTypes: GuiTypeConfig[] = [
+    {
+      type: 'Frame',
+      label: 'Frame',
+      icon: <rect x="3" y="3" width="18" height="18" rx="2" />,
+    },
+    {
+      type: 'TextLabel',
+      label: 'Label',
+      icon: (
+        <>
+          <polyline points="4 7 4 4 20 4 20 7" />
+          <line x1="9" y1="20" x2="15" y2="20" />
+          <line x1="12" y1="4" x2="12" y2="20" />
+        </>
+      ),
+    },
+    {
+      type: 'TextButton',
+      label: 'Button',
+      icon: <rect x="2" y="7" width="20" height="10" rx="3" />,
+    },
+    {
+      type: 'TextBox',
+      label: 'Input',
+      icon: (
+        <>
+          <rect x="3" y="5" width="18" height="14" rx="2" />
+          <line x1="7" y1="12" x2="17" y2="12" />
+        </>
+      ),
+    },
+    {
+      type: 'ImageLabel',
+      label: 'Image',
+      icon: (
+        <>
+          <rect x="3" y="3" width="18" height="18" rx="2" />
+          <circle cx="8.5" cy="8.5" r="1.5" />
+          <polyline points="21 15 16 10 5 21" />
+        </>
+      ),
+    },
+    {
+      type: 'ScrollingFrame',
+      label: 'Scroll',
+      icon: (
+        <>
+          <rect x="3" y="3" width="18" height="18" rx="2" />
+          <path d="M3 9h18" />
+        </>
+      ),
+    },
   ]
 
-  const themeOptions = ['nexus_ai','aurora','candy','dark','default','midnight','studs','custom (no theme)']
+  const themeOptions = [
+    'nexus_ai',
+    'aurora',
+    'candy',
+    'dark',
+    'default',
+    'midnight',
+    'studs',
+    'custom (no theme)',
+  ]
 
   return (
     <>
@@ -652,10 +746,12 @@ export default function ChatsPage() {
       {/* ── PAGE LOADER ── */}
       <div id="pageLoader">
         <div className="pl-logo">
-          <img src="/nexusai.png" alt="N" onError={(e) => { if (e.currentTarget.parentElement) e.currentTarget.parentElement.style.background = 'linear-gradient(135deg,#00e5ff,#8800ff)'; e.currentTarget.style.display = 'none' }} />
+          <img src="/nexusai.png" alt="N" onError={logoErr} />
         </div>
         <div className="pl-title">NEXUS AI</div>
-        <div className="pl-bar-wrap"><div className="pl-bar" id="plBar" /></div>
+        <div className="pl-bar-wrap">
+          <div className="pl-bar" id="plBar" />
+        </div>
         <div className="pl-txt" id="plTxt">Initializing...</div>
       </div>
 
@@ -663,7 +759,8 @@ export default function ChatsPage() {
       <div className="mention-dd" id="mentionDD">
         <div className="mention-hdr">
           <svg viewBox="0 0 24 24" width={10} height={10} stroke="currentColor" fill="none" strokeWidth={2}>
-            <circle cx="12" cy="8" r="4"/><path d="M20 21a8 8 0 10-16 0"/>
+            <circle cx="12" cy="8" r="4" />
+            <path d="M20 21a8 8 0 10-16 0" />
           </svg>
           <span id="mentionHdrTxt">Scripts &amp; Objects in Place</span>
         </div>
@@ -681,7 +778,7 @@ export default function ChatsPage() {
           {/* Logo */}
           <div className="sb-head">
             <div className="sb-logo">
-              <img src="/nexusai.png" alt="N" onError={(e) => { if (e.currentTarget.parentElement) e.currentTarget.parentElement.style.background = 'linear-gradient(135deg,#00e5ff,#8800ff)'; e.currentTarget.style.display = 'none' }} />
+              <img src="/nexusai.png" alt="N" onError={logoErr} />
             </div>
             <div>
               <div className="sb-logo-text">NEXUS AI</div>
@@ -691,7 +788,14 @@ export default function ChatsPage() {
 
           {/* User */}
           <div className="sb-user">
-            <img className="sb-av" id="sbAv" src="/nexusai.png" alt="" onError={(e) => { e.currentTarget.style.opacity = '.3' }} onClick={call('openAvatarModal')} />
+            <img
+              className="sb-av"
+              id="sbAv"
+              src="/nexusai.png"
+              alt=""
+              onError={(e) => { e.currentTarget.style.opacity = '0.3' }}
+              onClick={call('openAvatarModal')}
+            />
             <div style={{ minWidth: 0, flex: 1 }}>
               <div className="sb-un" id="sbUn">-</div>
               <div className="sb-role" id="sbRole">Roblox Developer</div>
@@ -702,10 +806,18 @@ export default function ChatsPage() {
           </div>
 
           {/* Credits */}
-          <div className="creds" id="credsEl" onClick={() => { window.location.href = '/payment' }} role="button" aria-label="Buy credits">
+          <div
+            className="creds"
+            id="credsEl"
+            onClick={() => { window.location.href = '/payment' }}
+            role="button"
+            aria-label="Buy credits"
+          >
             <div>
               <div className="cred-l" id="credLabel">Credits</div>
-              <div style={{ fontSize: '8.5px', color: 'rgba(255,214,0,.5)', marginTop: 1 }} id="credHint">Click to buy more</div>
+              <div style={{ fontSize: '8.5px', color: 'rgba(255,214,0,.5)', marginTop: 1 }} id="credHint">
+                Click to buy more
+              </div>
             </div>
             <div style={{ textAlign: 'right' }}>
               <div className="cred-v" id="credDisp">30</div>
@@ -716,19 +828,32 @@ export default function ChatsPage() {
           {/* Nav buttons */}
           <div className="sb-btn-group">
             <button className="btn-nc" onClick={() => { window.location.href = '/dashboard' }}>
-              <svg viewBox="0 0 24 24"><path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/><polyline points="9 22 9 12 15 12 15 22"/></svg>
+              <svg viewBox="0 0 24 24">
+                <path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z" />
+                <polyline points="9 22 9 12 15 12 15 22" />
+              </svg>
               <span id="dashLbl">Dashboard</span>
             </button>
             <button className="btn-nc" onClick={call('newChat')}>
-              <svg viewBox="0 0 24 24"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+              <svg viewBox="0 0 24 24">
+                <line x1="12" y1="5" x2="12" y2="19" />
+                <line x1="5" y1="12" x2="19" y2="12" />
+              </svg>
               <span id="newChatLbl">New Chat</span>
             </button>
             <button className="help-btn" onClick={() => { window.location.href = '/agent' }}>
-              <svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/><path d="M9.09 9a3 3 0 0 1 5.83 1c0 2-3 3-3 3"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>
+              <svg viewBox="0 0 24 24">
+                <circle cx="12" cy="12" r="10" />
+                <path d="M9.09 9a3 3 0 0 1 5.83 1c0 2-3 3-3 3" />
+                <line x1="12" y1="17" x2="12.01" y2="17" />
+              </svg>
               <span id="helpBtnText">Need Help?</span>
             </button>
             <button className="inbox-btn" onClick={() => { window.location.href = '/inbox' }}>
-              <svg viewBox="0 0 24 24"><polyline points="22 12 16 12 14 15 10 15 8 12 2 12"/><path d="M5.45 5.11L2 12v6a2 2 0 002 2h16a2 2 0 002-2v-6l-3.45-6.89A2 2 0 0016.76 4H7.24a2 2 0 00-1.79 1.11z"/></svg>
+              <svg viewBox="0 0 24 24">
+                <polyline points="22 12 16 12 14 15 10 15 8 12 2 12" />
+                <path d="M5.45 5.11L2 12v6a2 2 0 002 2h16a2 2 0 002-2v-6l-3.45-6.89A2 2 0 0016.76 4H7.24a2 2 0 00-1.79 1.11z" />
+              </svg>
               <span id="inboxBtnText">Inbox</span>
               <span className="inbox-badge" id="inboxBadge">0</span>
             </button>
@@ -747,14 +872,20 @@ export default function ChatsPage() {
 
           {/* Footer */}
           <div className="sb-footer">
-            Made by <span style={{ color: 'var(--cyan)' }}>NEXUS STUDIO</span><br />
+            Made by <span style={{ color: 'var(--cyan)' }}>NEXUS STUDIO</span>
+            <br />
             YouTube: <span style={{ color: 'rgba(0,229,255,.6)' }}>NEXUS STUDIO</span>
           </div>
 
           {/* Collapse toggle */}
-          <div className="collapse-sb" onClick={call('toggleSidebar')} role="button" aria-label="Toggle sidebar">
+          <div
+            className="collapse-sb"
+            onClick={call('toggleSidebar')}
+            role="button"
+            aria-label="Toggle sidebar"
+          >
             <svg id="collapseSbIcon" viewBox="0 0 24 24" width={10} height={10} stroke="currentColor" fill="none" strokeWidth={2}>
-              <polyline points="15 18 9 12 15 6"/>
+              <polyline points="15 18 9 12 15 6" />
             </svg>
           </div>
         </div>
@@ -768,15 +899,30 @@ export default function ChatsPage() {
           <div className="plug-banner" id="plugBanner">
             {Icon.info}
             <span id="plugBannerTxt">Plugin not connected —</span>
-            <a onClick={call('showInstall')} id="plugInstallLink" role="button">How to connect</a>
-            <a onClick={call('retryStudio')} id="plugReconnectLink" role="button" style={{ marginLeft: 8, color: 'var(--green)', cursor: 'pointer' }}>Reconnect</a>
+            <a onClick={call('showInstall')} id="plugInstallLink" role="button" style={{ cursor: 'pointer' }}>
+              How to connect
+            </a>
+            <a
+              onClick={call('retryStudio')}
+              id="plugReconnectLink"
+              role="button"
+              style={{ marginLeft: 8, color: 'var(--green)', cursor: 'pointer' }}
+            >
+              Reconnect
+            </a>
           </div>
 
           {/* Header */}
           <div className="chat-hdr">
             <div className="chat-title" id="chatTitle">NEXUS AI</div>
             <div className="proj-badge-hdr" id="hdrProjBadge" style={{ display: 'none' }} />
-            <div className="status-badge off" id="studioBadge" onClick={call('retryStudio')} role="button" aria-label="Studio status">
+            <div
+              className="status-badge off"
+              id="studioBadge"
+              onClick={call('retryStudio')}
+              role="button"
+              aria-label="Studio status"
+            >
               <div className="sdot pulse" id="studioDot" />
               <span id="studioTxt">Studio: OFF</span>
             </div>
@@ -784,28 +930,53 @@ export default function ChatsPage() {
 
           {/* Tabs */}
           <div className="chat-tabs">
-            <button className="tab-btn act" id="tabChat" onClick={(e) => w('switchTab')?.('chat', e.currentTarget)}>
+            <button
+              className="tab-btn act"
+              id="tabChat"
+              onClick={(e) => w('switchTab')?.('chat', e.currentTarget)}
+            >
               {Icon.chat}
               <span id="tabChatLbl">Chat</span>
             </button>
-            <button className="tab-btn" id="tabGui" onClick={(e) => w('switchTab')?.('gui', e.currentTarget)}>
+            <button
+              className="tab-btn"
+              id="tabGui"
+              onClick={(e) => w('switchTab')?.('gui', e.currentTarget)}
+            >
               {Icon.grid}
               <span id="tabGuiLbl">UI Editor</span>
             </button>
           </div>
 
           {/* ── CHAT TAB ── */}
-          <div id="chatTab" style={{ flex: 1, overflow: 'hidden', display: 'flex', flexDirection: 'column', minHeight: 0 }}>
-
+          <div
+            id="chatTab"
+            style={{ flex: 1, overflow: 'hidden', display: 'flex', flexDirection: 'column', minHeight: 0 }}
+          >
             {/* Messages */}
             <div id="msgs">
               <div className="welcome" id="welcome">
-                <div style={{ width: 56, height: 56, borderRadius: 14, overflow: 'hidden', border: '2px solid rgba(0,229,255,.3)', flexShrink: 0 }}>
-                  <img src="/nexusai.png" style={{ width: '100%', height: '100%', objectFit: 'cover' }} alt=""
-                    onError={(e) => { if (e.currentTarget.parentElement) e.currentTarget.parentElement.style.background = 'linear-gradient(135deg,#00e5ff,#8800ff)' }} />
+                <div
+                  style={{
+                    width: 56,
+                    height: 56,
+                    borderRadius: 14,
+                    overflow: 'hidden',
+                    border: '2px solid rgba(0,229,255,.3)',
+                    flexShrink: 0,
+                  }}
+                >
+                  <img
+                    src="/nexusai.png"
+                    style={{ width: '100%', height: '100%', objectFit: 'cover' }}
+                    alt=""
+                    onError={logoErr}
+                  />
                 </div>
                 <div className="wt">NEXUS AI</div>
-                <div className="ws" id="welcomeText">Smart Roblox AI — write Lua, debug scripts, build GUIs.</div>
+                <div className="ws" id="welcomeText">
+                  Smart Roblox AI — write Lua, debug scripts, build GUIs.
+                </div>
                 <div className="suggs" id="suggGrid" />
               </div>
             </div>
@@ -820,12 +991,32 @@ export default function ChatsPage() {
 
                     {/* File attach */}
                     <div style={{ position: 'relative', flexShrink: 0, display: 'inline-flex' }}>
-                      <label htmlFor="fi" className="ib" title="Attach file" role="button" aria-label="Attach file" tabIndex={0}>
+                      <label
+                        htmlFor="fi"
+                        className="ib"
+                        title="Attach file"
+                        role="button"
+                        aria-label="Attach file"
+                        tabIndex={0}
+                      >
                         {Icon.attach}
                       </label>
-                      <input type="file" id="fi" accept="image/*,.lua,.txt,.json,.js,.py,.html,.css"
-                        style={{ position: 'absolute', width: 0, height: 0, opacity: 0, overflow: 'hidden', pointerEvents: 'none' }}
-                        onChange={(e) => w('handleFile')?.(e)} multiple tabIndex={-1} />
+                      <input
+                        type="file"
+                        id="fi"
+                        accept="image/*,.lua,.txt,.json,.js,.py,.html,.css"
+                        style={{
+                          position: 'absolute',
+                          width: 0,
+                          height: 0,
+                          opacity: 0,
+                          overflow: 'hidden',
+                          pointerEvents: 'none',
+                        }}
+                        onChange={(e) => w('handleFile')?.(e)}
+                        multiple
+                        tabIndex={-1}
+                      />
                     </div>
 
                     {/* Clear chat */}
@@ -834,15 +1025,35 @@ export default function ChatsPage() {
                     </button>
 
                     {/* Model selector */}
-                    <div className="inp-model" id="inpModelBtn" onClick={(e) => w('toggleMDD')?.(e)} role="button" aria-label="Select model" aria-haspopup="listbox">
-                      <img id="inpMIcon" src="" alt="" onError={imgErr} style={{ width: 13, height: 13, borderRadius: 2, objectFit: 'contain', flexShrink: 0 }} />
+                    <div
+                      className="inp-model"
+                      id="inpModelBtn"
+                      onClick={(e) => w('toggleMDD')?.(e)}
+                      role="button"
+                      aria-label="Select model"
+                      aria-haspopup="listbox"
+                    >
+                      <img
+                        id="inpMIcon"
+                        src=""
+                        alt=""
+                        onError={imgErr}
+                        style={{ width: 13, height: 13, borderRadius: 2, objectFit: 'contain', flexShrink: 0 }}
+                      />
                       <span className="inp-model-name" id="inpMName">Gemini 3.5 Flash</span>
-                      <span className="inp-model-badge" id="inpMBadge" style={{ color: 'var(--cyan)' }}>FAST</span>
+                      <span className="inp-model-badge" id="inpMBadge" style={{ color: 'var(--cyan)' }}>
+                        FAST
+                      </span>
                       {Icon.chevronDown}
                     </div>
 
                     {/* Theme picker */}
-                    <button className="theme-picker-btn" id="themePickerBtn" onClick={(e) => w('toggleThemeDD')?.(e)} aria-label="Select theme">
+                    <button
+                      className="theme-picker-btn"
+                      id="themePickerBtn"
+                      onClick={(e) => w('toggleThemeDD')?.(e)}
+                      aria-label="Select theme"
+                    >
                       <div className="theme-swatch" id="themeSwatchBtn" style={{ background: '#00e5ff' }} />
                       <span id="themePickerLabel">nexus_ai</span>
                       {Icon.chevronDown}
@@ -850,7 +1061,12 @@ export default function ChatsPage() {
                   </div>
 
                   {/* Cancel / Send */}
-                  <button className="btn-cancel hidden" id="cancelBtn" onClick={call('cancelGen')} aria-label="Cancel generation">
+                  <button
+                    className="btn-cancel hidden"
+                    id="cancelBtn"
+                    onClick={call('cancelGen')}
+                    aria-label="Cancel generation"
+                  >
                     {Icon.x}
                   </button>
                   <button className="btn-send" id="sendBtn" onClick={call('send')} aria-label="Send message">
@@ -868,30 +1084,72 @@ export default function ChatsPage() {
           {/* ── GUI EDITOR TAB ── */}
           <div id="guiTab">
             <div className="gui-toolbar">
-              <span style={{ fontSize: 10, color: 'var(--dim)', flexShrink: 0 }} id="guiAddLabel">Add:</span>
+              <span style={{ fontSize: 10, color: 'var(--dim)', flexShrink: 0 }} id="guiAddLabel">
+                Add:
+              </span>
+
               {guiTypes.map(({ type, label, icon }) => (
                 <button key={type} className="gui-btn" onClick={call('addEl', type)}>
-                  <svg viewBox="0 0 24 24" width={11} height={11} stroke="currentColor" fill="none" strokeWidth={1.8}>{icon}</svg>
+                  <svg
+                    viewBox="0 0 24 24"
+                    width={11}
+                    height={11}
+                    stroke="currentColor"
+                    fill="none"
+                    strokeWidth={1.8}
+                  >
+                    {icon}
+                  </svg>
                   {label}
                 </button>
               ))}
 
               {/* Right-side controls */}
-              <div style={{ marginLeft: 'auto', display: 'flex', gap: 4, alignItems: 'center', flexWrap: 'nowrap', flexShrink: 0 }}>
+              <div
+                style={{
+                  marginLeft: 'auto',
+                  display: 'flex',
+                  gap: 4,
+                  alignItems: 'center',
+                  flexWrap: 'nowrap',
+                  flexShrink: 0,
+                }}
+              >
                 {/* GUI model selector */}
-                <div className="inp-model" id="guiModelBtn" onClick={callE('toggleGuiMDD')} style={{ maxWidth: 150 }}>
-                  <img id="guiMIcon" src="" alt="" onError={imgErr} style={{ width: 13, height: 13, borderRadius: 2, flexShrink: 0 }} />
+                <div
+                  className="inp-model"
+                  id="guiModelBtn"
+                  onClick={callE('toggleGuiMDD')}
+                  style={{ maxWidth: 150 }}
+                >
+                  <img
+                    id="guiMIcon"
+                    src=""
+                    alt=""
+                    onError={imgErr}
+                    style={{ width: 13, height: 13, borderRadius: 2, flexShrink: 0 }}
+                  />
                   <span className="inp-model-name" id="guiMName">Gemini 3.5 Flash</span>
-                  <span className="inp-model-badge" id="guiMBadge" style={{ color: 'var(--cyan)' }}>FAST</span>
+                  <span className="inp-model-badge" id="guiMBadge" style={{ color: 'var(--cyan)' }}>
+                    FAST
+                  </span>
                   {Icon.chevronDown}
                 </div>
                 <div className="model-dd" id="guiMDD" />
 
                 {/* Theme select */}
-                <select id="guiThemeSelect" className="settings-select" style={{ fontSize: 9, padding: '3px 6px', maxWidth: 110 }}
-                  onChange={(e) => w('applyGuiTheme')?.(e.target.value)}>
+                <select
+                  id="guiThemeSelect"
+                  className="settings-select"
+                  style={{ fontSize: 9, padding: '3px 6px', maxWidth: 110 }}
+                  onChange={(e) => w('applyGuiTheme')?.(e.target.value)}
+                >
                   <option value="">Theme...</option>
-                  {themeOptions.map(t => <option key={t} value={t.split(' ')[0]}>{t}</option>)}
+                  {themeOptions.map((t) => (
+                    <option key={t} value={t.split(' ')[0]}>
+                      {t}
+                    </option>
+                  ))}
                 </select>
 
                 <button className="gui-ai-btn" onClick={call('openGuiAIChat')}>
@@ -900,8 +1158,8 @@ export default function ChatsPage() {
                 </button>
                 <button className="gui-btn" onClick={call('clearCanvas')}>
                   <svg viewBox="0 0 24 24" width={11} height={11} stroke="currentColor" fill="none" strokeWidth={1.8}>
-                    <polyline points="3 6 5 6 21 6"/>
-                    <path d="M19 6v14a2 2 0 01-2 2H7a2 2 0 01-2-2V6m3 0V4a2 2 0 012-2h4a2 2 0 012 2v2"/>
+                    <polyline points="3 6 5 6 21 6" />
+                    <path d="M19 6v14a2 2 0 01-2 2H7a2 2 0 01-2-2V6m3 0V4a2 2 0 012-2h4a2 2 0 012 2v2" />
                   </svg>
                   <span id="guiClearLbl">Clear</span>
                 </button>
@@ -909,7 +1167,11 @@ export default function ChatsPage() {
                   {Icon.code}
                   <span id="guiExportLbl">Export</span>
                 </button>
-                <button className="gui-gen-btn" onClick={call('sendGuiToPlace')} style={{ background: 'linear-gradient(135deg,var(--green),var(--cyan))' }}>
+                <button
+                  className="gui-gen-btn"
+                  onClick={call('sendGuiToPlace')}
+                  style={{ background: 'linear-gradient(135deg,var(--green),var(--cyan))' }}
+                >
                   {Icon.send}
                   <span id="guiToPlaceText">Send to Place</span>
                 </button>
@@ -928,20 +1190,35 @@ export default function ChatsPage() {
                 <div className="gui-canvas-inner" id="guiCanvasInner">
                   <div className="gui-empty-hint" id="guiEmpty">
                     <svg viewBox="0 0 24 24" width={30} height={30} stroke="currentColor" fill="none" strokeWidth={1.5}>
-                      <rect x="3" y="3" width="18" height="18" rx="2"/><path d="M3 9h18M9 21V9"/>
+                      <rect x="3" y="3" width="18" height="18" rx="2" />
+                      <path d="M3 9h18M9 21V9" />
                     </svg>
                     <span id="guiEmptyText">Add elements or click AI Build</span>
                   </div>
                 </div>
                 <div className="gui-loading" id="guiLoading">
-                  <div style={{ width: 20, height: 20, border: '2px solid rgba(0,229,255,.2)', borderTopColor: 'var(--cyan)', borderRadius: '50%', animation: 'spin .7s linear infinite' }} />
+                  <div
+                    style={{
+                      width: 20,
+                      height: 20,
+                      border: '2px solid rgba(0,229,255,.2)',
+                      borderTopColor: 'var(--cyan)',
+                      borderRadius: '50%',
+                      animation: 'spin .7s linear infinite',
+                    }}
+                  />
                   <span id="guiLoadingText">AI is building UI...</span>
                 </div>
               </div>
 
               {/* Properties panel */}
               <div className="gui-props" id="guiProps">
-                <div style={{ fontSize: 10, color: 'var(--dim)', textAlign: 'center', padding: '20px 0' }} id="guiPropsEmpty">Select element</div>
+                <div
+                  style={{ fontSize: 10, color: 'var(--dim)', textAlign: 'center', padding: '20px 0' }}
+                  id="guiPropsEmpty"
+                >
+                  Select element
+                </div>
               </div>
             </div>
           </div>
@@ -956,14 +1233,37 @@ export default function ChatsPage() {
       {/* ── Avatar modal ── */}
       <div className="ov" id="avatarModal">
         <div className="modal" style={{ width: 340, textAlign: 'center', padding: 26 }}>
-          <div style={{ fontFamily: "'Orbitron',sans-serif", fontSize: 13, color: 'var(--cyan)', marginBottom: 14 }} id="avatarModalName">@-</div>
-          <img id="avatarModalImg" src="" alt=""
-            style={{ width: 110, height: 110, borderRadius: '50%', border: '3px solid var(--cyan)', objectFit: 'cover', margin: '0 auto 12px', display: 'block' }}
-            onError={(e) => { e.currentTarget.src = '/nexusai.png' }} />
-          <div style={{ fontSize: 11, color: 'var(--dim)', marginBottom: 3 }} id="avatarModalRole">Developer</div>
-          <div style={{ fontSize: 10, color: 'var(--dim)' }} id="avatarModalId">Roblox ID: -</div>
+          <div
+            style={{ fontFamily: "'Orbitron',sans-serif", fontSize: 13, color: 'var(--cyan)', marginBottom: 14 }}
+            id="avatarModalName"
+          >
+            @-
+          </div>
+          <img
+            id="avatarModalImg"
+            src=""
+            alt=""
+            style={{
+              width: 110,
+              height: 110,
+              borderRadius: '50%',
+              border: '3px solid var(--cyan)',
+              objectFit: 'cover',
+              margin: '0 auto 12px',
+              display: 'block',
+            }}
+            onError={(e) => { e.currentTarget.src = '/nexusai.png' }}
+          />
+          <div style={{ fontSize: 11, color: 'var(--dim)', marginBottom: 3 }} id="avatarModalRole">
+            Developer
+          </div>
+          <div style={{ fontSize: 10, color: 'var(--dim)' }} id="avatarModalId">
+            Roblox ID: -
+          </div>
           <div className="modal-footer" style={{ justifyContent: 'center', marginTop: 14 }}>
-            <button className="btn-modal primary" onClick={call('closeModal', 'avatarModal')} id="avatarCloseBtn">CLOSE</button>
+            <button className="btn-modal primary" onClick={call('closeModal', 'avatarModal')} id="avatarCloseBtn">
+              CLOSE
+            </button>
           </div>
         </div>
       </div>
@@ -976,16 +1276,21 @@ export default function ChatsPage() {
             <span id="installTitle">Install NEXUS AI Plugin</span>
           </div>
           <div className="modal-b">
-            {[1,2,3,4,5].map(n => (
+            {[1, 2, 3, 4, 5].map((n) => (
               <div key={n} className="install-step">
                 <div className="install-num">{n}</div>
-                {/* chats.js finds these via querySelectorAll('.install-txt') */}
                 <div className="install-txt">Step {n}</div>
               </div>
             ))}
           </div>
           <div className="modal-footer">
-            <button className="btn-modal primary" onClick={call('closeModal', 'installModal')} id="installCloseBtn">GOT IT</button>
+            <button
+              className="btn-modal primary"
+              onClick={call('closeModal', 'installModal')}
+              id="installCloseBtn"
+            >
+              GOT IT
+            </button>
           </div>
         </div>
       </div>
@@ -1032,7 +1337,9 @@ export default function ChatsPage() {
             </div>
             <div className="settings-row">
               <span id="lastClaimInfo" style={{ fontSize: 10, color: 'var(--dim)' }} />
-              <button className="settings-btn" id="claimDailyBtn" onClick={call('claimDaily')}>Claim Daily</button>
+              <button className="settings-btn" id="claimDailyBtn" onClick={call('claimDaily')}>
+                Claim Daily
+              </button>
             </div>
           </div>
 
@@ -1044,12 +1351,25 @@ export default function ChatsPage() {
                 <div id="playTestLabel">Run play_test after inject</div>
                 <div className="settings-hint" id="playTestHint">Disable if PC crashes during play_test</div>
               </div>
-              <button className="toggle-sw on" id="playTestToggle" onClick={call('togglePlayTest')} aria-label="Toggle play test" />
+              <button
+                className="toggle-sw on"
+                id="playTestToggle"
+                onClick={call('togglePlayTest')}
+                aria-label="Toggle play test"
+              />
             </div>
             <div className="settings-row">
               <span id="playTestDurLabel">Duration (seconds)</span>
-              <input type="number" id="playTestDurInput" className="settings-select" style={{ width: 70 }} min={5} max={120} defaultValue={15}
-                onChange={(e) => w('setPlayTestDur')?.(e.target.value)} />
+              <input
+                type="number"
+                id="playTestDurInput"
+                className="settings-select"
+                style={{ width: 70 }}
+                min={5}
+                max={120}
+                defaultValue={15}
+                onChange={(e) => w('setPlayTestDur')?.(e.target.value)}
+              />
             </div>
           </div>
 
@@ -1058,7 +1378,11 @@ export default function ChatsPage() {
             <div className="settings-title" id="langTitle">Language</div>
             <div className="settings-row">
               <span id="langLabel">Interface &amp; AI Language</span>
-              <select className="settings-select" id="langSelector" onChange={(e) => w('changeLang')?.(e.target.value)}>
+              <select
+                className="settings-select"
+                id="langSelector"
+                onChange={(e) => w('changeLang')?.(e.target.value)}
+              >
                 <option value="id">Bahasa Indonesia</option>
                 <option value="en">English</option>
               </select>
@@ -1070,11 +1394,16 @@ export default function ChatsPage() {
             <div className="settings-title" id="reportTitle">Report Issue</div>
             <textarea className="report-ta" id="reportTa" placeholder="Describe the issue..." />
             <div id="cf-turnstile-wrap" style={{ marginTop: 8, minHeight: 65, display: 'none' }}>
-              <div id="cf-turnstile-report" style={{ transform: 'scale(0.85)', transformOrigin: 'left' }} />
+              <div
+                id="cf-turnstile-report"
+                style={{ transform: 'scale(0.85)', transformOrigin: 'left' }}
+              />
             </div>
             <input type="hidden" id="_tsToken" value="" />
             <div style={{ marginTop: 8, display: 'flex', alignItems: 'center', gap: 8 }}>
-              <button className="settings-btn" onClick={call('sendReport')} id="reportBtn">Send Report</button>
+              <button className="settings-btn" onClick={call('sendReport')} id="reportBtn">
+                Send Report
+              </button>
               <span id="reportStatus" style={{ fontSize: 10, color: 'var(--green)' }} />
             </div>
           </div>
@@ -1083,7 +1412,9 @@ export default function ChatsPage() {
           <div className="settings-section" id="adminSection" style={{ display: 'none' }}>
             <div className="settings-title">Admin Panel</div>
             <div style={{ marginTop: 6 }}>
-              <a href="/admin-panel" className="settings-btn" style={{ textDecoration: 'none', display: 'inline-flex' }}>Open Admin Panel</a>
+              <a href="/admin-panel" className="settings-btn" style={{ textDecoration: 'none', display: 'inline-flex' }}>
+                Open Admin Panel
+              </a>
             </div>
           </div>
 
@@ -1091,10 +1422,20 @@ export default function ChatsPage() {
           <div className="settings-section">
             <div className="settings-title" id="redeemTitle">Redeem Code</div>
             <div className="settings-row" style={{ flexDirection: 'column', alignItems: 'flex-start', gap: 6 }}>
-              <div style={{ fontSize: 10, color: 'var(--dim)' }} id="redeemHint">Get codes on Discord</div>
+              <div style={{ fontSize: 10, color: 'var(--dim)' }} id="redeemHint">
+                Get codes on Discord
+              </div>
               <div style={{ display: 'flex', gap: 8, width: '100%' }}>
-                <input type="text" id="redeemInput" className="settings-select" style={{ flex: 1, padding: '6px 10px' }} placeholder="Enter code..." />
-                <button className="settings-btn" onClick={call('redeemCode')} id="redeemBtn">Redeem</button>
+                <input
+                  type="text"
+                  id="redeemInput"
+                  className="settings-select"
+                  style={{ flex: 1, padding: '6px 10px' }}
+                  placeholder="Enter code..."
+                />
+                <button className="settings-btn" onClick={call('redeemCode')} id="redeemBtn">
+                  Redeem
+                </button>
               </div>
               <span id="redeemStatus" style={{ fontSize: 10, color: 'var(--green)' }} />
             </div>
@@ -1104,9 +1445,19 @@ export default function ChatsPage() {
           <div className="settings-section">
             <div className="settings-title" id="downloadTitle">Download Plugin</div>
             <div className="settings-row" style={{ flexDirection: 'column', gap: 5, alignItems: 'flex-start' }}>
-              <div style={{ fontSize: 10, color: 'var(--dim)' }} id="downloadHint">Install NEXUS AI Plugin in Roblox Studio</div>
-              <button className="settings-btn" id="downloadPluginBtn"
-                onClick={() => window.open('https://create.roblox.com/store/asset/91870814099475/NEXUS-AI', '_blank')}>
+              <div style={{ fontSize: 10, color: 'var(--dim)' }} id="downloadHint">
+                Install NEXUS AI Plugin in Roblox Studio
+              </div>
+              <button
+                className="settings-btn"
+                id="downloadPluginBtn"
+                onClick={() =>
+                  window.open(
+                    'https://create.roblox.com/store/asset/91870814099475/NEXUS-AI',
+                    '_blank'
+                  )
+                }
+              >
                 Download from Creator Store
               </button>
             </div>
@@ -1117,12 +1468,20 @@ export default function ChatsPage() {
             <div className="settings-title" id="accountTitle">Account</div>
             <div className="settings-row">
               <span id="logoutLabel">Logout</span>
-              <button className="settings-btn danger" onClick={call('logout')}>Logout</button>
+              <button className="settings-btn danger" onClick={call('logout')}>
+                Logout
+              </button>
             </div>
           </div>
 
           <div className="modal-footer">
-            <button className="btn-modal primary" onClick={call('closeModal', 'settingsModal')} id="settingsCloseBtn">CLOSE</button>
+            <button
+              className="btn-modal primary"
+              onClick={call('closeModal', 'settingsModal')}
+              id="settingsCloseBtn"
+            >
+              CLOSE
+            </button>
           </div>
         </div>
       </div>
@@ -1135,12 +1494,36 @@ export default function ChatsPage() {
             <span id="guiCodeTitle">Generated GUI Script</span>
           </div>
           <div className="modal-b">
-            <pre id="guiCodeOutput" style={{ maxHeight: 380, overflowY: 'auto', whiteSpace: 'pre-wrap', wordBreak: 'break-all', fontSize: 10.5, color: 'var(--text)', background: 'rgba(0,0,0,.4)', padding: 12, borderRadius: 6, border: '1px solid var(--b)' }} />
+            <pre
+              id="guiCodeOutput"
+              style={{
+                maxHeight: 380,
+                overflowY: 'auto',
+                whiteSpace: 'pre-wrap',
+                wordBreak: 'break-all',
+                fontSize: 10.5,
+                color: 'var(--text)',
+                background: 'rgba(0,0,0,.4)',
+                padding: 12,
+                borderRadius: 6,
+                border: '1px solid var(--b)',
+              }}
+            />
           </div>
           <div className="modal-footer">
-            <button className="btn-modal primary" onClick={call('copyGuiCode')} id="guiCodeCopyBtn">Copy</button>
-            <button className="btn-modal secondary" onClick={call('downloadGuiCode')} id="guiCodeDlBtn">Download .lua</button>
-            <button className="btn-modal secondary" onClick={call('closeModal', 'guiCodeModal')} id="guiCodeCloseBtn">Close</button>
+            <button className="btn-modal primary" onClick={call('copyGuiCode')} id="guiCodeCopyBtn">
+              Copy
+            </button>
+            <button className="btn-modal secondary" onClick={call('downloadGuiCode')} id="guiCodeDlBtn">
+              Download .lua
+            </button>
+            <button
+              className="btn-modal secondary"
+              onClick={call('closeModal', 'guiCodeModal')}
+              id="guiCodeCloseBtn"
+            >
+              Close
+            </button>
           </div>
         </div>
       </div>
@@ -1153,17 +1536,49 @@ export default function ChatsPage() {
             <span id="guiAiTitle">AI UI Builder</span>
           </div>
           <div className="modal-b" style={{ marginBottom: 8 }}>
-            <p style={{ marginBottom: 8, fontSize: 11 }} id="guiAiDesc">Describe the UI you want:</p>
-            <select id="guiAiThemeSelect" className="settings-select" style={{ width: '100%', marginBottom: 8, fontSize: 10 }}>
-              {themeOptions.map(t => <option key={t} value={t.split(' ')[0]}>{t.charAt(0).toUpperCase() + t.slice(1)}</option>)}
+            <p style={{ marginBottom: 8, fontSize: 11 }} id="guiAiDesc">
+              Describe the UI you want:
+            </p>
+            <select
+              id="guiAiThemeSelect"
+              className="settings-select"
+              style={{ width: '100%', marginBottom: 8, fontSize: 10 }}
+            >
+              {themeOptions.map((t) => (
+                <option key={t} value={t.split(' ')[0]}>
+                  {t.charAt(0).toUpperCase() + t.slice(1)}
+                </option>
+              ))}
             </select>
-            <textarea id="guiAIPrompt"
-              style={{ width: '100%', background: 'var(--bg3)', border: '1px solid var(--b)', borderRadius: 6, padding: 10, color: 'white', fontFamily: "'JetBrains Mono',monospace", fontSize: 12, outline: 'none', resize: 'vertical', minHeight: 90 }}
-              placeholder="e.g. Shop GUI with 3 item cards, scroll list, buy button..." />
+            <textarea
+              id="guiAIPrompt"
+              style={{
+                width: '100%',
+                background: 'var(--bg3)',
+                border: '1px solid var(--b)',
+                borderRadius: 6,
+                padding: 10,
+                color: 'white',
+                fontFamily: "'JetBrains Mono',monospace",
+                fontSize: 12,
+                outline: 'none',
+                resize: 'vertical',
+                minHeight: 90,
+              }}
+              placeholder="e.g. Shop GUI with 3 item cards, scroll list, buy button..."
+            />
           </div>
           <div className="modal-footer">
-            <button className="btn-modal primary" onClick={call('generateGuiFromAI')} id="guiAiBuildBtn">Build with AI</button>
-            <button className="btn-modal secondary" onClick={call('closeModal', 'guiAIChatModal')} id="guiAiCancelBtn">Cancel</button>
+            <button className="btn-modal primary" onClick={call('generateGuiFromAI')} id="guiAiBuildBtn">
+              Build with AI
+            </button>
+            <button
+              className="btn-modal secondary"
+              onClick={call('closeModal', 'guiAIChatModal')}
+              id="guiAiCancelBtn"
+            >
+              Cancel
+            </button>
           </div>
         </div>
       </div>
@@ -1182,18 +1597,27 @@ export default function ChatsPage() {
                 <span>Lua</span>
                 <div className="code-btns">
                   <button className="cbtn" onClick={call('copyPreviewCode')}>
-                    <svg viewBox="0 0 24 24"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 01-2-2V4a2 2 0 012-2h9a2 2 0 012 2v1"/></svg>
+                    <svg viewBox="0 0 24 24">
+                      <rect x="9" y="9" width="13" height="13" rx="2" />
+                      <path d="M5 15H4a2 2 0 01-2-2V4a2 2 0 012-2h9a2 2 0 012 2v1" />
+                    </svg>
                     Copy
                   </button>
                 </div>
               </div>
               <pre style={{ maxHeight: 440, overflowY: 'auto', margin: 0 }}>
-                <code id="codePreviewCode" className="language-lua" style={{ fontSize: 11, lineHeight: 1.5, padding: 14, display: 'block' }} />
+                <code
+                  id="codePreviewCode"
+                  className="language-lua"
+                  style={{ fontSize: 11, lineHeight: 1.5, padding: 14, display: 'block' }}
+                />
               </pre>
             </div>
           </div>
           <div className="modal-footer" style={{ marginTop: 12 }}>
-            <button className="btn-modal secondary" onClick={call('closeModal', 'codePreviewModal')}>Close</button>
+            <button className="btn-modal secondary" onClick={call('closeModal', 'codePreviewModal')}>
+              Close
+            </button>
           </div>
         </div>
       </div>
@@ -1206,12 +1630,22 @@ export default function ChatsPage() {
             <span id="shareModalTitle">Share Chat</span>
           </div>
           <div className="modal-b" style={{ marginBottom: 8 }}>
-            <p style={{ fontSize: 11, color: 'var(--dim)', marginBottom: 6 }} id="shareModalDesc">Copy conversation text:</p>
+            <p style={{ fontSize: 11, color: 'var(--dim)', marginBottom: 6 }} id="shareModalDesc">
+              Copy conversation text:
+            </p>
             <textarea className="share-modal-ta" id="shareModalTa" readOnly />
           </div>
           <div className="modal-footer">
-            <button className="btn-modal primary" onClick={call('copyShareText')} id="shareModalCopyBtn">Copy Text</button>
-            <button className="btn-modal secondary" onClick={call('closeModal', 'shareModal')} id="shareModalCloseBtn">Close</button>
+            <button className="btn-modal primary" onClick={call('copyShareText')} id="shareModalCopyBtn">
+              Copy Text
+            </button>
+            <button
+              className="btn-modal secondary"
+              onClick={call('closeModal', 'shareModal')}
+              id="shareModalCloseBtn"
+            >
+              Close
+            </button>
           </div>
         </div>
       </div>
