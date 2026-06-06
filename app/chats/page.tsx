@@ -1610,8 +1610,8 @@ export default function ChatsPage() {
             style={{ width:110, height:110, borderRadius:'50%', border:'3px solid var(--cyan)', objectFit:'cover', margin:'0 auto 12px', display:'block' }}
             onError={(e) => { e.currentTarget.src = '/nexusai.png' }}
           />
-          <div style={{ fontSize:var(--fs-md), color:'var(--dim)', marginBottom:3 }} id="avatarModalRole">Developer</div>
-          <div style={{ fontSize:var(--fs-sm), color:'var(--dim)' }} id="avatarModalId">Roblox ID: -</div>
+          <div style={{ fontSize: 'var(--fs-md)', color: 'var(--dim)', marginBottom: 3 }} id="avatarModalRole">Developer</div>
+          <div style={{ fontSize: 'var(--fs-sm)', color: 'var(--dim)' }} id="avatarModalId">Roblox ID: -</div>
           <div className="modal-footer" style={{ justifyContent:'center', marginTop:14 }}>
             <button className="btn-modal primary" onClick={call('closeModal', 'avatarModal')} id="avatarCloseBtn">
               CLOSE
@@ -1833,7 +1833,7 @@ export default function ChatsPage() {
             <span id="guiAiTitle">AI UI Builder</span>
           </div>
           <div className="modal-b" style={{ marginBottom:8 }}>
-            <p style={{ marginBottom:8, fontSize:var(--fs-md) }} id="guiAiDesc">Describe the UI you want:</p>
+            <p style={{ marginBottom:8, fontSize: 'var(--fs-md)' }} id="guiAiDesc">Describe the UI you want:</p>
             <select
               id="guiAiThemeSelect"
               className="settings-select"
@@ -1904,7 +1904,7 @@ export default function ChatsPage() {
             <span id="shareModalTitle">Share Chat</span>
           </div>
           <div className="modal-b" style={{ marginBottom:8 }}>
-            <p style={{ fontSize:var(--fs-md), color:'var(--dim)', marginBottom:6 }} id="shareModalDesc">
+            <p style={{ fontSize: 'var(--fs-md)', color:'var(--dim)', marginBottom:6 }} id="shareModalDesc">
               Copy conversation text:
             </p>
             <textarea className="share-modal-ta" id="shareModalTa" readOnly/>
