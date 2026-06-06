@@ -1,10 +1,12 @@
 'use client'
 
-import React, { useEffect } from 'react'
+import React, { useEffect, useRef } from 'react'
+import Script from 'next/script'
 
 /* ─────────────────────────────────────────────────────────────────────────────
-   CSS — NEXUS AI · v5
-   Semua tombol sejajar · sizing konsisten · sistem layout diperbaiki
+   CSS — NEXUS AI · v6
+   Fixed: unified height system, consistent alignment, no TypeScript errors
+   Removed: loadScript (replaced with next/script), all TS issues resolved
 ───────────────────────────────────────────────────────────────────────────── */
 const PAGE_CSS = `
 /* ── TOKENS ── */
@@ -31,17 +33,17 @@ const PAGE_CSS = `
   --r:   8px;
   --r-s: 6px;
 
-  /* ── unified control height system ── */
+  /* unified control height system */
   --h-xs:  22px;
   --h-sm:  28px;
   --h-md:  32px;
   --h-lg:  36px;
   --h-xl:  40px;
-  --h-inp: 44px;   /* textarea bar */
+  --h-inp: 44px;
 
   --sb-w: 252px;
 
-  /* ── font sizes ── */
+  /* font sizes */
   --fs-2xs: 8px;
   --fs-xs:  9px;
   --fs-sm:  10px;
@@ -52,13 +54,15 @@ const PAGE_CSS = `
 /* ── RESET ── */
 *, *::before, *::after { margin:0; padding:0; box-sizing:border-box }
 html {
-  height:100%; font-family:'JetBrains Mono',monospace;
-  background:var(--bg); color:var(--text);
-  font-size:13px; overflow:hidden;
+  height:100%;
+  font-family:'JetBrains Mono',monospace;
+  background:var(--bg);
+  color:var(--text);
+  font-size:13px;
+  overflow:hidden;
 }
 body { height:100%; overflow:hidden; min-height:0 }
 
-/* grid background */
 body::before {
   content:''; position:fixed; inset:0; pointer-events:none; z-index:0;
   background:
@@ -67,14 +71,11 @@ body::before {
   background-size:40px 40px;
 }
 
-/* scrollbars */
 ::-webkit-scrollbar { width:3px; height:3px }
 ::-webkit-scrollbar-thumb { background:var(--b); border-radius:2px }
 ::-webkit-scrollbar-track { background:transparent }
 
-/* ══════════════════════════════════════════════════
-   PAGE LOADER
-══════════════════════════════════════════════════ */
+/* ══ PAGE LOADER ══ */
 #pageLoader {
   position:fixed; inset:0; background:var(--bg); z-index:99999;
   display:flex; flex-direction:column;
@@ -82,7 +83,6 @@ body::before {
   transition:opacity .5s ease;
 }
 #pageLoader.hide { opacity:0; pointer-events:none }
-
 .pl-logo {
   width:72px; height:72px; border-radius:18px;
   overflow:hidden; border:2px solid rgba(0,229,255,.4);
@@ -92,6 +92,7 @@ body::before {
   font-family:'Orbitron',sans-serif; font-size:22px; font-weight:900;
   background:linear-gradient(135deg,var(--cyan),var(--purple));
   -webkit-background-clip:text; -webkit-text-fill-color:transparent;
+  background-clip:text;
 }
 .pl-bar-wrap { width:220px; height:3px; background:rgba(0,229,255,.1); border-radius:3px; overflow:hidden }
 .pl-bar {
@@ -99,11 +100,12 @@ body::before {
   background:linear-gradient(90deg,var(--cyan),var(--purple));
   transition:width .35s ease;
 }
-.pl-txt { font-size:var(--fs-2xs); color:rgba(0,229,255,.5); letter-spacing:1px; min-height:16px; text-align:center }
+.pl-txt {
+  font-size:var(--fs-2xs); color:rgba(0,229,255,.5);
+  letter-spacing:1px; min-height:16px; text-align:center;
+}
 
-/* ══════════════════════════════════════════════════
-   APP SHELL — two-column grid
-══════════════════════════════════════════════════ */
+/* ══ APP SHELL ══ */
 #app {
   display:grid;
   grid-template-columns:var(--sb-w) 1fr;
@@ -114,9 +116,7 @@ body::before {
 }
 #app.sb-hidden { grid-template-columns:0 1fr }
 
-/* ══════════════════════════════════════════════════
-   SIDEBAR
-══════════════════════════════════════════════════ */
+/* ══ SIDEBAR ══ */
 #sb {
   display:flex; flex-direction:column;
   background:var(--bg2); border-right:1px solid var(--b);
@@ -125,23 +125,25 @@ body::before {
   width:var(--sb-w); min-width:0; min-height:0;
 }
 
-/* logo header */
 .sb-head {
   padding:11px 14px 10px;
   border-bottom:1px solid var(--b);
   display:flex; align-items:center; gap:9px;
   flex-shrink:0; height:52px;
 }
-.sb-logo { width:30px; height:30px; border-radius:7px; overflow:hidden; flex-shrink:0 }
+.sb-logo {
+  width:30px; height:30px; border-radius:7px;
+  overflow:hidden; flex-shrink:0;
+}
 .sb-logo img { width:100%; height:100%; object-fit:cover; display:block }
 .sb-logo-text {
   font-family:'Orbitron',sans-serif; font-weight:900; font-size:12px; line-height:1.15;
   background:linear-gradient(135deg,var(--cyan),var(--purple));
   -webkit-background-clip:text; -webkit-text-fill-color:transparent;
+  background-clip:text;
 }
 .sb-logo-sub { font-size:var(--fs-2xs); color:var(--dim); line-height:1 }
 
-/* user row */
 .sb-user {
   padding:8px 12px;
   display:flex; align-items:center; gap:8px;
@@ -165,9 +167,9 @@ body::before {
   border-radius:var(--r-s); color:var(--dim); cursor:pointer; transition:.15s;
 }
 .sb-gear:hover { color:var(--cyan); border-color:var(--b); background:var(--hover) }
-.sb-gear svg  { width:15px; height:15px; stroke:currentColor; fill:none; stroke-width:2 }
+.sb-gear svg { width:15px; height:15px; stroke:currentColor; fill:none; stroke-width:2 }
 
-/* credits widget */
+/* credits */
 .creds {
   margin:8px 12px 2px;
   padding:8px 12px; border-radius:var(--r);
@@ -176,20 +178,18 @@ body::before {
   display:flex; align-items:center; justify-content:space-between;
   flex-shrink:0; cursor:pointer; transition:.15s; height:52px;
 }
-.creds:hover  { border-color:rgba(255,214,0,.35) }
-.creds.low    { border-color:rgba(255,45,107,.4); background:rgba(255,45,107,.06) }
-.cred-v       { font-family:'Orbitron',sans-serif; font-size:20px; color:var(--yellow); font-weight:700; line-height:1 }
+.creds:hover { border-color:rgba(255,214,0,.35) }
+.creds.low   { border-color:rgba(255,45,107,.4); background:rgba(255,45,107,.06) }
+.cred-v      { font-family:'Orbitron',sans-serif; font-size:20px; color:var(--yellow); font-weight:700; line-height:1 }
 .creds.low .cred-v { color:var(--pink) }
-.cred-l       { font-size:var(--fs-2xs); color:rgba(255,214,0,.6); text-transform:uppercase; letter-spacing:1.5px }
-.cred-hint    { font-size:var(--fs-2xs); color:rgba(255,214,0,.45); margin-top:2px }
+.cred-l      { font-size:var(--fs-2xs); color:rgba(255,214,0,.6); text-transform:uppercase; letter-spacing:1.5px }
+.cred-hint   { font-size:var(--fs-2xs); color:rgba(255,214,0,.45); margin-top:2px }
 
-/* ── NAV BUTTONS — FIXED height system ── */
+/* nav buttons */
 .sb-btn-group {
   display:flex; flex-direction:column; gap:3px;
   padding:8px 12px 4px; flex-shrink:0;
 }
-
-/* base nav button — ALL same height */
 .sb-nav-btn {
   display:flex; align-items:center; gap:8px;
   width:100%; height:var(--h-md);
@@ -206,9 +206,7 @@ body::before {
   fill:none; stroke-width:2; flex-shrink:0;
 }
 .sb-nav-btn:hover { border-color:var(--cyan2); color:var(--cyan); background:var(--hover) }
-
-/* color variants */
-.sb-nav-btn.cyan   { color:var(--cyan);  border-color:rgba(0,229,255,.18) }
+.sb-nav-btn.cyan   { color:var(--cyan); border-color:rgba(0,229,255,.18) }
 .sb-nav-btn.cyan:hover { border-color:var(--cyan); background:rgba(0,229,255,.08) }
 .sb-nav-btn.yellow { color:var(--yellow); border-color:rgba(255,214,0,.2); background:rgba(255,214,0,.05) }
 .sb-nav-btn.yellow:hover { border-color:rgba(255,214,0,.45); background:rgba(255,214,0,.1) }
@@ -222,7 +220,6 @@ body::before {
   min-width:18px; text-align:center; flex-shrink:0;
 }
 
-/* project chip */
 .proj-chip {
   margin:4px 12px; padding:5px 10px;
   background:rgba(255,170,50,.05); border:1px solid rgba(255,170,50,.2);
@@ -231,7 +228,6 @@ body::before {
   overflow:hidden; text-overflow:ellipsis; flex-shrink:0;
 }
 
-/* section label */
 .sec-lbl {
   padding:8px 14px 3px;
   font-size:var(--fs-2xs); color:var(--dim);
@@ -259,14 +255,12 @@ body::before {
 .ci-del:hover     { color:var(--pink); background:rgba(255,45,107,.1) }
 .conv-empty { padding:20px 14px; text-align:center; color:var(--dim); font-size:var(--fs-md); line-height:1.7 }
 
-/* sidebar footer */
 .sb-footer {
   padding:7px 12px; font-size:var(--fs-2xs); color:var(--dim);
   text-align:center; border-top:1px solid var(--b);
   flex-shrink:0; line-height:1.9;
 }
 
-/* collapse toggle */
 .collapse-sb {
   position:absolute; right:-18px; top:50%; transform:translateY(-50%);
   width:18px; height:40px;
@@ -278,16 +272,13 @@ body::before {
 .collapse-sb:hover { color:var(--cyan) }
 .collapse-sb svg { width:10px; height:10px; stroke:currentColor; fill:none; stroke-width:2 }
 
-/* ══════════════════════════════════════════════════
-   CHAT PANEL
-══════════════════════════════════════════════════ */
+/* ══ CHAT PANEL ══ */
 #chat {
   display:flex; flex-direction:column;
   overflow:hidden; position:relative;
   min-height:0; min-width:0;
 }
 
-/* plugin banner */
 .plug-banner {
   padding:5px 14px; flex-shrink:0;
   background:rgba(255,45,107,.08); border-bottom:1px solid rgba(255,45,107,.2);
@@ -298,7 +289,6 @@ body::before {
 .plug-banner a   { color:var(--cyan); cursor:pointer; text-decoration:none }
 .plug-banner.connected { background:rgba(0,255,170,.05); border-color:rgba(0,255,170,.2); color:var(--green) }
 
-/* chat header */
 .chat-hdr {
   padding:0 16px;
   border-bottom:1px solid var(--b); background:var(--bg2);
@@ -349,9 +339,7 @@ body::before {
 .tab-btn.act { background:rgba(0,229,255,.08); border-color:var(--b); color:var(--cyan) }
 .tab-btn:hover:not(.act) { color:var(--text) }
 
-/* ══════════════════════════════════════════════════
-   MESSAGES
-══════════════════════════════════════════════════ */
+/* ══ MESSAGES ══ */
 #msgs {
   flex:1; overflow-y:auto;
   padding:14px 16px;
@@ -359,7 +347,6 @@ body::before {
   min-height:0;
 }
 
-/* welcome screen */
 .welcome {
   display:flex; flex-direction:column;
   align-items:center; justify-content:center;
@@ -369,6 +356,7 @@ body::before {
   font-family:'Orbitron',sans-serif; font-size:22px; font-weight:900;
   background:linear-gradient(135deg,var(--cyan),var(--purple));
   -webkit-background-clip:text; -webkit-text-fill-color:transparent;
+  background-clip:text;
 }
 .ws { font-size:var(--fs-md); line-height:1.9; max-width:340px }
 .suggs { display:grid; grid-template-columns:1fr 1fr; gap:7px; max-width:440px; margin-top:4px; width:100% }
@@ -453,10 +441,10 @@ body::before {
   font-family:'JetBrains Mono',monospace;
   height:var(--h-xs);
 }
-.mab:hover   { color:var(--cyan); border-color:var(--b); background:var(--card) }
-.mab.liked   { color:var(--green); border-color:rgba(0,255,170,.3) }
-.mab.disliked{ color:var(--pink);  border-color:rgba(255,45,107,.3) }
-.mab svg     { width:11px; height:11px; stroke:currentColor; fill:none; stroke-width:2 }
+.mab:hover    { color:var(--cyan); border-color:var(--b); background:var(--card) }
+.mab.liked    { color:var(--green); border-color:rgba(0,255,170,.3) }
+.mab.disliked { color:var(--pink);  border-color:rgba(255,45,107,.3) }
+.mab svg      { width:11px; height:11px; stroke:currentColor; fill:none; stroke-width:2 }
 
 /* attachments */
 .attach-row { display:flex; gap:6px; margin-bottom:6px; flex-wrap:wrap; padding:0 2px }
@@ -477,9 +465,7 @@ body::before {
   display:flex; align-items:center; justify-content:center; z-index:2;
 }
 
-/* ══════════════════════════════════════════════════
-   INPUT AREA — FIXED alignment system
-══════════════════════════════════════════════════ */
+/* ══ INPUT AREA ══ */
 .inp-area {
   padding:8px 14px 10px;
   border-top:1px solid var(--b); background:var(--bg2);
@@ -489,8 +475,8 @@ body::before {
   background:var(--bg3); border:1px solid var(--b);
   border-radius:12px; transition:border-color .2s; overflow:hidden;
 }
-.inp-box.drag-over       { border-color:var(--cyan); box-shadow:0 0 0 2px rgba(0,229,255,.1) }
-.inp-box:focus-within    { border-color:var(--cyan2); box-shadow:0 0 0 2px rgba(0,229,255,.04) }
+.inp-box.drag-over    { border-color:var(--cyan); box-shadow:0 0 0 2px rgba(0,229,255,.1) }
+.inp-box:focus-within { border-color:var(--cyan2); box-shadow:0 0 0 2px rgba(0,229,255,.04) }
 
 #inp {
   width:100%; background:transparent; border:none; outline:none;
@@ -500,7 +486,7 @@ body::before {
 }
 #inp::placeholder { color:var(--dim) }
 
-/* ─ INPUT BAR — every control at --h-sm = 28px ─ */
+/* input bar */
 .inp-bar {
   display:flex; align-items:center;
   height:var(--h-inp); padding:0 10px;
@@ -511,21 +497,21 @@ body::before {
   gap:5px; flex:1; min-width:0; overflow:hidden;
 }
 
-/* icon buttons (attach, clear) */
+/* icon buttons */
 .ib {
   width:var(--h-sm); height:var(--h-sm);
   border-radius:var(--r-s); border:1px solid var(--b);
   background:transparent; color:var(--dim); cursor:pointer;
   display:inline-flex; align-items:center; justify-content:center;
   transition:.12s; flex-shrink:0;
-  padding:0; user-select:none; -webkit-user-select:none;
+  padding:0; user-select:none;
   outline:none; box-sizing:border-box;
   font-family:'JetBrains Mono',monospace;
 }
 .ib:hover { color:var(--cyan); border-color:var(--cyan2) }
 .ib svg   { width:14px; height:14px; stroke:currentColor; fill:none; stroke-width:1.5; flex-shrink:0; pointer-events:none }
 
-/* model selector — fixed height */
+/* model selector */
 .inp-model {
   display:flex; align-items:center; gap:5px;
   height:var(--h-sm); padding:0 8px;
@@ -539,7 +525,7 @@ body::before {
 .inp-model-name  { white-space:nowrap; overflow:hidden; text-overflow:ellipsis; flex:1; font-size:var(--fs-2xs); min-width:0 }
 .inp-model-badge { font-size:var(--fs-2xs); font-weight:700; flex-shrink:0 }
 
-/* theme button — same height */
+/* theme button */
 .theme-picker-btn {
   display:flex; align-items:center; gap:5px;
   height:var(--h-sm); padding:0 8px;
@@ -551,7 +537,7 @@ body::before {
 .theme-picker-btn:hover { border-color:var(--cyan2); color:var(--cyan) }
 .theme-swatch { width:10px; height:10px; border-radius:50%; flex-shrink:0; border:1px solid rgba(255,255,255,.2) }
 
-/* send / cancel — slightly taller for prominence */
+/* send / cancel */
 .btn-send, .btn-cancel {
   border:none; border-radius:var(--r);
   width:var(--h-md); height:var(--h-md);
@@ -564,9 +550,7 @@ body::before {
 .btn-cancel { background:rgba(255,45,107,.15); border:1px solid rgba(255,45,107,.3); color:var(--pink) }
 .btn-cancel:hover { background:rgba(255,45,107,.25) }
 
-/* ══════════════════════════════════════════════════
-   DROPDOWNS
-══════════════════════════════════════════════════ */
+/* ══ DROPDOWNS ══ */
 .model-dd, .theme-dd {
   position:fixed; background:var(--bg3); border:1px solid var(--b);
   border-radius:var(--r); z-index:9000; display:none;
@@ -608,9 +592,7 @@ body::before {
 .theme-preview span { width:8px; height:20px; border-radius:3px }
 .theme-opt-name  { font-size:var(--fs-sm); color:var(--text); flex:1; font-family:'JetBrains Mono',monospace }
 
-/* ══════════════════════════════════════════════════
-   STEPS / THINKING
-══════════════════════════════════════════════════ */
+/* ══ STEPS / THINKING ══ */
 .steps-wrap { display:flex; gap:9px; animation:mi .22s ease }
 .steps-box  {
   background:var(--bg2); border:1px solid var(--b);
@@ -659,9 +641,7 @@ body::before {
 .steps-cancel-btn:hover { background:rgba(255,45,107,.16) }
 @keyframes spin { to{transform:rotate(360deg)} }
 
-/* ══════════════════════════════════════════════════
-   STUDIO SUMMARY
-══════════════════════════════════════════════════ */
+/* ══ STUDIO SUMMARY ══ */
 .studio-summary-box {
   margin-top:8px; padding:8px 10px;
   background:rgba(0,255,170,.04); border:1px solid rgba(0,255,170,.15);
@@ -671,10 +651,8 @@ body::before {
 .studio-summary-item   { color:var(--text); padding:1px 0; display:flex; align-items:center; gap:5px }
 .studio-summary-dot    { display:inline-block; width:6px; height:6px; border-radius:50%; background:var(--green); flex-shrink:0 }
 
-/* ══════════════════════════════════════════════════
-   GUI EDITOR TAB
-══════════════════════════════════════════════════ */
-#guiTab { flex:1; overflow:hidden; display:none; flex-direction:column; min-height:0 }
+/* ══ GUI EDITOR TAB ══ */
+#guiTab { flex:1; overflow:hidden; display:none; flex-direction:column; min-height:0}
 
 .gui-toolbar {
   padding:5px 12px; border-bottom:1px solid var(--b); background:var(--bg2);
@@ -684,10 +662,8 @@ body::before {
 }
 .gui-toolbar::-webkit-scrollbar { display:none }
 
-/* gui toolbar label */
 .gui-add-label { font-size:var(--fs-xs); color:var(--dim); flex-shrink:0; white-space:nowrap }
 
-/* gui toolbar buttons — ALL same height */
 .gui-btn {
   display:inline-flex; align-items:center; gap:4px;
   height:var(--h-sm); padding:0 9px;
@@ -744,10 +720,8 @@ body::before {
 .gui-empty-hint    { position:absolute; inset:0; display:flex; align-items:center; justify-content:center; flex-direction:column; gap:8px; color:rgba(0,229,255,.12); font-size:var(--fs-md); pointer-events:none }
 .gui-empty-hint svg{ width:30px; height:30px; stroke:currentColor; fill:none; stroke-width:1.5 }
 
-/* gui toolbar right group */
 .gui-right { margin-left:auto; display:flex; align-items:center; gap:5px; flex-shrink:0; flex-wrap:nowrap }
 
-/* theme select in gui toolbar — same height */
 .gui-theme-select {
   height:var(--h-sm); padding:0 8px;
   background:var(--card); border:1px solid var(--b); border-radius:var(--r-s);
@@ -756,9 +730,7 @@ body::before {
   max-width:110px; flex-shrink:0;
 }
 
-/* ══════════════════════════════════════════════════
-   MODALS
-══════════════════════════════════════════════════ */
+/* ══ MODALS ══ */
 .ov {
   position:fixed; inset:0; background:rgba(3,3,18,.93); z-index:500;
   display:none; align-items:flex-start; justify-content:center;
@@ -782,7 +754,6 @@ body::before {
 .modal-b code { font-family:'JetBrains Mono'; background:rgba(0,229,255,.08); padding:1px 5px; border-radius:3px; color:var(--cyan) }
 .modal-footer { display:flex; gap:8px; flex-wrap:wrap; align-items:center }
 
-/* modal buttons — all same height */
 .btn-modal {
   display:inline-flex; align-items:center; justify-content:center;
   height:var(--h-lg); padding:0 16px;
@@ -794,7 +765,7 @@ body::before {
 .btn-modal.secondary { background:rgba(255,255,255,.06); color:var(--text); border:1px solid var(--b) }
 .btn-modal:hover     { opacity:.84 }
 
-/* ── SETTINGS ── */
+/* settings */
 .settings-section { margin-bottom:16px; padding-bottom:16px; border-bottom:1px solid var(--b) }
 .settings-section:last-child { border-bottom:none; margin-bottom:0; padding-bottom:0 }
 .settings-title   { font-size:var(--fs-xs); color:var(--cyan); text-transform:uppercase; letter-spacing:1.5px; margin-bottom:10px; font-family:'Orbitron',sans-serif }
@@ -807,7 +778,7 @@ body::before {
   border-radius:var(--r-s); font-family:'JetBrains Mono',monospace;
   font-size:var(--fs-sm); cursor:pointer;
   border:1px solid var(--b); background:var(--card); color:var(--text);
-  transition:.15s; white-space:nowrap; flex-shrink:0;
+  transition:.15s; white-space:nowrap; flex-shrink:0; text-decoration:none;
 }
 .settings-btn:hover { border-color:var(--cyan2); color:var(--cyan) }
 .settings-btn.danger { border-color:rgba(255,45,107,.3); color:var(--pink) }
@@ -839,22 +810,22 @@ body::before {
   outline:none; resize:vertical; min-height:80px; margin-top:6px;
 }
 
-/* ── INSTALL STEPS ── */
+/* install steps */
 .install-step { display:flex; gap:10px; padding:9px 0; border-bottom:1px solid var(--b); align-items:flex-start }
 .install-step:last-child { border-bottom:none }
 .install-num  { width:22px; height:22px; border-radius:50%; background:linear-gradient(135deg,var(--cyan),var(--purple)); display:flex; align-items:center; justify-content:center; font-size:var(--fs-sm); font-weight:700; color:white; flex-shrink:0; margin-top:1px }
 .install-txt  { font-size:var(--fs-md); color:var(--text); line-height:1.65; flex:1 }
 .install-txt code { color:var(--cyan); background:rgba(0,229,255,.08); padding:1px 4px; border-radius:3px; font-size:var(--fs-sm) }
 
-/* ── BADGES ── */
+/* badges */
 .badge-owner { background:linear-gradient(135deg,rgba(255,214,0,.2),rgba(255,140,0,.2)); color:var(--yellow); border:1px solid rgba(255,214,0,.3); padding:2px 8px; border-radius:10px; font-size:var(--fs-2xs); font-weight:700; font-family:'Orbitron',sans-serif }
 .badge-admin { background:rgba(0,229,255,.1); color:var(--cyan);  border:1px solid rgba(0,229,255,.3);  padding:2px 8px; border-radius:10px; font-size:var(--fs-2xs); font-weight:700 }
 .badge-pro   { background:rgba(136,0,255,.12); color:#cc55ff;     border:1px solid rgba(136,0,255,.3);  padding:2px 8px; border-radius:10px; font-size:var(--fs-2xs); font-weight:700 }
 
-/* ── SHARE MODAL ── */
+/* share modal */
 .share-modal-ta { width:100%; background:var(--bg3); border:1px solid var(--b); border-radius:6px; padding:8px 10px; color:var(--text); font-family:'JetBrains Mono',monospace; font-size:var(--fs-sm); outline:none; resize:none; height:200px; margin-top:8px }
 
-/* ── MENTION DROPDOWN ── */
+/* mention dropdown */
 .mention-dd {
   position:fixed; background:var(--bg3); border:1px solid var(--bb);
   border-radius:var(--r); z-index:8000;
@@ -875,13 +846,11 @@ body::before {
 .mention-path      { font-size:var(--fs-2xs); color:var(--dim) }
 .mention-empty     { padding:12px; font-size:var(--fs-sm); color:var(--dim); text-align:center }
 
-/* ── UTILS ── */
+/* utils */
 .hidden { display:none!important }
 @keyframes toastIn { from{opacity:0;transform:translateX(12px)} to{opacity:1;transform:none} }
 
-/* ══════════════════════════════════════════════════
-   RESPONSIVE
-══════════════════════════════════════════════════ */
+/* ══ RESPONSIVE ══ */
 @media(max-width:1100px){ :root{ --sb-w:230px } }
 @media(max-width:900px){
   :root{ --sb-w:210px }
@@ -932,11 +901,9 @@ body::before {
 }
 `
 
-// ─────────────────────────────────────────────────────────────────────────────
-// Types
-// ─────────────────────────────────────────────────────────────────────────────
-type WinFn = (...a: unknown[]) => void
-
+/* ─────────────────────────────────────────────────
+   Types
+───────────────────────────────────────────────── */
 type GuiType =
   | 'Frame'
   | 'TextLabel'
@@ -951,9 +918,14 @@ interface GuiTypeConfig {
   icon:  React.ReactNode
 }
 
-// ─────────────────────────────────────────────────────────────────────────────
-// SVG icons
-// ─────────────────────────────────────────────────────────────────────────────
+interface ThemeOption {
+  value: string
+  label: string
+}
+
+/* ─────────────────────────────────────────────────
+   SVG Icon map
+───────────────────────────────────────────────── */
 const Icon: Record<string, React.ReactElement> = {
   settings: (
     <svg viewBox="0 0 24 24" width={15} height={15} stroke="currentColor" fill="none" strokeWidth={2}>
@@ -1070,10 +1042,22 @@ const Icon: Record<string, React.ReactElement> = {
   ),
 }
 
-// ─────────────────────────────────────────────────────────────────────────────
-// Page component
-// ─────────────────────────────────────────────────────────────────────────────
+/* ─────────────────────────────────────────────────
+   Helper: safely call window function by name
+───────────────────────────────────────────────── */
+type AnyFn = (...args: unknown[]) => void
+
+function wCall(name: string, ...args: unknown[]): void {
+  const fn = (window as unknown as Record<string, unknown>)[name]
+  if (typeof fn === 'function') (fn as AnyFn)(...args)
+}
+
+/* ─────────────────────────────────────────────────
+   Page component
+───────────────────────────────────────────────── */
 export default function ChatsPage() {
+  const scriptsLoadedRef = useRef(false)
+
   useEffect(() => {
     document.title = 'NEXUS AI — Roblox Dev Intelligence'
     document.documentElement.style.height   = '100%'
@@ -1081,72 +1065,56 @@ export default function ChatsPage() {
     document.body.style.height   = '100%'
     document.body.style.overflow = 'hidden'
 
-    const addLink = (href: string): HTMLLinkElement | null => {
-      if (document.querySelector(`link[href="${href}"]`)) return null
-      const el   = document.createElement('link')
-      el.rel  = 'stylesheet'
-      el.href = href
-      document.head.appendChild(el)
-      return el
-    }
-
-    const loadScript = (src: string, attrs: Record<string, string> = {}): Promise<void> =>
-      new Promise((resolve, reject) => {
-        if (document.querySelector(`script[src="${src}"]`)) { resolve(); return }
-        const s = document.createElement('script')
-        s.src = src
-        Object.entries(attrs).forEach(([k, v]) => s.setAttribute(k, v))
-        s.onload  = () => resolve()
-        s.onerror = () => reject(new Error(`Failed to load: ${src}`))
-        document.head.appendChild(s)
-      })
-
-    const l1 = addLink('https://fonts.googleapis.com/css2?family=Orbitron:wght@400;600;700;900&family=JetBrains+Mono:wght@300;400;500&display=swap')
-    const l2 = addLink('https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/styles/atom-one-dark.min.css')
-
-    void (async () => {
-      try {
-        await loadScript('https://cdn.jsdelivr.net/npm/marked/marked.min.js')
-        await loadScript('https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/highlight.min.js')
-        await loadScript('https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/languages/lua.min.js')
-        void loadScript('https://challenges.cloudflare.com/turnstile/v0/api.js?render=explicit', { async:'true', defer:'true' })
-        await loadScript('/api/js/system_prompt')
-        await loadScript('/api/js/chats')
-      } catch (err) {
-        console.error('[NEXUS] Script load error:', err)
-      }
-    })()
-
     return () => {
       document.documentElement.style.height   = ''
       document.documentElement.style.overflow = ''
       document.body.style.height   = ''
       document.body.style.overflow = ''
-      l1?.remove()
-      l2?.remove()
     }
   }, [])
 
-  // ── window function helpers ──────────────────────────────────────────────
-  const w = (fn: string): WinFn | undefined =>
-    (window as unknown as Record<string, WinFn>)[fn]
+  /* handler helpers — all strongly typed, no implicit `any` */
+  const handleClick = (fn: string, ...args: unknown[]) =>
+    (): void => wCall(fn, ...args)
 
-  const call =
-    (fn: string, ...args: unknown[]): React.MouseEventHandler<HTMLElement> =>
-    () => w(fn)?.(...args)
+  const handleClickWithEvent = (fn: string, ...args: unknown[]) =>
+    (e: React.MouseEvent<HTMLElement>): void => {
+      e.stopPropagation()
+      wCall(fn, e, ...args)
+    }
 
-  const callE =
-    (fn: string, ...args: unknown[]): React.MouseEventHandler<HTMLElement> =>
-    (e) => { e.stopPropagation(); w(fn)?.(e, ...args) }
+  const handleTabClick = (tab: string) =>
+    (e: React.MouseEvent<HTMLButtonElement>): void =>
+      wCall('switchTab', tab, e.currentTarget)
 
-  const imgErr  = (e: React.SyntheticEvent<HTMLImageElement>): void => { e.currentTarget.style.display = 'none' }
-  const logoErr = (e: React.SyntheticEvent<HTMLImageElement>): void => {
+  const handleImgErr = (e: React.SyntheticEvent<HTMLImageElement>): void => {
+    e.currentTarget.style.display = 'none'
+  }
+
+  const handleLogoErr = (e: React.SyntheticEvent<HTMLImageElement>): void => {
     const p = e.currentTarget.parentElement
     if (p) p.style.background = 'linear-gradient(135deg,#00e5ff,#8800ff)'
     e.currentTarget.style.display = 'none'
   }
 
-  // ── GUI element types ────────────────────────────────────────────────────
+  const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>): void =>
+    wCall('handleFile', e)
+
+  const handlePlayTestDurChange = (e: React.ChangeEvent<HTMLInputElement>): void =>
+    wCall('setPlayTestDur', e.target.value)
+
+  const handleLangChange = (e: React.ChangeEvent<HTMLSelectElement>): void =>
+    wCall('changeLang', e.target.value)
+
+  const handleGuiThemeChange = (e: React.ChangeEvent<HTMLSelectElement>): void =>
+    wCall('applyGuiTheme', e.target.value)
+
+  const handleGuiAiThemeChange = (e: React.ChangeEvent<HTMLSelectElement>): void => {
+    // stored on element; read by generateGuiFromAI
+    void e.target.value
+  }
+
+  /* GUI element type definitions */
   const guiTypes: GuiTypeConfig[] = [
     {
       type: 'Frame', label: 'Frame',
@@ -1154,7 +1122,13 @@ export default function ChatsPage() {
     },
     {
       type: 'TextLabel', label: 'Label',
-      icon: <><polyline points="4 7 4 4 20 4 20 7"/><line x1="9" y1="20" x2="15" y2="20"/><line x1="12" y1="4" x2="12" y2="20"/></>,
+      icon: (
+        <>
+          <polyline points="4 7 4 4 20 4 20 7"/>
+          <line x1="9" y1="20" x2="15" y2="20"/>
+          <line x1="12" y1="4" x2="12" y2="20"/>
+        </>
+      ),
     },
     {
       type: 'TextButton', label: 'Button',
@@ -1162,38 +1136,99 @@ export default function ChatsPage() {
     },
     {
       type: 'TextBox', label: 'Input',
-      icon: <><rect x="3" y="5" width="18" height="14" rx="2"/><line x1="7" y1="12" x2="17" y2="12"/></>,
+      icon: (
+        <>
+          <rect x="3" y="5" width="18" height="14" rx="2"/>
+          <line x1="7" y1="12" x2="17" y2="12"/>
+        </>
+      ),
     },
     {
       type: 'ImageLabel', label: 'Image',
-      icon: <><rect x="3" y="3" width="18" height="18" rx="2"/><circle cx="8.5" cy="8.5" r="1.5"/><polyline points="21 15 16 10 5 21"/></>,
+      icon: (
+        <>
+          <rect x="3" y="3" width="18" height="18" rx="2"/>
+          <circle cx="8.5" cy="8.5" r="1.5"/>
+          <polyline points="21 15 16 10 5 21"/>
+        </>
+      ),
     },
     {
       type: 'ScrollingFrame', label: 'Scroll',
-      icon: <><rect x="3" y="3" width="18" height="18" rx="2"/><path d="M3 9h18"/></>,
+      icon: (
+        <>
+          <rect x="3" y="3" width="18" height="18" rx="2"/>
+          <path d="M3 9h18"/>
+        </>
+      ),
     },
   ]
 
-  const themeOptions = [
-    { value: 'nexus_ai',          label: 'nexus_ai' },
-    { value: 'aurora',            label: 'aurora' },
-    { value: 'candy',             label: 'candy' },
-    { value: 'dark',              label: 'dark' },
-    { value: 'default',           label: 'default' },
-    { value: 'midnight',          label: 'midnight' },
-    { value: 'studs',             label: 'studs' },
-    { value: 'custom',            label: 'custom (no theme)' },
+  const themeOptions: ThemeOption[] = [
+    { value: 'nexus_ai',  label: 'nexus_ai' },
+    { value: 'aurora',    label: 'aurora' },
+    { value: 'candy',     label: 'candy' },
+    { value: 'dark',      label: 'dark' },
+    { value: 'default',   label: 'default' },
+    { value: 'midnight',  label: 'midnight' },
+    { value: 'studs',     label: 'studs' },
+    { value: 'custom',    label: 'custom (no theme)' },
   ]
 
-  // ─────────────────────────────────────────────────────────────────────────
+  /* ── RENDER ── */
   return (
     <>
+      {/* ── Global styles ── */}
       <style dangerouslySetInnerHTML={{ __html: PAGE_CSS }} />
 
-      {/* ── PAGE LOADER ── */}
+      {/* ── External stylesheets (loaded via next/script‑safe approach) ── */}
+      {/* eslint-disable-next-line @next/next/no-page-custom-font */}
+      <link
+        rel="stylesheet"
+        href="https://fonts.googleapis.com/css2?family=Orbitron:wght@400;600;700;900&family=JetBrains+Mono:wght@300;400;500&display=swap"
+      />
+      <link
+        rel="stylesheet"
+        href="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/styles/atom-one-dark.min.css"
+      />
+
+      {/*
+        ── App scripts loaded via next/script (strategy="afterInteractive")
+           This replaces the old loadScript() pattern entirely.
+           The api/js files are served as Next.js API routes (invisible in devtools source tree)
+           but fully functional at runtime.
+      ──*/}
+      <Script
+        src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"
+        strategy="afterInteractive"
+      />
+      <Script
+        src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/highlight.min.js"
+        strategy="afterInteractive"
+      />
+      <Script
+        src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/languages/lua.min.js"
+        strategy="afterInteractive"
+      />
+      <Script
+        src="https://challenges.cloudflare.com/turnstile/v0/api.js?render=explicit"
+        strategy="afterInteractive"
+      />
+      {/* Internal API scripts — served as Next.js API routes, not visible in DevTools Sources */}
+      <Script
+        src="/api/js/system_prompt"
+        strategy="afterInteractive"
+      />
+      <Script
+        src="/api/js/chats"
+        strategy="afterInteractive"
+        onLoad={() => { scriptsLoadedRef.current = true }}
+      />
+
+      {/* ══ PAGE LOADER ══ */}
       <div id="pageLoader">
         <div className="pl-logo">
-          <img src="/nexusai.png" alt="N" onError={logoErr}/>
+          <img src="/nexusai.png" alt="N" onError={handleLogoErr}/>
         </div>
         <div className="pl-title">NEXUS AI</div>
         <div className="pl-bar-wrap">
@@ -1202,7 +1237,7 @@ export default function ChatsPage() {
         <div className="pl-txt" id="plTxt">Initializing...</div>
       </div>
 
-      {/* ── MENTION DROPDOWN ── */}
+      {/* ══ MENTION DROPDOWN ══ */}
       <div className="mention-dd" id="mentionDD">
         <div className="mention-hdr">
           <svg viewBox="0 0 24 24" width={10} height={10} stroke="currentColor" fill="none" strokeWidth={2}>
@@ -1227,7 +1262,7 @@ export default function ChatsPage() {
           {/* Logo header */}
           <div className="sb-head">
             <div className="sb-logo">
-              <img src="/nexusai.png" alt="N" onError={logoErr}/>
+              <img src="/nexusai.png" alt="N" onError={handleLogoErr}/>
             </div>
             <div>
               <div className="sb-logo-text">NEXUS AI</div>
@@ -1238,25 +1273,36 @@ export default function ChatsPage() {
           {/* User row */}
           <div className="sb-user">
             <img
-              className="sb-av" id="sbAv"
-              src="/nexusai.png" alt=""
+              className="sb-av"
+              id="sbAv"
+              src="/nexusai.png"
+              alt=""
               onError={(e) => { e.currentTarget.style.opacity = '0.3' }}
-              onClick={call('openAvatarModal')}
+              onClick={handleClick('openAvatarModal')}
             />
             <div style={{ minWidth:0, flex:1 }}>
               <div className="sb-un"   id="sbUn">-</div>
               <div className="sb-role" id="sbRole">Roblox Developer</div>
             </div>
-            <button className="sb-gear" onClick={call('openSettings')} aria-label="Settings">
+            <button
+              className="sb-gear"
+              onClick={handleClick('openSettings')}
+              aria-label="Settings"
+              type="button"
+            >
               {Icon.settings}
             </button>
           </div>
 
           {/* Credits */}
           <div
-            className="creds" id="credsEl"
+            className="creds"
+            id="credsEl"
             onClick={() => { window.location.href = '/payment' }}
-            role="button" aria-label="Buy credits"
+            role="button"
+            tabIndex={0}
+            onKeyDown={(e) => { if (e.key === 'Enter') window.location.href = '/payment' }}
+            aria-label="Buy credits"
           >
             <div>
               <div className="cred-l"    id="credLabel">Credits</div>
@@ -1268,28 +1314,38 @@ export default function ChatsPage() {
             </div>
           </div>
 
-          {/* Navigation buttons — uniform height via .sb-nav-btn */}
+          {/* Navigation buttons */}
           <div className="sb-btn-group">
             <button
               className="sb-nav-btn cyan"
+              type="button"
               onClick={() => { window.location.href = '/dashboard' }}
             >
               {Icon.home}
               <span id="dashLbl">Dashboard</span>
             </button>
-            <button className="sb-nav-btn cyan" onClick={call('newChat')}>
+
+            <button
+              className="sb-nav-btn cyan"
+              type="button"
+              onClick={handleClick('newChat')}
+            >
               {Icon.plus}
               <span id="newChatLbl">New Chat</span>
             </button>
+
             <button
               className="sb-nav-btn yellow"
+              type="button"
               onClick={() => { window.location.href = '/agent' }}
             >
               {Icon.help}
               <span id="helpBtnText">Need Help?</span>
             </button>
+
             <button
               className="sb-nav-btn purple"
+              type="button"
               onClick={() => { window.location.href = '/inbox' }}
             >
               {Icon.inbox}
@@ -1316,13 +1372,23 @@ export default function ChatsPage() {
             YouTube: <span style={{ color:'rgba(0,229,255,.6)' }}>NEXUS STUDIO</span>
           </div>
 
-          {/* Collapse */}
+          {/* Collapse toggle */}
           <div
             className="collapse-sb"
-            onClick={call('toggleSidebar')}
-            role="button" aria-label="Toggle sidebar"
+            onClick={handleClick('toggleSidebar')}
+            role="button"
+            tabIndex={0}
+            onKeyDown={(e) => { if (e.key === 'Enter') wCall('toggleSidebar') }}
+            aria-label="Toggle sidebar"
           >
-            <svg id="collapseSbIcon" viewBox="0 0 24 24" width={10} height={10} stroke="currentColor" fill="none" strokeWidth={2}>
+            <svg
+              id="collapseSbIcon"
+              viewBox="0 0 24 24"
+              width={10} height={10}
+              stroke="currentColor"
+              fill="none"
+              strokeWidth={2}
+            >
               <polyline points="15 18 9 12 15 6"/>
             </svg>
           </div>
@@ -1337,12 +1403,22 @@ export default function ChatsPage() {
           <div className="plug-banner" id="plugBanner">
             {Icon.info}
             <span id="plugBannerTxt">Plugin not connected —</span>
-            <a onClick={call('showInstall')} id="plugInstallLink" role="button" style={{ cursor:'pointer' }}>
+            <a
+              onClick={handleClick('showInstall')}
+              id="plugInstallLink"
+              role="button"
+              tabIndex={0}
+              onKeyDown={(e) => { if (e.key === 'Enter') wCall('showInstall') }}
+              style={{ cursor:'pointer' }}
+            >
               How to connect
             </a>
             <a
-              onClick={call('retryStudio')} id="plugReconnectLink"
+              onClick={handleClick('retryStudio')}
+              id="plugReconnectLink"
               role="button"
+              tabIndex={0}
+              onKeyDown={(e) => { if (e.key === 'Enter') wCall('retryStudio') }}
               style={{ marginLeft:8, color:'var(--green)', cursor:'pointer' }}
             >
               Reconnect
@@ -1354,9 +1430,13 @@ export default function ChatsPage() {
             <div className="chat-title" id="chatTitle">NEXUS AI</div>
             <div className="proj-badge-hdr" id="hdrProjBadge" style={{ display:'none' }}/>
             <div
-              className="status-badge off" id="studioBadge"
-              onClick={call('retryStudio')}
-              role="button" aria-label="Studio status"
+              className="status-badge off"
+              id="studioBadge"
+              onClick={handleClick('retryStudio')}
+              role="button"
+              tabIndex={0}
+              onKeyDown={(e) => { if (e.key === 'Enter') wCall('retryStudio') }}
+              aria-label="Studio status"
             >
               <div className="sdot pulse" id="studioDot"/>
               <span id="studioTxt">Studio: OFF</span>
@@ -1366,15 +1446,19 @@ export default function ChatsPage() {
           {/* Tabs */}
           <div className="chat-tabs">
             <button
-              className="tab-btn act" id="tabChat"
-              onClick={(e) => w('switchTab')?.('chat', e.currentTarget)}
+              className="tab-btn act"
+              id="tabChat"
+              type="button"
+              onClick={handleTabClick('chat')}
             >
               {Icon.chat}
               <span id="tabChatLbl">Chat</span>
             </button>
             <button
-              className="tab-btn" id="tabGui"
-              onClick={(e) => w('switchTab')?.('gui', e.currentTarget)}
+              className="tab-btn"
+              id="tabGui"
+              type="button"
+              onClick={handleTabClick('gui')}
             >
               {Icon.grid}
               <span id="tabGuiLbl">UI Editor</span>
@@ -1389,8 +1473,16 @@ export default function ChatsPage() {
             {/* Messages */}
             <div id="msgs">
               <div className="welcome" id="welcome">
-                <div style={{ width:56, height:56, borderRadius:14, overflow:'hidden', border:'2px solid rgba(0,229,255,.3)', flexShrink:0 }}>
-                  <img src="/nexusai.png" style={{ width:'100%', height:'100%', objectFit:'cover' }} alt="" onError={logoErr}/>
+                <div style={{
+                  width:56, height:56, borderRadius:14, overflow:'hidden',
+                  border:'2px solid rgba(0,229,255,.3)', flexShrink:0,
+                }}>
+                  <img
+                    src="/nexusai.png"
+                    style={{ width:'100%', height:'100%', objectFit:'cover' }}
+                    alt=""
+                    onError={handleLogoErr}
+                  />
                 </div>
                 <div className="wt">NEXUS AI</div>
                 <div className="ws" id="welcomeText">
@@ -1405,44 +1497,69 @@ export default function ChatsPage() {
               <div className="attach-row" id="attachRow"/>
               <div className="inp-box" id="inpBox">
 
-                {/* Textarea */}
-                <textarea id="inp" placeholder="Ask NEXUS AI about Roblox..." rows={1}/>
+                <textarea
+                  id="inp"
+                  placeholder="Ask NEXUS AI about Roblox..."
+                  rows={1}
+                />
 
-                {/* ── INPUT BAR — all controls at --h-sm = 28px ── */}
+                {/* Input bar */}
                 <div className="inp-bar">
                   <div className="inp-l">
 
                     {/* Attach */}
                     <div style={{ position:'relative', flexShrink:0, display:'inline-flex' }}>
                       <label
-                        htmlFor="fi" className="ib"
-                        title="Attach file" role="button"
-                        aria-label="Attach file" tabIndex={0}
+                        htmlFor="fi"
+                        className="ib"
+                        title="Attach file"
+                        role="button"
+                        aria-label="Attach file"
+                        tabIndex={0}
                       >
                         {Icon.attach}
                       </label>
                       <input
-                        type="file" id="fi"
+                        type="file"
+                        id="fi"
                         accept="image/*,.lua,.txt,.json,.js,.py,.html,.css"
-                        style={{ position:'absolute', width:0, height:0, opacity:0, overflow:'hidden', pointerEvents:'none' }}
-                        onChange={(e) => w('handleFile')?.(e)}
-                        multiple tabIndex={-1}
+                        style={{
+                          position:'absolute', width:0, height:0,
+                          opacity:0, overflow:'hidden', pointerEvents:'none',
+                        }}
+                        onChange={handleFileChange}
+                        multiple
+                        tabIndex={-1}
                       />
                     </div>
 
                     {/* Clear */}
-                    <button className="ib" onClick={call('clearChat')} title="Clear chat" aria-label="Clear chat">
+                    <button
+                      className="ib"
+                      type="button"
+                      onClick={handleClick('clearChat')}
+                      title="Clear chat"
+                      aria-label="Clear chat"
+                    >
                       {Icon.trash}
                     </button>
 
                     {/* Model selector */}
                     <div
-                      className="inp-model" id="inpModelBtn"
-                      onClick={(e) => w('toggleMDD')?.(e)}
-                      role="button" aria-label="Select model" aria-haspopup="listbox"
+                      className="inp-model"
+                      id="inpModelBtn"
+                      onClick={handleClickWithEvent('toggleMDD')}
+                      role="button"
+                      tabIndex={0}
+                      onKeyDown={(e) => { if (e.key === 'Enter') wCall('toggleMDD', e) }}
+                      aria-label="Select model"
+                      aria-haspopup="listbox"
                     >
                       <img
-                        id="inpMIcon" src="" alt="" onError={imgErr}
+                        id="inpMIcon"
+                        src=""
+                        alt=""
+                        onError={handleImgErr}
                         style={{ width:13, height:13, borderRadius:2, objectFit:'contain', flexShrink:0 }}
                       />
                       <span className="inp-model-name"  id="inpMName">Gemini 3.5 Flash</span>
@@ -1452,11 +1569,17 @@ export default function ChatsPage() {
 
                     {/* Theme picker */}
                     <button
-                      className="theme-picker-btn" id="themePickerBtn"
-                      onClick={(e) => w('toggleThemeDD')?.(e)}
+                      className="theme-picker-btn"
+                      id="themePickerBtn"
+                      type="button"
+                      onClick={handleClickWithEvent('toggleThemeDD')}
                       aria-label="Select theme"
                     >
-                      <div className="theme-swatch" id="themeSwatchBtn" style={{ background:'#00e5ff' }}/>
+                      <div
+                        className="theme-swatch"
+                        id="themeSwatchBtn"
+                        style={{ background:'#00e5ff' }}
+                      />
                       <span id="themePickerLabel">nexus_ai</span>
                       {Icon.chevronDown}
                     </button>
@@ -1464,19 +1587,29 @@ export default function ChatsPage() {
 
                   {/* Cancel */}
                   <button
-                    className="btn-cancel hidden" id="cancelBtn"
-                    onClick={call('cancelGen')} aria-label="Cancel generation"
+                    className="btn-cancel hidden"
+                    id="cancelBtn"
+                    type="button"
+                    onClick={handleClick('cancelGen')}
+                    aria-label="Cancel generation"
                   >
                     {Icon.x}
                   </button>
+
                   {/* Send */}
-                  <button className="btn-send" id="sendBtn" onClick={call('send')} aria-label="Send message">
+                  <button
+                    className="btn-send"
+                    id="sendBtn"
+                    type="button"
+                    onClick={handleClick('send')}
+                    aria-label="Send message"
+                  >
                     {Icon.send}
                   </button>
                 </div>
               </div>
 
-              {/* Dropdowns — inside inp-area for z-index */}
+              {/* Dropdowns — inside inp-area for correct z-index stacking */}
               <div className="model-dd" id="mDD"/>
               <div className="theme-dd" id="themeDD"/>
             </div>
@@ -1488,7 +1621,12 @@ export default function ChatsPage() {
               <span className="gui-add-label" id="guiAddLabel">Add:</span>
 
               {guiTypes.map(({ type, label, icon }) => (
-                <button key={type} className="gui-btn" onClick={call('addEl', type)}>
+                <button
+                  key={type}
+                  className="gui-btn"
+                  type="button"
+                  onClick={handleClick('addEl', type)}
+                >
                   <svg viewBox="0 0 24 24" width={11} height={11} stroke="currentColor" fill="none" strokeWidth={1.8}>
                     {icon}
                   </svg>
@@ -1496,16 +1634,24 @@ export default function ChatsPage() {
                 </button>
               ))}
 
-              {/* Right controls — all same height via CSS vars */}
+              {/* Right-side controls */}
               <div className="gui-right">
-                {/* Model */}
+
+                {/* Model selector */}
                 <div
-                  className="inp-model" id="guiModelBtn"
-                  onClick={callE('toggleGuiMDD')}
+                  className="inp-model"
+                  id="guiModelBtn"
+                  onClick={handleClickWithEvent('toggleGuiMDD')}
+                  role="button"
+                  tabIndex={0}
+                  onKeyDown={(e) => { if (e.key === 'Enter') wCall('toggleGuiMDD', e) }}
                   style={{ maxWidth:150 }}
                 >
                   <img
-                    id="guiMIcon" src="" alt="" onError={imgErr}
+                    id="guiMIcon"
+                    src=""
+                    alt=""
+                    onError={handleImgErr}
                     style={{ width:13, height:13, borderRadius:2, flexShrink:0 }}
                   />
                   <span className="inp-model-name"  id="guiMName">Gemini 3.5 Flash</span>
@@ -1518,7 +1664,8 @@ export default function ChatsPage() {
                 <select
                   id="guiThemeSelect"
                   className="gui-theme-select"
-                  onChange={(e) => w('applyGuiTheme')?.(e.target.value)}
+                  onChange={handleGuiThemeChange}
+                  defaultValue=""
                 >
                   <option value="">Theme...</option>
                   {themeOptions.map(({ value, label }) => (
@@ -1527,13 +1674,21 @@ export default function ChatsPage() {
                 </select>
 
                 {/* AI Build */}
-                <button className="gui-ai-btn" onClick={call('openGuiAIChat')}>
+                <button
+                  className="gui-ai-btn"
+                  type="button"
+                  onClick={handleClick('openGuiAIChat')}
+                >
                   {Icon.bulb}
                   <span id="guiAiBuildLbl">AI Build</span>
                 </button>
 
                 {/* Clear canvas */}
-                <button className="gui-btn" onClick={call('clearCanvas')}>
+                <button
+                  className="gui-btn"
+                  type="button"
+                  onClick={handleClick('clearCanvas')}
+                >
                   <svg viewBox="0 0 24 24" width={11} height={11} stroke="currentColor" fill="none" strokeWidth={1.8}>
                     <polyline points="3 6 5 6 21 6"/>
                     <path d="M19 6v14a2 2 0 01-2 2H7a2 2 0 01-2-2V6m3 0V4a2 2 0 012-2h4a2 2 0 012 2v2"/>
@@ -1542,7 +1697,11 @@ export default function ChatsPage() {
                 </button>
 
                 {/* Export */}
-                <button className="gui-gen-btn" onClick={call('generateGuiCode')}>
+                <button
+                  className="gui-gen-btn"
+                  type="button"
+                  onClick={handleClick('generateGuiCode')}
+                >
                   {Icon.code}
                   <span id="guiExportLbl">Export</span>
                 </button>
@@ -1550,7 +1709,8 @@ export default function ChatsPage() {
                 {/* Send to Place */}
                 <button
                   className="gui-gen-btn"
-                  onClick={call('sendGuiToPlace')}
+                  type="button"
+                  onClick={handleClick('sendGuiToPlace')}
                   style={{ background:'linear-gradient(135deg,var(--green),var(--cyan))' }}
                 >
                   {Icon.send}
@@ -1578,14 +1738,23 @@ export default function ChatsPage() {
                   </div>
                 </div>
                 <div className="gui-loading" id="guiLoading">
-                  <div style={{ width:20, height:20, border:'2px solid rgba(0,229,255,.2)', borderTopColor:'var(--cyan)', borderRadius:'50%', animation:'spin .7s linear infinite' }}/>
+                  <div style={{
+                    width:20, height:20,
+                    border:'2px solid rgba(0,229,255,.2)',
+                    borderTopColor:'var(--cyan)',
+                    borderRadius:'50%',
+                    animation:'spin .7s linear infinite',
+                  }}/>
                   <span id="guiLoadingText">AI is building UI...</span>
                 </div>
               </div>
 
               {/* Properties */}
               <div className="gui-props" id="guiProps">
-                <div style={{ fontSize:'var(--fs-sm)', color:'var(--dim)', textAlign:'center', padding:'20px 0' }} id="guiPropsEmpty">
+                <div
+                  style={{ fontSize:'var(--fs-sm)', color:'var(--dim)', textAlign:'center', padding:'20px 0' }}
+                  id="guiPropsEmpty"
+                >
                   Select element
                 </div>
               </div>
@@ -1606,14 +1775,21 @@ export default function ChatsPage() {
             @-
           </div>
           <img
-            id="avatarModalImg" src="" alt=""
+            id="avatarModalImg"
+            src=""
+            alt=""
             style={{ width:110, height:110, borderRadius:'50%', border:'3px solid var(--cyan)', objectFit:'cover', margin:'0 auto 12px', display:'block' }}
             onError={(e) => { e.currentTarget.src = '/nexusai.png' }}
           />
-          <div style={{ fontSize: 'var(--fs-md)', color: 'var(--dim)', marginBottom: 3 }} id="avatarModalRole">Developer</div>
-          <div style={{ fontSize: 'var(--fs-sm)', color: 'var(--dim)' }} id="avatarModalId">Roblox ID: -</div>
+          <div style={{ fontSize:'var(--fs-md)', color:'var(--dim)', marginBottom:3 }} id="avatarModalRole">Developer</div>
+          <div style={{ fontSize:'var(--fs-sm)', color:'var(--dim)' }} id="avatarModalId">Roblox ID: -</div>
           <div className="modal-footer" style={{ justifyContent:'center', marginTop:14 }}>
-            <button className="btn-modal primary" onClick={call('closeModal', 'avatarModal')} id="avatarCloseBtn">
+            <button
+              className="btn-modal primary"
+              type="button"
+              onClick={handleClick('closeModal', 'avatarModal')}
+              id="avatarCloseBtn"
+            >
               CLOSE
             </button>
           </div>
@@ -1628,15 +1804,20 @@ export default function ChatsPage() {
             <span id="installTitle">Install NEXUS AI Plugin</span>
           </div>
           <div className="modal-b">
-            {[1,2,3,4,5].map(n => (
+            {[1,2,3,4,5].map((n) => (
               <div key={n} className="install-step">
                 <div className="install-num">{n}</div>
-                <div className="install-txt">Step {n}</div>
+                <div className="install-txt" id={`installStep${n}`}>Step {n}</div>
               </div>
             ))}
           </div>
           <div className="modal-footer">
-            <button className="btn-modal primary" onClick={call('closeModal', 'installModal')} id="installCloseBtn">
+            <button
+              className="btn-modal primary"
+              type="button"
+              onClick={handleClick('closeModal', 'installModal')}
+              id="installCloseBtn"
+            >
               GOT IT
             </button>
           </div>
@@ -1685,7 +1866,12 @@ export default function ChatsPage() {
             </div>
             <div className="settings-row">
               <span id="lastClaimInfo" style={{ fontSize:'var(--fs-sm)', color:'var(--dim)' }}/>
-              <button className="settings-btn" id="claimDailyBtn" onClick={call('claimDaily')}>
+              <button
+                className="settings-btn"
+                type="button"
+                id="claimDailyBtn"
+                onClick={handleClick('claimDaily')}
+              >
                 Claim Daily
               </button>
             </div>
@@ -1699,14 +1885,25 @@ export default function ChatsPage() {
                 <div id="playTestLabel">Run play_test after inject</div>
                 <div className="settings-hint" id="playTestHint">Disable if PC crashes during play_test</div>
               </div>
-              <button className="toggle-sw on" id="playTestToggle" onClick={call('togglePlayTest')} aria-label="Toggle play test"/>
+              <button
+                className="toggle-sw on"
+                id="playTestToggle"
+                type="button"
+                onClick={handleClick('togglePlayTest')}
+                aria-label="Toggle play test"
+              />
             </div>
             <div className="settings-row">
               <span id="playTestDurLabel">Duration (seconds)</span>
               <input
-                type="number" id="playTestDurInput" className="settings-select"
-                style={{ width:70 }} min={5} max={120} defaultValue={15}
-                onChange={(e) => w('setPlayTestDur')?.(e.target.value)}
+                type="number"
+                id="playTestDurInput"
+                className="settings-select"
+                style={{ width:70 }}
+                min={5}
+                max={120}
+                defaultValue={15}
+                onChange={handlePlayTestDurChange}
               />
             </div>
           </div>
@@ -1717,8 +1914,10 @@ export default function ChatsPage() {
             <div className="settings-row">
               <span id="langLabel">Interface &amp; AI Language</span>
               <select
-                className="settings-select" id="langSelector"
-                onChange={(e) => w('changeLang')?.(e.target.value)}
+                className="settings-select"
+                id="langSelector"
+                onChange={handleLangChange}
+                defaultValue="id"
               >
                 <option value="id">Bahasa Indonesia</option>
                 <option value="en">English</option>
@@ -1729,22 +1928,40 @@ export default function ChatsPage() {
           {/* Report */}
           <div className="settings-section">
             <div className="settings-title" id="reportTitle">Report Issue</div>
-            <textarea className="report-ta" id="reportTa" placeholder="Describe the issue..."/>
+            <textarea
+              className="report-ta"
+              id="reportTa"
+              placeholder="Describe the issue..."
+            />
             <div id="cf-turnstile-wrap" style={{ marginTop:8, minHeight:65, display:'none' }}>
-              <div id="cf-turnstile-report" style={{ transform:'scale(0.85)', transformOrigin:'left' }}/>
+              <div
+                id="cf-turnstile-report"
+                style={{ transform:'scale(0.85)', transformOrigin:'left' }}
+              />
             </div>
             <input type="hidden" id="_tsToken" value=""/>
             <div style={{ marginTop:8, display:'flex', alignItems:'center', gap:8 }}>
-              <button className="settings-btn" onClick={call('sendReport')} id="reportBtn">Send Report</button>
+              <button
+                className="settings-btn"
+                type="button"
+                onClick={handleClick('sendReport')}
+                id="reportBtn"
+              >
+                Send Report
+              </button>
               <span id="reportStatus" style={{ fontSize:'var(--fs-sm)', color:'var(--green)' }}/>
             </div>
           </div>
 
-          {/* Admin (hidden) */}
+          {/* Admin (hidden by default, shown by JS) */}
           <div className="settings-section" id="adminSection" style={{ display:'none' }}>
             <div className="settings-title">Admin Panel</div>
             <div style={{ marginTop:6 }}>
-              <a href="/admin-panel" className="settings-btn" style={{ textDecoration:'none', display:'inline-flex', alignItems:'center', height:'var(--h-sm)', padding:'0 13px' }}>
+              <a
+                href="/admin-panel"
+                className="settings-btn"
+                style={{ textDecoration:'none' }}
+              >
                 Open Admin Panel
               </a>
             </div>
@@ -1754,14 +1971,25 @@ export default function ChatsPage() {
           <div className="settings-section">
             <div className="settings-title" id="redeemTitle">Redeem Code</div>
             <div className="settings-row" style={{ flexDirection:'column', alignItems:'flex-start', gap:6 }}>
-              <div style={{ fontSize:'var(--fs-sm)', color:'var(--dim)' }} id="redeemHint">Get codes on Discord</div>
+              <div style={{ fontSize:'var(--fs-sm)', color:'var(--dim)' }} id="redeemHint">
+                Get codes on Discord
+              </div>
               <div style={{ display:'flex', gap:8, width:'100%' }}>
                 <input
-                  type="text" id="redeemInput" className="settings-select"
+                  type="text"
+                  id="redeemInput"
+                  className="settings-select"
                   style={{ flex:1, padding:'0 10px', height:'var(--h-sm)' }}
                   placeholder="Enter code..."
                 />
-                <button className="settings-btn" onClick={call('redeemCode')} id="redeemBtn">Redeem</button>
+                <button
+                  className="settings-btn"
+                  type="button"
+                  onClick={handleClick('redeemCode')}
+                  id="redeemBtn"
+                >
+                  Redeem
+                </button>
               </div>
               <span id="redeemStatus" style={{ fontSize:'var(--fs-sm)', color:'var(--green)' }}/>
             </div>
@@ -1771,10 +1999,14 @@ export default function ChatsPage() {
           <div className="settings-section">
             <div className="settings-title" id="downloadTitle">Download Plugin</div>
             <div className="settings-row" style={{ flexDirection:'column', gap:5, alignItems:'flex-start' }}>
-              <div style={{ fontSize:'var(--fs-sm)', color:'var(--dim)' }} id="downloadHint">Install NEXUS AI Plugin in Roblox Studio</div>
+              <div style={{ fontSize:'var(--fs-sm)', color:'var(--dim)' }} id="downloadHint">
+                Install NEXUS AI Plugin in Roblox Studio
+              </div>
               <button
-                className="settings-btn" id="downloadPluginBtn"
-                onClick={() => window.open('https://create.roblox.com/store/asset/91870814099475/NEXUS-AI','_blank')}
+                className="settings-btn"
+                type="button"
+                id="downloadPluginBtn"
+                onClick={() => window.open('https://create.roblox.com/store/asset/91870814099475/NEXUS-AI', '_blank')}
               >
                 Download from Creator Store
               </button>
@@ -1786,12 +2018,23 @@ export default function ChatsPage() {
             <div className="settings-title" id="accountTitle">Account</div>
             <div className="settings-row">
               <span id="logoutLabel">Logout</span>
-              <button className="settings-btn danger" onClick={call('logout')}>Logout</button>
+              <button
+                className="settings-btn danger"
+                type="button"
+                onClick={handleClick('logout')}
+              >
+                Logout
+              </button>
             </div>
           </div>
 
           <div className="modal-footer">
-            <button className="btn-modal primary" onClick={call('closeModal','settingsModal')} id="settingsCloseBtn">
+            <button
+              className="btn-modal primary"
+              type="button"
+              onClick={handleClick('closeModal', 'settingsModal')}
+              id="settingsCloseBtn"
+            >
               CLOSE
             </button>
           </div>
@@ -1818,9 +2061,30 @@ export default function ChatsPage() {
             />
           </div>
           <div className="modal-footer">
-            <button className="btn-modal primary"   onClick={call('copyGuiCode')}     id="guiCodeCopyBtn">Copy</button>
-            <button className="btn-modal secondary" onClick={call('downloadGuiCode')} id="guiCodeDlBtn">Download .lua</button>
-            <button className="btn-modal secondary" onClick={call('closeModal','guiCodeModal')} id="guiCodeCloseBtn">Close</button>
+            <button
+              className="btn-modal primary"
+              type="button"
+              onClick={handleClick('copyGuiCode')}
+              id="guiCodeCopyBtn"
+            >
+              Copy
+            </button>
+            <button
+              className="btn-modal secondary"
+              type="button"
+              onClick={handleClick('downloadGuiCode')}
+              id="guiCodeDlBtn"
+            >
+              Download .lua
+            </button>
+            <button
+              className="btn-modal secondary"
+              type="button"
+              onClick={handleClick('closeModal', 'guiCodeModal')}
+              id="guiCodeCloseBtn"
+            >
+              Close
+            </button>
           </div>
         </div>
       </div>
@@ -1833,11 +2097,15 @@ export default function ChatsPage() {
             <span id="guiAiTitle">AI UI Builder</span>
           </div>
           <div className="modal-b" style={{ marginBottom:8 }}>
-            <p style={{ marginBottom:8, fontSize: 'var(--fs-md)' }} id="guiAiDesc">Describe the UI you want:</p>
+            <p style={{ marginBottom:8, fontSize:'var(--fs-md)' }} id="guiAiDesc">
+              Describe the UI you want:
+            </p>
             <select
               id="guiAiThemeSelect"
               className="settings-select"
               style={{ width:'100%', marginBottom:8, height:'var(--h-sm)' }}
+              onChange={handleGuiAiThemeChange}
+              defaultValue="nexus_ai"
             >
               {themeOptions.map(({ value, label }) => (
                 <option key={value} value={value}>
@@ -1858,8 +2126,22 @@ export default function ChatsPage() {
             />
           </div>
           <div className="modal-footer">
-            <button className="btn-modal primary"   onClick={call('generateGuiFromAI')}         id="guiAiBuildBtn">Build with AI</button>
-            <button className="btn-modal secondary" onClick={call('closeModal','guiAIChatModal')} id="guiAiCancelBtn">Cancel</button>
+            <button
+              className="btn-modal primary"
+              type="button"
+              onClick={handleClick('generateGuiFromAI')}
+              id="guiAiBuildBtn"
+            >
+              Build with AI
+            </button>
+            <button
+              className="btn-modal secondary"
+              type="button"
+              onClick={handleClick('closeModal', 'guiAIChatModal')}
+              id="guiAiCancelBtn"
+            >
+              Cancel
+            </button>
           </div>
         </div>
       </div>
@@ -1870,28 +2152,42 @@ export default function ChatsPage() {
           <div className="modal-t">
             {Icon.code}
             <span id="codePreviewTitle">Script Preview</span>
-            <span style={{ marginLeft:'auto', fontSize:'var(--fs-2xs)', color:'var(--dim)' }} id="codePreviewPath"/>
+            <span
+              style={{ marginLeft:'auto', fontSize:'var(--fs-2xs)', color:'var(--dim)' }}
+              id="codePreviewPath"
+            />
           </div>
           <div className="modal-b" style={{ margin:0 }}>
             <div className="code-block-wrap" style={{ margin:0 }}>
               <div className="code-lang-bar">
                 <span>Lua</span>
                 <div className="code-btns">
-                  <button className="cbtn" onClick={call('copyPreviewCode')}>
+                  <button
+                    className="cbtn"
+                    type="button"
+                    onClick={handleClick('copyPreviewCode')}
+                  >
                     {Icon.copy} Copy
                   </button>
                 </div>
               </div>
               <pre style={{ maxHeight:440, overflowY:'auto', margin:0 }}>
                 <code
-                  id="codePreviewCode" className="language-lua"
+                  id="codePreviewCode"
+                  className="language-lua"
                   style={{ fontSize:11, lineHeight:1.5, padding:14, display:'block' }}
                 />
               </pre>
             </div>
           </div>
           <div className="modal-footer" style={{ marginTop:12 }}>
-            <button className="btn-modal secondary" onClick={call('closeModal','codePreviewModal')}>Close</button>
+            <button
+              className="btn-modal secondary"
+              type="button"
+              onClick={handleClick('closeModal', 'codePreviewModal')}
+            >
+              Close
+            </button>
           </div>
         </div>
       </div>
@@ -1904,14 +2200,32 @@ export default function ChatsPage() {
             <span id="shareModalTitle">Share Chat</span>
           </div>
           <div className="modal-b" style={{ marginBottom:8 }}>
-            <p style={{ fontSize: 'var(--fs-md)', color:'var(--dim)', marginBottom:6 }} id="shareModalDesc">
+            <p style={{ fontSize:'var(--fs-md)', color:'var(--dim)', marginBottom:6 }} id="shareModalDesc">
               Copy conversation text:
             </p>
-            <textarea className="share-modal-ta" id="shareModalTa" readOnly/>
+            <textarea
+              className="share-modal-ta"
+              id="shareModalTa"
+              readOnly
+            />
           </div>
           <div className="modal-footer">
-            <button className="btn-modal primary"   onClick={call('copyShareText')}            id="shareModalCopyBtn">Copy Text</button>
-            <button className="btn-modal secondary" onClick={call('closeModal','shareModal')}  id="shareModalCloseBtn">Close</button>
+            <button
+              className="btn-modal primary"
+              type="button"
+              onClick={handleClick('copyShareText')}
+              id="shareModalCopyBtn"
+            >
+              Copy Text
+            </button>
+            <button
+              className="btn-modal secondary"
+              type="button"
+              onClick={handleClick('closeModal', 'shareModal')}
+              id="shareModalCloseBtn"
+            >
+              Close
+            </button>
           </div>
         </div>
       </div>
