@@ -2,8 +2,8 @@
 
 import React, { useEffect, useRef } from 'react'
 import Script from 'next/script'
-import "../../../lib/app/chats.js";
-import "../../../lib/app/system_prompt.js";
+import "@/lib/app/chats";
+import "@/lib/app/system_prompt";
 
 /* ─────────────────────────────────────────────────────────────────────────────
    CSS — NEXUS AI · v7
