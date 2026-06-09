@@ -4,9 +4,8 @@ import React, { useEffect, useRef } from 'react'
 import Script from 'next/script'
 
 /* ─────────────────────────────────────────────────────────────────────────────
-   CSS — NEXUS AI · v6
-   Fixed: unified height system, consistent alignment, no TypeScript errors
-   Removed: loadScript (replaced with next/script), all TS issues resolved
+   CSS — NEXUS AI · v7
+   Fixed: theme dropdown layout, consistent hover sizes, unified height system
 ───────────────────────────────────────────────────────────────────────────── */
 const PAGE_CSS = `
 /* ── TOKENS ── */
@@ -33,7 +32,6 @@ const PAGE_CSS = `
   --r:   8px;
   --r-s: 6px;
 
-  /* unified control height system */
   --h-xs:  22px;
   --h-sm:  28px;
   --h-md:  32px;
@@ -43,7 +41,6 @@ const PAGE_CSS = `
 
   --sb-w: 252px;
 
-  /* font sizes */
   --fs-2xs: 8px;
   --fs-xs:  9px;
   --fs-sm:  10px;
@@ -551,15 +548,96 @@ body::before {
 .btn-cancel:hover { background:rgba(255,45,107,.25) }
 
 /* ══ DROPDOWNS ══ */
-.model-dd, .theme-dd {
+.model-dd {
   position:fixed; background:var(--bg3); border:1px solid var(--b);
   border-radius:var(--r); z-index:9000; display:none;
   box-shadow:0 8px 32px rgba(0,0,0,.95);
+  max-height:min(380px,70vh); overflow-y:auto; min-width:265px;
 }
-.model-dd { max-height:min(380px,70vh); overflow-y:auto; min-width:265px }
 .model-dd::-webkit-scrollbar { width:3px }
 .model-dd::-webkit-scrollbar-thumb { background:var(--b) }
-.model-dd.open, .theme-dd.open { display:block }
+.model-dd.open { display:block }
+
+/* ── THEME DROPDOWN — fixed layout ── */
+.theme-dd {
+  position:fixed;
+  background:var(--bg3);
+  border:1px solid var(--b);
+  border-radius:var(--r);
+  z-index:9000;
+  display:none;
+  box-shadow:0 8px 32px rgba(0,0,0,.95);
+  width:200px;
+  padding:4px;
+  overflow:hidden;
+}
+.theme-dd.open { display:block }
+
+.theme-dd-title {
+  font-size:var(--fs-2xs); color:var(--dim);
+  text-transform:uppercase; letter-spacing:2px;
+  padding:5px 8px 6px;
+  border-bottom:1px solid var(--b);
+  margin-bottom:3px;
+  line-height:1;
+}
+
+/* hint line under title */
+.theme-dd-hint {
+  font-size:var(--fs-2xs); color:rgba(0,229,255,.35);
+  padding:3px 8px 5px;
+  border-bottom:1px solid var(--b);
+  margin-bottom:3px;
+  line-height:1.4;
+}
+
+.theme-opt {
+  display:flex;
+  align-items:center;
+  gap:8px;
+  padding:0 8px;
+  height:30px;          /* fixed height — no more jumpy hover */
+  border-radius:5px;
+  cursor:pointer;
+  transition:background .1s;
+  width:100%;
+  box-sizing:border-box;
+}
+.theme-opt:hover { background:var(--hover) }
+.theme-opt.act   { background:rgba(0,229,255,.07); outline:1px solid rgba(0,229,255,.2) }
+
+.theme-preview {
+  display:flex;
+  gap:2px;
+  flex-shrink:0;
+  align-items:center;
+}
+.theme-preview span {
+  width:6px;
+  height:18px;   /* fixed height for preview bars */
+  border-radius:3px;
+  display:block;
+  flex-shrink:0;
+}
+
+.theme-opt-name {
+  font-size:var(--fs-sm);
+  color:var(--text);
+  flex:1;
+  font-family:'JetBrains Mono',monospace;
+  white-space:nowrap;
+  overflow:hidden;
+  text-overflow:ellipsis;
+  line-height:1;
+}
+.theme-opt.act .theme-opt-name { color:var(--cyan) }
+
+/* active tick */
+.theme-opt-tick {
+  width:10px; height:10px; flex-shrink:0;
+  opacity:0;
+}
+.theme-opt.act .theme-opt-tick { opacity:1 }
 
 .mg {
   padding:6px 11px 3px;
@@ -579,18 +657,6 @@ body::before {
 .mb-badge.f { background:rgba(0,255,170,.12); color:var(--green) }
 .mb-badge.s { background:rgba(0,229,255,.12); color:var(--cyan) }
 .mb-badge.p { background:rgba(136,0,255,.15); color:#cc55ff }
-
-.theme-dd   { width:220px; padding:6px }
-.theme-dd-title {
-  font-size:var(--fs-2xs); color:var(--dim); text-transform:uppercase; letter-spacing:2px;
-  padding:2px 6px 6px; border-bottom:1px solid var(--b); margin-bottom:4px;
-}
-.theme-opt { display:flex; align-items:center; gap:8px; padding:6px 8px; border-radius:6px; cursor:pointer; transition:.1s }
-.theme-opt:hover { background:var(--hover) }
-.theme-opt.act   { background:rgba(0,229,255,.07); outline:1px solid rgba(0,229,255,.25) }
-.theme-preview   { display:flex; gap:2px; flex-shrink:0 }
-.theme-preview span { width:8px; height:20px; border-radius:3px }
-.theme-opt-name  { font-size:var(--fs-sm); color:var(--text); flex:1; font-family:'JetBrains Mono',monospace }
 
 /* ══ STEPS / THINKING ══ */
 .steps-wrap { display:flex; gap:9px; animation:mi .22s ease }
@@ -652,7 +718,7 @@ body::before {
 .studio-summary-dot    { display:inline-block; width:6px; height:6px; border-radius:50%; background:var(--green); flex-shrink:0 }
 
 /* ══ GUI EDITOR TAB ══ */
-#guiTab { flex:1; overflow:hidden; display:none; flex-direction:column; min-height:0}
+#guiTab { flex:1; overflow:hidden; display:none; flex-direction:column; min-height:0 }
 
 .gui-toolbar {
   padding:5px 12px; border-bottom:1px solid var(--b); background:var(--bg2);
@@ -919,8 +985,9 @@ interface GuiTypeConfig {
 }
 
 interface ThemeOption {
-  value: string
-  label: string
+  value:  string
+  label:  string
+  colors: string[]  // preview bar colors
 }
 
 /* ─────────────────────────────────────────────────
@@ -970,6 +1037,11 @@ const Icon: Record<string, React.ReactElement> = {
   chevronLeft: (
     <svg viewBox="0 0 24 24" width={10} height={10} stroke="currentColor" fill="none" strokeWidth={2}>
       <polyline points="15 18 9 12 15 6"/>
+    </svg>
+  ),
+  check: (
+    <svg viewBox="0 0 24 24" width={10} height={10} stroke="currentColor" fill="none" strokeWidth={2.5}>
+      <polyline points="20 6 9 17 4 12"/>
     </svg>
   ),
   attach: (
@@ -1073,7 +1145,7 @@ export default function ChatsPage() {
     }
   }, [])
 
-  /* handler helpers — all strongly typed, no implicit `any` */
+  /* handler helpers */
   const handleClick = (fn: string, ...args: unknown[]) =>
     (): void => wCall(fn, ...args)
 
@@ -1108,11 +1180,6 @@ export default function ChatsPage() {
 
   const handleGuiThemeChange = (e: React.ChangeEvent<HTMLSelectElement>): void =>
     wCall('applyGuiTheme', e.target.value)
-
-  const handleGuiAiThemeChange = (e: React.ChangeEvent<HTMLSelectElement>): void => {
-    // stored on element; read by generateGuiFromAI
-    void e.target.value
-  }
 
   /* GUI element type definitions */
   const guiTypes: GuiTypeConfig[] = [
@@ -1164,15 +1231,16 @@ export default function ChatsPage() {
     },
   ]
 
+  /* Theme options with preview colors */
   const themeOptions: ThemeOption[] = [
-    { value: 'nexus_ai',  label: 'nexus_ai' },
-    { value: 'aurora',    label: 'aurora' },
-    { value: 'candy',     label: 'candy' },
-    { value: 'dark',      label: 'dark' },
-    { value: 'default',   label: 'default' },
-    { value: 'midnight',  label: 'midnight' },
-    { value: 'studs',     label: 'studs' },
-    { value: 'custom',    label: 'custom (no theme)' },
+    { value: 'nexus_ai',  label: 'NEXUS AI',  colors: ['#00e5ff', '#8800ff'] },
+    { value: 'aurora',    label: 'Aurora',    colors: ['#00ffaa', '#0099ff'] },
+    { value: 'candy',     label: 'Candy',     colors: ['#ff6ec7', '#ff9500'] },
+    { value: 'dark',      label: 'Dark',      colors: ['#444466', '#666688'] },
+    { value: 'default',   label: 'Default',   colors: ['#5555ff', '#8888ff'] },
+    { value: 'midnight',  label: 'Midnight',  colors: ['#aa44ff', '#ff44aa'] },
+    { value: 'studs',     label: 'Studs',     colors: ['#ff9900', '#ffcc00'] },
+    { value: 'custom',    label: 'Custom',    colors: ['#555566', '#555566'] },
   ]
 
   /* ── RENDER ── */
@@ -1181,7 +1249,7 @@ export default function ChatsPage() {
       {/* ── Global styles ── */}
       <style dangerouslySetInnerHTML={{ __html: PAGE_CSS }} />
 
-      {/* ── External stylesheets (loaded via next/script‑safe approach) ── */}
+      {/* ── External stylesheets ── */}
       {/* eslint-disable-next-line @next/next/no-page-custom-font */}
       <link
         rel="stylesheet"
@@ -1192,12 +1260,7 @@ export default function ChatsPage() {
         href="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/styles/atom-one-dark.min.css"
       />
 
-      {/*
-        ── App scripts loaded via next/script (strategy="afterInteractive")
-           This replaces the old loadScript() pattern entirely.
-           The api/js files are served as Next.js API routes (invisible in devtools source tree)
-           but fully functional at runtime.
-      ──*/}
+      {/* ── Scripts ── */}
       <Script
         src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"
         strategy="afterInteractive"
@@ -1214,13 +1277,9 @@ export default function ChatsPage() {
         src="https://challenges.cloudflare.com/turnstile/v0/api.js?render=explicit"
         strategy="afterInteractive"
       />
-      {/* Internal API scripts — served as Next.js API routes, not visible in DevTools Sources */}
+      {/* Single app script — all logic lives here */}
       <Script
-        src="/api/js/system_prompt"
-        strategy="afterInteractive"
-      />
-      <Script
-        src="/api/js/chats"
+        src="/api/app/chats.js"
         strategy="afterInteractive"
         onLoad={() => { scriptsLoadedRef.current = true }}
       />
@@ -1254,9 +1313,7 @@ export default function ChatsPage() {
       ══════════════════════════════════════════════════ */}
       <div id="app" className="hidden">
 
-        {/* ════════════════
-            SIDEBAR
-        ════════════════ */}
+        {/* ════════════════ SIDEBAR ════════════════ */}
         <div id="sb">
 
           {/* Logo header */}
@@ -1394,9 +1451,7 @@ export default function ChatsPage() {
           </div>
         </div>{/* /#sb */}
 
-        {/* ════════════════
-            CHAT PANEL
-        ════════════════ */}
+        {/* ════════════════ CHAT PANEL ════════════════ */}
         <div id="chat">
 
           {/* Plugin banner */}
@@ -1562,12 +1617,12 @@ export default function ChatsPage() {
                         onError={handleImgErr}
                         style={{ width:13, height:13, borderRadius:2, objectFit:'contain', flexShrink:0 }}
                       />
-                      <span className="inp-model-name"  id="inpMName">Gemini 3.5 Flash</span>
+                      <span className="inp-model-name"  id="inpMName">Gemini 2.5 Flash</span>
                       <span className="inp-model-badge" id="inpMBadge" style={{ color:'var(--cyan)' }}>FAST</span>
                       {Icon.chevronDown}
                     </div>
 
-                    {/* Theme picker */}
+                    {/* Theme picker button */}
                     <button
                       className="theme-picker-btn"
                       id="themePickerBtn"
@@ -1609,9 +1664,36 @@ export default function ChatsPage() {
                 </div>
               </div>
 
-              {/* Dropdowns — inside inp-area for correct z-index stacking */}
+              {/* Model dropdown */}
               <div className="model-dd" id="mDD"/>
-              <div className="theme-dd" id="themeDD"/>
+
+              {/* ── THEME DROPDOWN — fixed layout, consistent heights ── */}
+              <div className="theme-dd" id="themeDD">
+                <div className="theme-dd-title">GUI Theme</div>
+                <div className="theme-dd-hint">Custom = AI builds UI without a preset theme</div>
+                {themeOptions.map(({ value, label, colors }) => (
+                  <div
+                    key={value}
+                    className="theme-opt"
+                    data-theme={value}
+                    onClick={handleClick('selectTheme', value)}
+                    role="option"
+                    tabIndex={0}
+                    aria-selected={false}
+                    onKeyDown={(e) => { if (e.key === 'Enter') wCall('selectTheme', value) }}
+                  >
+                    <div className="theme-preview">
+                      {colors.map((c, i) => (
+                        <span key={i} style={{ background: c }}/>
+                      ))}
+                    </div>
+                    <span className="theme-opt-name">{label}</span>
+                    <span className="theme-opt-tick" style={{ color:'var(--cyan)' }}>
+                      {Icon.check}
+                    </span>
+                  </div>
+                ))}
+              </div>
             </div>
           </div>{/* /#chatTab */}
 
@@ -1654,7 +1736,7 @@ export default function ChatsPage() {
                     onError={handleImgErr}
                     style={{ width:13, height:13, borderRadius:2, flexShrink:0 }}
                   />
-                  <span className="inp-model-name"  id="guiMName">Gemini 3.5 Flash</span>
+                  <span className="inp-model-name"  id="guiMName">Gemini 2.5 Flash</span>
                   <span className="inp-model-badge" id="guiMBadge" style={{ color:'var(--cyan)' }}>FAST</span>
                   {Icon.chevronDown}
                 </div>
@@ -2104,12 +2186,11 @@ export default function ChatsPage() {
               id="guiAiThemeSelect"
               className="settings-select"
               style={{ width:'100%', marginBottom:8, height:'var(--h-sm)' }}
-              onChange={handleGuiAiThemeChange}
               defaultValue="nexus_ai"
             >
               {themeOptions.map(({ value, label }) => (
                 <option key={value} value={value}>
-                  {label.charAt(0).toUpperCase() + label.slice(1)}
+                  {label}
                 </option>
               ))}
             </select>
