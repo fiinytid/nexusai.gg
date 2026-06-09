@@ -1,6 +1,7 @@
 import type { Metadata, Viewport } from "next";
 import { Inter, JetBrains_Mono } from "next/font/google";
 import { Analytics } from "@vercel/analytics/react";
+import type { BeforeSendEvent } from "@vercel/analytics";
 import { SpeedInsights } from "@vercel/speed-insights/next";
 import "./globals.css";
 
@@ -47,6 +48,19 @@ const ROBLOX_STORE_URL =
   "https://create.roblox.com/store/asset/91870814099475/NEXUS-AI";
 const THEME_COLOR      = "#030312";
 const ACCENT_COLOR     = "#00e5ff";
+
+/* ─────────────────────────────────────────────────────────────────────────────
+   Analytics — beforeSend helper
+   Defined at module level (NOT inside JSX) so it is never passed as an
+   anonymous function to a Client Component, which would break static export.
+───────────────────────────────────────────────────────────────────────────── */
+function stripPiiFromEvent(event: BeforeSendEvent): BeforeSendEvent | null {
+  const url = new URL(event.url);
+  url.searchParams.delete("email");
+  url.searchParams.delete("token");
+  url.searchParams.delete("key");
+  return { ...event, url: url.toString() };
+}
 
 /* ─────────────────────────────────────────────────────────────────────────────
    SEO Keywords  (comprehensive — brand + features + long-tail)
@@ -481,14 +495,7 @@ export default function RootLayout({
         {/* ── Vercel Web Analytics ── */}
         <Analytics
           debug={process.env.NODE_ENV === "development"}
-          beforeSend={(event) => {
-            // Strip any personally identifiable info from the URL before sending
-            const url = new URL(event.url);
-            url.searchParams.delete("email");
-            url.searchParams.delete("token");
-            url.searchParams.delete("key");
-            return { ...event, url: url.toString() };
-          }}
+          beforeSend={stripPiiFromEvent}
         />
 
         {/* ── Vercel Speed Insights ── */}
