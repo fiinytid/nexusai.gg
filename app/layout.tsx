@@ -49,19 +49,6 @@ const THEME_COLOR      = "#030312";
 const ACCENT_COLOR     = "#00e5ff";
 
 /* ─────────────────────────────────────────────────────────────────────────────
-   Analytics — beforeSend helper
-   Defined at module level (NOT inside JSX) so it is never passed as an
-   anonymous function to a Client Component, which would break static export.
-───────────────────────────────────────────────────────────────────────────── */
-function stripPiiFromEvent(event: BeforeSendEvent): BeforeSendEvent | null {
-  const url = new URL(event.url);
-  url.searchParams.delete("email");
-  url.searchParams.delete("token");
-  url.searchParams.delete("key");
-  return { ...event, url: url.toString() };
-}
-
-/* ─────────────────────────────────────────────────────────────────────────────
    SEO Keywords  (comprehensive — brand + features + long-tail)
 ───────────────────────────────────────────────────────────────────────────── */
 const KEYWORDS: string[] = [
