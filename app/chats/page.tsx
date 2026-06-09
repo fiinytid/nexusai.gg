@@ -2,6 +2,8 @@
 
 import React, { useEffect, useRef } from 'react'
 import Script from 'next/script'
+import "../../../lib/app/chats.js";
+import "../../../lib/app/system_prompt.js";
 
 /* ─────────────────────────────────────────────────────────────────────────────
    CSS — NEXUS AI · v7
@@ -1279,10 +1281,14 @@ export default function ChatsPage() {
       />
       {/* Single app script — all logic lives here */}
       <Script
-        src="/api/app/chats.js"
+        src="/api/app/chats"
         strategy="afterInteractive"
-        onLoad={() => { scriptsLoadedRef.current = true }}
       />
+            <Script
+        src="/api/app/system_prompt"
+        strategy="afterInteractive"
+      />
+
 
       {/* ══ PAGE LOADER ══ */}
       <div id="pageLoader">
