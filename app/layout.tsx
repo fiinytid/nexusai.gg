@@ -493,10 +493,7 @@ export default function RootLayout({
         {children}
 
         {/* ── Vercel Web Analytics ── */}
-        <Analytics
-          debug={process.env.NODE_ENV === "development"}
-          beforeSend={stripPiiFromEvent}
-        />
+        <Analytics/>
 
         {/* ── Vercel Speed Insights ── */}
         <SpeedInsights debug={process.env.NODE_ENV === "development"} />
