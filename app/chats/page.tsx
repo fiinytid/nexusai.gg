@@ -2,9 +2,7 @@
 
 import React, { useEffect, useRef } from 'react'
 import Script from 'next/script'
-import "@/lib/app/chats";
-import "@/lib/app/system_prompt";
-
+  
 /* ─────────────────────────────────────────────────────────────────────────────
    CSS — NEXUS AI · v7
    Fixed: theme dropdown layout, consistent hover sizes, unified height system
@@ -1133,16 +1131,23 @@ export default function ChatsPage() {
   const scriptsLoadedRef = useRef(false)
 
   useEffect(() => {
-    document.title = 'NEXUS AI — Roblox Dev Intelligence'
-    document.documentElement.style.height   = '100%'
+    document.title = 'NEXUS AI - Roblox Dev Intelligence'
+    document.documentElement.style.height = '100%'
     document.documentElement.style.overflow = 'hidden'
-    document.body.style.height   = '100%'
+    document.body.style.height = '100%'
     document.body.style.overflow = 'hidden'
 
+    import("@/lib/app/chats")
+      .then(() => console.log("Chats library loaded successfully on client-side."))
+      .catch((err) => console.error("Failed to load chats library:", err));
+      
+    import("@/lib/app/system_prompt")
+      .catch((err) => console.error("Failed to load system prompt library:", err));
+
     return () => {
-      document.documentElement.style.height   = ''
+      document.documentElement.style.height  = ''
       document.documentElement.style.overflow = ''
-      document.body.style.height   = ''
+      document.body.style.height = ''
       document.body.style.overflow = ''
     }
   }, [])
