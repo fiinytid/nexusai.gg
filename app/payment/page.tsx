@@ -269,7 +269,7 @@ export default function PaymentPage() {
   // ── User info ──
   const [displayName, setDisplayName] = useState("User");
   const [username, setUsername] = useState("user");
-  const [avatarUrl, setAvatarUrl] = useState("images/nexusai.png");
+  const [avatarUrl, setAvatarUrl] = useState("/images/nexusai.png");
   const [credits, setCredits] = useState<string>("—");
   const [plan, setPlan] = useState("FREE");
 
@@ -1044,7 +1044,7 @@ export default function PaymentPage() {
         <a href="/dashboard" className="nav-logo">
           <div className="nav-logo-icon">
             <img
-              src="images/nexusai.png"
+              src="/images/nexusai.png"
               alt="NEXUS"
               onError={(e) => {
                 (e.target as HTMLImageElement).style.display = "none";
@@ -1089,7 +1089,7 @@ export default function PaymentPage() {
             src={avatarUrl}
             alt="avatar"
             onError={(e) => {
-              (e.target as HTMLImageElement).src = "images/nexusai.png";
+              (e.target as HTMLImageElement).src = "/images/nexusai.png";
             }}
           />
           <div className="user-info">

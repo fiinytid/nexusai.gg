@@ -598,15 +598,15 @@ function T(): LangStrings { return LANGS[curLang] || LANGS.en }
 
 const MODEL_LIST: ModelEntry[] = [
   { grp: 'Google' },
-  { id: 'gemini-3.5-flash', prov: 'gemini', cost: 3, label: 'Gemini 3.5 Flash', icon: 'images/gemini.png', badge: 'FAST' },
-  { id: 'gemini-3.1-flash-lite', prov: 'gemini', cost: 2, label: 'Gemini 3.1 Flash Lite', icon: 'images/gemini.png', badge: 'FAST' },
-  { id: 'gemini-3.1-pro-preview', prov: 'gemini', cost: 10, label: 'Gemini 3.1 Pro', icon: 'images/gemini.png', badge: 'BEST' },
+  { id: 'gemini-3.5-flash', prov: 'gemini', cost: 3, label: 'Gemini 3.5 Flash', icon: '/images/gemini.png', badge: 'FAST' },
+  { id: 'gemini-3.1-flash-lite', prov: 'gemini', cost: 2, label: 'Gemini 3.1 Flash Lite', icon: '/images/gemini.png', badge: 'FAST' },
+  { id: 'gemini-3.1-pro-preview', prov: 'gemini', cost: 10, label: 'Gemini 3.1 Pro', icon: '/images/gemini.png', badge: 'BEST' },
   { grp: 'StepFun' },
-  { id: 'stepfun/step-3.5-flash', prov: 'openrouter', cost: 1, label: 'Step 3.5 Flash', icon: 'images/stepfun.png', badge: 'FAST' },
+  { id: 'stepfun/step-3.5-flash', prov: 'openrouter', cost: 1, label: 'Step 3.5 Flash', icon: '/images/stepfun.png', badge: 'FAST' },
   { grp: 'Poolside' },
-  { id: 'poolside/laguna-m.1:free', prov: 'openrouter', cost: 0, label: 'Laguna M.1', icon: 'images/laguna.svg', badge: 'FREE' },
+  { id: 'poolside/laguna-m.1:free', prov: 'openrouter', cost: 0, label: 'Laguna M.1', icon: '/images/laguna.svg', badge: 'FREE' },
   { grp: 'DeepSeek' },
-  { id: 'deepseek/deepseek-v4-flash', prov: 'openrouter', cost: 16, label: 'DeepSeek V4 Pro', icon: 'images/deepseek.svg', badge: 'BEST' },
+  { id: 'deepseek/deepseek-v4-flash', prov: 'openrouter', cost: 16, label: 'DeepSeek V4 Pro', icon: '/images/deepseek.svg', badge: 'BEST' },
 ]
 
 const S: AppState = {
@@ -2454,7 +2454,7 @@ function mkAv(role: string): HTMLElement {
     container.textContent = letter || '?'
   }
   if (role === 'ai') {
-    const img = document.createElement('img'); img.src = 'images/nexusai.png'; img.alt = 'N'
+    const img = document.createElement('img'); img.src = '/images/nexusai.png'; img.alt = 'N'
     img.onerror = () => {
       av.style.cssText = 'display:flex;align-items:center;justify-content:center;font-size:12px;font-weight:700;color:var(--cyan);background:linear-gradient(135deg,rgba(0,229,255,.2),rgba(136,0,255,.2));border-radius:50%;'
       if (img.parentNode === av) av.removeChild(img); av.textContent = 'N'
@@ -2867,7 +2867,7 @@ function openAvatarModal(): void {
   const u = SESSION.user
   const nameEl = document.getElementById('avatarModalName'); if (nameEl) nameEl.textContent = '@' + (u.username || '-')
   const imgEl = document.getElementById('avatarModalImg') as HTMLImageElement | null
-  if (imgEl) { imgEl.src = u.avatar || 'images/nexusai.png'; imgEl.onerror = () => { imgEl.src = 'images/nexusai.png' } }
+  if (imgEl) { imgEl.src = u.avatar || '/images/nexusai.png'; imgEl.onerror = () => { imgEl.src = '/images/nexusai.png' } }
   const roleEl = document.getElementById('avatarModalRole'); if (roleEl) roleEl.textContent = isOwner() ? 'Owner' : isAdmin() ? 'Admin' : 'Roblox Developer'
   const idEl = document.getElementById('avatarModalId'); if (idEl) idEl.textContent = 'Roblox ID: ' + (u.robloxId || '-')
   const m = document.getElementById('avatarModal'); if (m) m.classList.add('show')
@@ -3287,7 +3287,7 @@ async function initApp(): Promise<void> {
   updateProjectUI()
   const u = SESSION.user
   const av = document.getElementById('sbAv') as HTMLImageElement | null
-  if (av) { av.src = u.avatar || 'images/nexusai.png'; av.onerror = () => { try { av.src = 'images/nexusai.png' } catch { } } }
+  if (av) { av.src = u.avatar || '/images/nexusai.png'; av.onerror = () => { try { av.src = '/images/nexusai.png' } catch { } } }
   const unEl = document.getElementById('sbUn'); if (unEl) unEl.textContent = '@' + (u.username || '-')
   const suEl = document.getElementById('settingsUsername'); if (suEl) suEl.textContent = '@' + (u.username || '-')
   updateRoleDisplay(); updateCreds(); updatePlayTestUI()

@@ -871,7 +871,7 @@ export default function ChatsPage() {
 
       {/* PAGE LOADER */}
       <div id="pageLoader">
-        <div className="pl-logo"><img src="/nexusai.png" alt="N" onError={handleLogoErr}/></div>
+        <div className="pl-logo"><img src="/images/nexusai.png" alt="N" onError={handleLogoErr}/></div>
         <div className="pl-title">NEXUS AI</div>
         <div className="pl-bar-wrap"><div className="pl-bar" id="plBar"/></div>
         <div className="pl-txt" id="plTxt">Menginisialisasi...</div>
@@ -894,7 +894,7 @@ export default function ChatsPage() {
         {/* ════ SIDEBAR ════ */}
         <div id="sb">
           <div className="sb-head">
-            <div className="sb-logo"><img src="/nexusai.png" alt="N" onError={handleLogoErr}/></div>
+            <div className="sb-logo"><img src="/images/nexusai.png" alt="N" onError={handleLogoErr}/></div>
             <div>
               <div className="sb-logo-text">NEXUS AI</div>
               <div className="sb-logo-sub">Roblox Dev</div>
@@ -902,7 +902,7 @@ export default function ChatsPage() {
           </div>
 
           <div className="sb-user">
-            <img className="sb-av" id="sbAv" src="/nexusai.png" alt=""
+            <img className="sb-av" id="sbAv" src="/images/nexusai.png" alt=""
               onError={(e) => { e.currentTarget.style.opacity = '0.3' }}
               onClick={handleClick('openAvatarModal')}/>
             <div style={{ minWidth:0, flex:1 }}>
@@ -1016,7 +1016,7 @@ export default function ChatsPage() {
             <div id="msgs">
               <div className="welcome" id="welcome">
                 <div style={{ width:56, height:56, borderRadius:14, overflow:'hidden', border:'2px solid rgba(0,229,255,.3)', flexShrink:0 }}>
-                  <img src="/nexusai.png" style={{ width:'100%', height:'100%', objectFit:'cover' }} alt="" onError={handleLogoErr}/>
+                  <img src="/images/nexusai.png" style={{ width:'100%', height:'100%', objectFit:'cover' }} alt="" onError={handleLogoErr}/>
                 </div>
                 <div className="wt">NEXUS AI</div>
                 <div className="ws" id="welcomeText">
@@ -1172,7 +1172,7 @@ export default function ChatsPage() {
           <div style={{ fontFamily:"'Orbitron',sans-serif", fontSize:13, color:'var(--cyan)', marginBottom:14 }} id="avatarModalName">@-</div>
           <img id="avatarModalImg" src="" alt=""
             style={{ width:110, height:110, borderRadius:'50%', border:'3px solid var(--cyan)', objectFit:'cover', margin:'0 auto 12px', display:'block' }}
-            onError={(e) => { e.currentTarget.src = '/nexusai.png' }}/>
+            onError={(e) => { e.currentTarget.src = '/images/nexusai.png' }}/>
           <div style={{ fontSize:'var(--fs-md)', color:'var(--dim)', marginBottom:3 }} id="avatarModalRole">Developer</div>
           <div style={{ fontSize:'var(--fs-sm)', color:'var(--dim)' }} id="avatarModalId">Roblox ID: -</div>
           <div className="modal-footer" style={{ justifyContent:'center', marginTop:14 }}>

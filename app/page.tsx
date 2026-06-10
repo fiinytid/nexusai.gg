@@ -755,7 +755,7 @@ export default function HomePage() {
       {/* ── NAVBAR ── */}
       <nav className="nav" id="navbar">
         <a href="/" className="nav-logo-wrap">
-          <img src="images/nexusai.png" alt="NEXUS AI" className="nav-logo-img" onError={imgFail} />
+          <img src="/images/nexusai.png" alt="NEXUS AI" className="nav-logo-img" onError={imgFail} />
           <span className="nav-logo">NEXUS AI</span>
         </a>
         <div className="nav-divider" />
