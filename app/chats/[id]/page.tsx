@@ -1107,18 +1107,6 @@ const Icon: Record<string, React.ReactElement> = {
   ),
 }
 
-/* ─────────────────────────────────────────────────────────────────────────────
-   PERBAIKAN UTAMA: wCall — panggil fungsi dari window dengan aman
-   
-   Masalah: chats.js di-import sebagai ES module via import('./chats'),
-   sehingga deklarasi 'var' di dalamnya TIDAK masuk ke window global.
-   
-   Solusi yang benar: chats.js harus diload sebagai script global (non-module)
-   menggunakan tag <Script src="/js/chats.js"> agar semua 'var funcName'
-   otomatis menjadi window.funcName.
-   
-   Di sini kita tetap support keduanya — jika ada di window, panggil langsung.
-───────────────────────────────────────────────────────────────────────────── */
 type AnyFn = (...args: unknown[]) => void
 
 function wCall(name: string, ...args: unknown[]): void {
@@ -1137,7 +1125,7 @@ function wCall(name: string, ...args: unknown[]): void {
 }
 
 /* ─────────────────────────────────────────────────
-   Komponen halaman utama
+   Page component
 ───────────────────────────────────────────────── */
 export default function ChatsPage() {
   const scriptsLoadedRef = useRef(false)
@@ -1148,6 +1136,16 @@ export default function ChatsPage() {
     document.documentElement.style.overflow = 'hidden'
     document.body.style.height = '100%'
     document.body.style.overflow = 'hidden'
+
+    // ── Dynamic import: file tidak lagi di /public sehingga
+    //    tidak bisa diakses langsung via URL oleh siapapun.
+    //    Next.js akan bundle + minify keduanya ke dalam chunk JS-nya.
+    if (!scriptsLoadedRef.current) {
+      scriptsLoadedRef.current = true
+      import('./system_prompt').then(() => {
+        import('./chats').catch(console.error)
+      }).catch(console.error)
+    }
 
     return () => {
       document.documentElement.style.height  = ''
@@ -1289,26 +1287,6 @@ export default function ChatsPage() {
       <Script
         src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/languages/lua.min.js"
         strategy="beforeInteractive"
-      />
-
-      {/* ────────────────────────────────────────────────────────────────────
-          PERBAIKAN UTAMA: system_prompt.js & chats.js diload sebagai
-          GLOBAL SCRIPT (bukan ES module) menggunakan strategy="afterInteractive"
-          dengan src langsung ke /js/ folder.
-          
-          Ini memastikan semua 'var funcName = ...' di chats.js terdaftar
-          sebagai window.funcName sehingga wCall('funcName') berhasil.
-          
-          HAPUS import('./chats') dari useEffect karena itu menyebabkan
-          chats.js dibundle sebagai module dan fungsinya tidak masuk window.
-      ────────────────────────────────────────────────────────────────────── */}
-      <Script
-        src="/js/system_prompt.js"
-        strategy="afterInteractive"
-      />
-      <Script
-        src="/js/chats.js"
-        strategy="afterInteractive"
       />
 
       <Script
