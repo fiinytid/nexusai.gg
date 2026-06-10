@@ -5,10 +5,8 @@ import Script from 'next/script'
 
 /* ─────────────────────────────────────────────────────────────────────────────
    CSS — NEXUS AI · v7
-   Perbaikan: layout dropdown tema, ukuran hover konsisten, sistem tinggi unified
-───────────────────────────────────────────────────────────────────────────── */
+───────────────────────────────────────────────── */
 const PAGE_CSS = `
-/* ── TOKEN ── */
 :root {
   --bg:    #030312;
   --bg2:   #06071a;
@@ -16,7 +14,6 @@ const PAGE_CSS = `
   --bg4:   #0d0e28;
   --card:  rgba(0,229,255,.04);
   --hover: rgba(0,229,255,.07);
-
   --cyan:   #00e5ff;
   --cyan2:  rgba(0,229,255,.35);
   --purple: #8800ff;
@@ -25,30 +22,23 @@ const PAGE_CSS = `
   --yellow: #ffd600;
   --text:   #b8cfff;
   --dim:    #3a4a7a;
-
   --b:  rgba(0,229,255,.12);
   --bb: rgba(0,229,255,.30);
-
   --r:   8px;
   --r-s: 6px;
-
   --h-xs:  22px;
   --h-sm:  28px;
   --h-md:  32px;
   --h-lg:  36px;
   --h-xl:  40px;
   --h-inp: 44px;
-
   --sb-w: 252px;
-
   --fs-2xs: 8px;
   --fs-xs:  9px;
   --fs-sm:  10px;
   --fs-md:  11px;
   --fs-base:13px;
 }
-
-/* ── RESET ── */
 *, *::before, *::after { margin:0; padding:0; box-sizing:border-box }
 html {
   height:100%;
@@ -59,7 +49,6 @@ html {
   overflow:hidden;
 }
 body { height:100%; overflow:hidden; min-height:0 }
-
 body::before {
   content:''; position:fixed; inset:0; pointer-events:none; z-index:0;
   background:
@@ -67,12 +56,11 @@ body::before {
     linear-gradient(90deg, rgba(0,229,255,.013) 1px, transparent 1px);
   background-size:40px 40px;
 }
-
 ::-webkit-scrollbar { width:3px; height:3px }
 ::-webkit-scrollbar-thumb { background:var(--b); border-radius:2px }
 ::-webkit-scrollbar-track { background:transparent }
 
-/* ══ PAGE LOADER ══ */
+/* PAGE LOADER */
 #pageLoader {
   position:fixed; inset:0; background:var(--bg); z-index:99999;
   display:flex; flex-direction:column;
@@ -80,95 +68,68 @@ body::before {
   transition:opacity .5s ease;
 }
 #pageLoader.hide { opacity:0; pointer-events:none }
-.pl-logo {
-  width:72px; height:72px; border-radius:18px;
-  overflow:hidden; border:2px solid rgba(0,229,255,.4);
-}
+.pl-logo { width:72px; height:72px; border-radius:18px; overflow:hidden; border:2px solid rgba(0,229,255,.4) }
 .pl-logo img { width:100%; height:100%; object-fit:cover; display:block }
 .pl-title {
   font-family:'Orbitron',sans-serif; font-size:22px; font-weight:900;
   background:linear-gradient(135deg,var(--cyan),var(--purple));
-  -webkit-background-clip:text; -webkit-text-fill-color:transparent;
-  background-clip:text;
+  -webkit-background-clip:text; -webkit-text-fill-color:transparent; background-clip:text;
 }
 .pl-bar-wrap { width:220px; height:3px; background:rgba(0,229,255,.1); border-radius:3px; overflow:hidden }
 .pl-bar {
   height:100%; width:0%; border-radius:3px;
-  background:linear-gradient(90deg,var(--cyan),var(--purple));
-  transition:width .35s ease;
+  background:linear-gradient(90deg,var(--cyan),var(--purple)); transition:width .35s ease;
 }
-.pl-txt {
-  font-size:var(--fs-2xs); color:rgba(0,229,255,.5);
-  letter-spacing:1px; min-height:16px; text-align:center;
-}
+.pl-txt { font-size:var(--fs-2xs); color:rgba(0,229,255,.5); letter-spacing:1px; min-height:16px; text-align:center }
 
-/* ══ APP SHELL ══ */
+/* APP SHELL */
 #app {
-  display:grid;
-  grid-template-columns:var(--sb-w) 1fr;
-  height:100vh; height:100dvh;
-  min-height:0; overflow:hidden;
-  position:relative; z-index:1;
-  transition:grid-template-columns .22s ease;
+  display:grid; grid-template-columns:var(--sb-w) 1fr;
+  height:100vh; height:100dvh; min-height:0; overflow:hidden;
+  position:relative; z-index:1; transition:grid-template-columns .22s ease;
 }
 #app.sb-hidden { grid-template-columns:0 1fr }
 
-/* ══ SIDEBAR ══ */
+/* SIDEBAR */
 #sb {
   display:flex; flex-direction:column;
   background:var(--bg2); border-right:1px solid var(--b);
-  overflow:hidden; overflow-y:auto;
-  position:relative; z-index:5;
+  overflow:hidden; overflow-y:auto; position:relative; z-index:5;
   width:var(--sb-w); min-width:0; min-height:0;
 }
-
 .sb-head {
-  padding:11px 14px 10px;
-  border-bottom:1px solid var(--b);
-  display:flex; align-items:center; gap:9px;
-  flex-shrink:0; height:52px;
+  padding:11px 14px 10px; border-bottom:1px solid var(--b);
+  display:flex; align-items:center; gap:9px; flex-shrink:0; height:52px;
 }
-.sb-logo {
-  width:30px; height:30px; border-radius:7px;
-  overflow:hidden; flex-shrink:0;
-}
+.sb-logo { width:30px; height:30px; border-radius:7px; overflow:hidden; flex-shrink:0 }
 .sb-logo img { width:100%; height:100%; object-fit:cover; display:block }
 .sb-logo-text {
   font-family:'Orbitron',sans-serif; font-weight:900; font-size:12px; line-height:1.15;
   background:linear-gradient(135deg,var(--cyan),var(--purple));
-  -webkit-background-clip:text; -webkit-text-fill-color:transparent;
-  background-clip:text;
+  -webkit-background-clip:text; -webkit-text-fill-color:transparent; background-clip:text;
 }
 .sb-logo-sub { font-size:var(--fs-2xs); color:var(--dim); line-height:1 }
-
 .sb-user {
-  padding:8px 12px;
-  display:flex; align-items:center; gap:8px;
-  border-bottom:1px solid var(--b);
-  flex-shrink:0; height:52px;
+  padding:8px 12px; display:flex; align-items:center; gap:8px;
+  border-bottom:1px solid var(--b); flex-shrink:0; height:52px;
 }
 .sb-av {
-  width:32px; height:32px; border-radius:50%;
-  border:1.5px solid var(--cyan2); object-fit:cover;
-  background:var(--bg3); flex-shrink:0;
-  cursor:pointer; transition:.2s;
+  width:32px; height:32px; border-radius:50%; border:1.5px solid var(--cyan2);
+  object-fit:cover; background:var(--bg3); flex-shrink:0; cursor:pointer; transition:.2s;
 }
 .sb-av:hover { border-color:var(--cyan); transform:scale(1.08) }
 .sb-un  { font-size:var(--fs-md); color:white; font-weight:500; line-height:1.3 }
 .sb-role{ font-size:var(--fs-2xs); color:var(--dim); line-height:1 }
 .sb-gear {
-  margin-left:auto; flex-shrink:0;
-  width:var(--h-sm); height:var(--h-sm);
+  margin-left:auto; flex-shrink:0; width:var(--h-sm); height:var(--h-sm);
   display:flex; align-items:center; justify-content:center;
-  background:none; border:1px solid transparent;
-  border-radius:var(--r-s); color:var(--dim); cursor:pointer; transition:.15s;
+  background:none; border:1px solid transparent; border-radius:var(--r-s);
+  color:var(--dim); cursor:pointer; transition:.15s;
 }
 .sb-gear:hover { color:var(--cyan); border-color:var(--b); background:var(--hover) }
 .sb-gear svg { width:15px; height:15px; stroke:currentColor; fill:none; stroke-width:2 }
-
 .creds {
-  margin:8px 12px 2px;
-  padding:8px 12px; border-radius:var(--r);
+  margin:8px 12px 2px; padding:8px 12px; border-radius:var(--r);
   background:linear-gradient(135deg,rgba(255,214,0,.06),rgba(255,119,0,.06));
   border:1px solid rgba(255,214,0,.18);
   display:flex; align-items:center; justify-content:space-between;
@@ -180,26 +141,18 @@ body::before {
 .creds.low .cred-v { color:var(--pink) }
 .cred-l      { font-size:var(--fs-2xs); color:rgba(255,214,0,.6); text-transform:uppercase; letter-spacing:1.5px }
 .cred-hint   { font-size:var(--fs-2xs); color:rgba(255,214,0,.45); margin-top:2px }
-
 .sb-btn-group {
-  display:flex; flex-direction:column; gap:3px;
-  padding:8px 12px 4px; flex-shrink:0;
+  display:flex; flex-direction:column; gap:3px; padding:8px 12px 4px; flex-shrink:0;
 }
 .sb-nav-btn {
-  display:flex; align-items:center; gap:8px;
-  width:100%; height:var(--h-md);
+  display:flex; align-items:center; gap:8px; width:100%; height:var(--h-md);
   padding:0 12px; border-radius:var(--r-s);
   font-family:'JetBrains Mono',monospace; font-size:var(--fs-sm);
-  cursor:pointer; border:1px solid var(--b);
-  transition:background .15s, border-color .15s, color .15s;
+  cursor:pointer; border:1px solid var(--b); transition:background .15s, border-color .15s, color .15s;
   white-space:nowrap; overflow:hidden; text-overflow:ellipsis;
-  background:var(--card); color:var(--text);
-  flex-shrink:0;
+  background:var(--card); color:var(--text); flex-shrink:0;
 }
-.sb-nav-btn svg {
-  width:13px; height:13px; stroke:currentColor;
-  fill:none; stroke-width:2; flex-shrink:0;
-}
+.sb-nav-btn svg { width:13px; height:13px; stroke:currentColor; fill:none; stroke-width:2; flex-shrink:0 }
 .sb-nav-btn:hover { border-color:var(--cyan2); color:var(--cyan); background:var(--hover) }
 .sb-nav-btn.cyan   { color:var(--cyan); border-color:rgba(0,229,255,.18) }
 .sb-nav-btn.cyan:hover { border-color:var(--cyan); background:rgba(0,229,255,.08) }
@@ -207,58 +160,32 @@ body::before {
 .sb-nav-btn.yellow:hover { border-color:rgba(255,214,0,.45); background:rgba(255,214,0,.1) }
 .sb-nav-btn.purple { color:#cc55ff; border-color:rgba(136,0,255,.22); background:rgba(136,0,255,.05) }
 .sb-nav-btn.purple:hover { border-color:rgba(136,0,255,.45); background:rgba(136,0,255,.1) }
-
 .inbox-badge {
   margin-left:auto; background:var(--pink); color:white;
-  font-size:var(--fs-2xs); font-weight:700;
-  padding:2px 6px; border-radius:10px;
+  font-size:var(--fs-2xs); font-weight:700; padding:2px 6px; border-radius:10px;
   min-width:18px; text-align:center; flex-shrink:0;
 }
-
 .proj-chip {
   margin:4px 12px; padding:5px 10px;
   background:rgba(255,170,50,.05); border:1px solid rgba(255,170,50,.2);
   border-radius:var(--r-s); font-size:var(--fs-2xs);
-  color:rgba(255,170,50,.8); white-space:nowrap;
-  overflow:hidden; text-overflow:ellipsis; flex-shrink:0;
+  color:rgba(255,170,50,.8); white-space:nowrap; overflow:hidden; text-overflow:ellipsis; flex-shrink:0;
 }
-
-.sec-lbl {
-  padding:8px 14px 3px;
-  font-size:var(--fs-2xs); color:var(--dim);
-  text-transform:uppercase; letter-spacing:2px; flex-shrink:0;
-}
-
-.convs {
-  flex:1; overflow-y:auto; padding:3px 8px; min-height:0;
-}
-.ci {
-  padding:6px 9px; border-radius:var(--r-s);
-  cursor:pointer; display:flex; align-items:center; gap:6px;
-  transition:background .1s;
-}
+.sec-lbl { padding:8px 14px 3px; font-size:var(--fs-2xs); color:var(--dim); text-transform:uppercase; letter-spacing:2px; flex-shrink:0 }
+.convs { flex:1; overflow-y:auto; padding:3px 8px; min-height:0 }
+.ci { padding:6px 9px; border-radius:var(--r-s); cursor:pointer; display:flex; align-items:center; gap:6px; transition:background .1s }
 .ci:hover { background:var(--hover) }
 .ci.act   { background:rgba(0,229,255,.06); border-left:2px solid var(--cyan); padding-left:7px }
 .ci-title { font-size:var(--fs-sm); color:var(--text); flex:1; white-space:nowrap; overflow:hidden; text-overflow:ellipsis }
 .ci-time  { font-size:var(--fs-2xs); color:var(--dim); flex-shrink:0 }
-.ci-del {
-  font-size:var(--fs-sm); color:var(--dim); opacity:0;
-  padding:2px 5px; cursor:pointer; background:none; border:none; border-radius:3px;
-}
+.ci-del { font-size:var(--fs-sm); color:var(--dim); opacity:0; padding:2px 5px; cursor:pointer; background:none; border:none; border-radius:3px }
 .ci:hover .ci-del { opacity:1 }
 .ci-del:hover     { color:var(--pink); background:rgba(255,45,107,.1) }
 .conv-empty { padding:20px 14px; text-align:center; color:var(--dim); font-size:var(--fs-md); line-height:1.7 }
-
-.sb-footer {
-  padding:7px 12px; font-size:var(--fs-2xs); color:var(--dim);
-  text-align:center; border-top:1px solid var(--b);
-  flex-shrink:0; line-height:1.9;
-}
-
+.sb-footer { padding:7px 12px; font-size:var(--fs-2xs); color:var(--dim); text-align:center; border-top:1px solid var(--b); flex-shrink:0; line-height:1.9 }
 .collapse-sb {
   position:absolute; right:-18px; top:50%; transform:translateY(-50%);
-  width:18px; height:40px;
-  background:var(--bg2); border:1px solid var(--b);
+  width:18px; height:40px; background:var(--bg2); border:1px solid var(--b);
   border-left:none; border-radius:0 6px 6px 0;
   cursor:pointer; display:flex; align-items:center; justify-content:center;
   color:var(--dim); z-index:10; transition:color .15s;
@@ -266,13 +193,8 @@ body::before {
 .collapse-sb:hover { color:var(--cyan) }
 .collapse-sb svg { width:10px; height:10px; stroke:currentColor; fill:none; stroke-width:2 }
 
-/* ══ CHAT PANEL ══ */
-#chat {
-  display:flex; flex-direction:column;
-  overflow:hidden; position:relative;
-  min-height:0; min-width:0;
-}
-
+/* CHAT PANEL */
+#chat { display:flex; flex-direction:column; overflow:hidden; position:relative; min-height:0; min-width:0 }
 .plug-banner {
   padding:5px 14px; flex-shrink:0;
   background:rgba(255,45,107,.08); border-bottom:1px solid rgba(255,45,107,.2);
@@ -282,12 +204,9 @@ body::before {
 .plug-banner svg { width:11px; height:11px; stroke:currentColor; fill:none; stroke-width:2; flex-shrink:0 }
 .plug-banner a   { color:var(--cyan); cursor:pointer; text-decoration:none }
 .plug-banner.connected { background:rgba(0,255,170,.05); border-color:rgba(0,255,170,.2); color:var(--green) }
-
 .chat-hdr {
-  padding:0 16px;
-  border-bottom:1px solid var(--b); background:var(--bg2);
-  display:flex; align-items:center; gap:9px;
-  flex-shrink:0; height:48px; min-width:0;
+  padding:0 16px; border-bottom:1px solid var(--b); background:var(--bg2);
+  display:flex; align-items:center; gap:9px; flex-shrink:0; height:48px; min-width:0;
 }
 .chat-title {
   font-family:'Orbitron',sans-serif; font-size:11px; font-weight:700;
@@ -296,117 +215,79 @@ body::before {
 .proj-badge-hdr {
   font-size:var(--fs-2xs); padding:3px 9px; border-radius:10px;
   background:rgba(255,170,50,.07); border:1px solid rgba(255,170,50,.2);
-  color:rgba(255,170,50,.8); white-space:nowrap;
-  overflow:hidden; text-overflow:ellipsis; max-width:130px; flex-shrink:0;
+  color:rgba(255,170,50,.8); white-space:nowrap; overflow:hidden; text-overflow:ellipsis; max-width:130px; flex-shrink:0;
 }
 .status-badge {
-  display:flex; align-items:center; gap:5px;
-  padding:0 10px; border-radius:20px; border:1px solid;
-  font-size:var(--fs-2xs); cursor:pointer;
-  flex-shrink:0; transition:.2s; white-space:nowrap;
-  height:var(--h-sm);
+  display:flex; align-items:center; gap:5px; padding:0 10px; border-radius:20px; border:1px solid;
+  font-size:var(--fs-2xs); cursor:pointer; flex-shrink:0; transition:.2s; white-space:nowrap; height:var(--h-sm);
 }
 .status-badge.off { border-color:rgba(255,45,107,.3); color:var(--pink); background:rgba(255,45,107,.06) }
 .status-badge.on  { border-color:rgba(0,255,170,.3);  color:var(--green); background:rgba(0,255,170,.06) }
 .sdot { width:5px; height:5px; border-radius:50%; background:currentColor; flex-shrink:0 }
 .sdot.pulse { animation:pd 1.8s infinite }
 @keyframes pd { 0%,100%{opacity:1} 50%{opacity:.25} }
-
 .chat-tabs {
-  display:flex; gap:4px; padding:5px 14px;
-  border-bottom:1px solid var(--b); background:var(--bg2);
-  flex-shrink:0; align-items:center;
-  overflow-x:auto; overflow-y:hidden; scrollbar-width:none;
-  height:42px;
+  display:flex; gap:4px; padding:5px 14px; border-bottom:1px solid var(--b); background:var(--bg2);
+  flex-shrink:0; align-items:center; overflow-x:auto; overflow-y:hidden; scrollbar-width:none; height:42px;
 }
 .chat-tabs::-webkit-scrollbar { display:none }
 .tab-btn {
-  display:flex; align-items:center; gap:5px;
-  height:var(--h-sm); padding:0 13px;
+  display:flex; align-items:center; gap:5px; height:var(--h-sm); padding:0 13px;
   border-radius:var(--r-s); border:1px solid transparent;
   font-family:'JetBrains Mono',monospace; font-size:var(--fs-sm);
-  cursor:pointer; color:var(--dim); background:none;
-  transition:.1s; white-space:nowrap; flex-shrink:0;
+  cursor:pointer; color:var(--dim); background:none; transition:.1s; white-space:nowrap; flex-shrink:0;
 }
 .tab-btn svg { width:11px; height:11px; stroke:currentColor; fill:none; stroke-width:2; flex-shrink:0 }
 .tab-btn.act { background:rgba(0,229,255,.08); border-color:var(--b); color:var(--cyan) }
 .tab-btn:hover:not(.act) { color:var(--text) }
 
-/* ══ PESAN ══ */
+/* MESSAGES */
 #msgs {
-  flex:1; overflow-y:auto;
-  padding:14px 16px;
-  display:flex; flex-direction:column; gap:10px;
-  min-height:0;
+  flex:1; overflow-y:auto; padding:14px 16px;
+  display:flex; flex-direction:column; gap:10px; min-height:0;
 }
-
-.welcome {
-  display:flex; flex-direction:column;
-  align-items:center; justify-content:center;
-  flex:1; text-align:center; gap:12px; padding:30px 16px; color:var(--dim);
-}
+.welcome { display:flex; flex-direction:column; align-items:center; justify-content:center; flex:1; text-align:center; gap:12px; padding:30px 16px; color:var(--dim) }
 .wt {
   font-family:'Orbitron',sans-serif; font-size:22px; font-weight:900;
   background:linear-gradient(135deg,var(--cyan),var(--purple));
-  -webkit-background-clip:text; -webkit-text-fill-color:transparent;
-  background-clip:text;
+  -webkit-background-clip:text; -webkit-text-fill-color:transparent; background-clip:text;
 }
 .ws { font-size:var(--fs-md); line-height:1.9; max-width:340px }
 .suggs { display:grid; grid-template-columns:1fr 1fr; gap:7px; max-width:440px; margin-top:4px; width:100% }
 .sugg {
   padding:9px 11px; background:var(--card); border:1px solid var(--b);
-  border-radius:var(--r); cursor:pointer; transition:.18s;
-  text-align:left; font-family:'JetBrains Mono',monospace;
-  font-size:var(--fs-md); color:var(--text); line-height:1.5;
+  border-radius:var(--r); cursor:pointer; transition:.18s; text-align:left;
+  font-family:'JetBrains Mono',monospace; font-size:var(--fs-md); color:var(--text); line-height:1.5;
 }
 .sugg:hover { border-color:var(--cyan2); background:var(--hover); color:white }
 .sugg-title { color:var(--cyan); display:flex; align-items:center; gap:5px; margin-bottom:3px; font-size:var(--fs-sm); font-weight:700 }
 .sugg-title svg { width:12px; height:12px; stroke:currentColor; fill:none; stroke-width:2; flex-shrink:0 }
-
 .msg       { display:flex; gap:9px; animation:mi .22s ease }
 .msg.user  { flex-direction:row-reverse }
 @keyframes mi { from{opacity:0;transform:translateY(5px)} to{opacity:1;transform:none} }
-
 .av { width:30px; height:30px; border-radius:50%; flex-shrink:0; overflow:hidden; background:var(--bg3) }
 .av img { width:100%; height:100%; object-fit:cover }
-
 .mb-wrap      { max-width:82%; display:flex; flex-direction:column; gap:3px; min-width:0 }
 .msg-sender   { font-size:var(--fs-2xs); color:var(--dim); display:flex; align-items:center; gap:5px; padding:0 3px }
 .msg.user .msg-sender { flex-direction:row-reverse }
-
 .bubble { padding:10px 13px; border-radius:10px; line-height:1.7; font-size:12.5px; word-break:break-word }
 .msg.user .bubble {
   background:linear-gradient(135deg,rgba(0,229,255,.08),rgba(136,0,255,.08));
   border:1px solid rgba(0,229,255,.15); border-radius:10px 2px 10px 10px; color:white;
 }
-.msg.ai .bubble {
-  background:var(--bg2); border:1px solid var(--b);
-  border-radius:2px 10px 10px 10px; color:var(--text);
-}
-
+.msg.ai .bubble { background:var(--bg2); border:1px solid var(--b); border-radius:2px 10px 10px 10px; color:var(--text) }
 .msg-imgs { display:flex; flex-wrap:wrap; gap:5px; margin-bottom:7px }
-.msg-img {
-  max-width:160px; max-height:130px; border-radius:6px;
-  object-fit:cover; border:1px solid var(--b); cursor:pointer; transition:.15px;
-}
+.msg-img { max-width:160px; max-height:130px; border-radius:6px; object-fit:cover; border:1px solid var(--b); cursor:pointer; transition:.15s }
 .msg-img:hover { border-color:var(--cyan); transform:scale(1.02) }
-
 .code-block-wrap   { position:relative; margin:8px 0; border-radius:7px; overflow:hidden; border:1px solid rgba(0,229,255,.1) }
-.code-lang-bar     {
-  display:flex; align-items:center; justify-content:space-between;
-  padding:4px 10px;
-  background:rgba(0,229,255,.06); border-bottom:1px solid rgba(0,229,255,.1);
-  font-size:var(--fs-2xs); color:var(--cyan); height:28px;
-}
+.code-lang-bar     { display:flex; align-items:center; justify-content:space-between; padding:4px 10px; background:rgba(0,229,255,.06); border-bottom:1px solid rgba(0,229,255,.1); font-size:var(--fs-2xs); color:var(--cyan); height:28px }
 .code-block-wrap pre { margin:0 }
 .code-block-wrap pre code.hljs { font-size:11px; line-height:1.55; padding:12px 14px; border-radius:0; border:none }
 .code-btns { display:flex; gap:4px; align-items:center }
 .cbtn {
-  background:rgba(10,11,34,.9); border:1px solid rgba(0,229,255,.25);
-  border-radius:5px; color:var(--cyan); font-size:var(--fs-2xs);
-  padding:0 8px; cursor:pointer;
-  display:flex; align-items:center; gap:3px; transition:.12s;
-  height:var(--h-xs);
+  background:rgba(10,11,34,.9); border:1px solid rgba(0,229,255,.25); border-radius:5px;
+  color:var(--cyan); font-size:var(--fs-2xs); padding:0 8px; cursor:pointer;
+  display:flex; align-items:center; gap:3px; transition:.12s; height:var(--h-xs);
 }
 .cbtn:hover { background:rgba(0,229,255,.15) }
 .cbtn svg   { width:11px; height:11px; stroke:currentColor; fill:none; stroke-width:2 }
@@ -421,21 +302,16 @@ body::before {
 .bubble table { width:100%; border-collapse:collapse; margin:7px 0; font-size:11px }
 .bubble th,.bubble td { padding:5px 9px; border:1px solid var(--b) }
 .bubble th  { background:rgba(0,229,255,.06); color:var(--cyan) }
-
 .msg-acts { display:flex; gap:2px; padding:2px; flex-wrap:wrap }
 .mab {
-  font-size:var(--fs-2xs); color:var(--dim); background:none;
-  border:1px solid transparent; cursor:pointer;
-  padding:0 6px; border-radius:4px;
-  transition:.12s; display:flex; align-items:center; gap:3px;
-  font-family:'JetBrains Mono',monospace;
-  height:var(--h-xs);
+  font-size:var(--fs-2xs); color:var(--dim); background:none; border:1px solid transparent;
+  cursor:pointer; padding:0 6px; border-radius:4px; transition:.12s;
+  display:flex; align-items:center; gap:3px; font-family:'JetBrains Mono',monospace; height:var(--h-xs);
 }
 .mab:hover    { color:var(--cyan); border-color:var(--b); background:var(--card) }
 .mab.liked    { color:var(--green); border-color:rgba(0,255,170,.3) }
 .mab.disliked { color:var(--pink);  border-color:rgba(255,45,107,.3) }
 .mab svg      { width:11px; height:11px; stroke:currentColor; fill:none; stroke-width:2 }
-
 .attach-row { display:flex; gap:6px; margin-bottom:6px; flex-wrap:wrap; padding:0 2px }
 .attach-row:empty { display:none }
 .attach-item { position:relative }
@@ -447,86 +323,55 @@ body::before {
   overflow:hidden; text-overflow:ellipsis; white-space:nowrap;
 }
 .attach-rm {
-  position:absolute; top:-5px; right:-5px;
-  width:16px; height:16px;
+  position:absolute; top:-5px; right:-5px; width:16px; height:16px;
   background:var(--pink); border:none; border-radius:50%;
   color:white; font-size:var(--fs-2xs); cursor:pointer;
   display:flex; align-items:center; justify-content:center; z-index:2;
 }
 
-/* ══ AREA INPUT ══ */
-.inp-area {
-  padding:8px 14px 10px;
-  border-top:1px solid var(--b); background:var(--bg2);
-  flex-shrink:0; position:relative; z-index:2;
-}
-.inp-box {
-  background:var(--bg3); border:1px solid var(--b);
-  border-radius:12px; transition:border-color .2s; overflow:hidden;
-}
+/* INPUT AREA */
+.inp-area { padding:8px 14px 10px; border-top:1px solid var(--b); background:var(--bg2); flex-shrink:0; position:relative; z-index:2 }
+.inp-box { background:var(--bg3); border:1px solid var(--b); border-radius:12px; transition:border-color .2s; overflow:hidden }
 .inp-box.drag-over    { border-color:var(--cyan); box-shadow:0 0 0 2px rgba(0,229,255,.1) }
 .inp-box:focus-within { border-color:var(--cyan2); box-shadow:0 0 0 2px rgba(0,229,255,.04) }
-
 #inp {
   width:100%; background:transparent; border:none; outline:none;
   color:white; font-family:'JetBrains Mono',monospace; font-size:var(--fs-base);
-  padding:11px 14px; resize:none;
-  min-height:44px; max-height:130px; line-height:1.55; display:block;
+  padding:11px 14px; resize:none; min-height:44px; max-height:130px; line-height:1.55; display:block;
 }
 #inp::placeholder { color:var(--dim) }
-
-.inp-bar {
-  display:flex; align-items:center;
-  height:var(--h-inp); padding:0 10px;
-  border-top:1px solid var(--b); gap:6px;
-}
-.inp-l {
-  display:flex; align-items:center;
-  gap:5px; flex:1; min-width:0; overflow:hidden;
-}
-
+.inp-bar { display:flex; align-items:center; height:var(--h-inp); padding:0 10px; border-top:1px solid var(--b); gap:6px }
+.inp-l { display:flex; align-items:center; gap:5px; flex:1; min-width:0; overflow:hidden }
 .ib {
-  width:var(--h-sm); height:var(--h-sm);
-  border-radius:var(--r-s); border:1px solid var(--b);
+  width:var(--h-sm); height:var(--h-sm); border-radius:var(--r-s); border:1px solid var(--b);
   background:transparent; color:var(--dim); cursor:pointer;
   display:inline-flex; align-items:center; justify-content:center;
-  transition:.12s; flex-shrink:0;
-  padding:0; user-select:none;
-  outline:none; box-sizing:border-box;
+  transition:.12s; flex-shrink:0; padding:0; user-select:none; outline:none; box-sizing:border-box;
   font-family:'JetBrains Mono',monospace;
 }
 .ib:hover { color:var(--cyan); border-color:var(--cyan2) }
 .ib svg   { width:14px; height:14px; stroke:currentColor; fill:none; stroke-width:1.5; flex-shrink:0; pointer-events:none }
-
 .inp-model {
-  display:flex; align-items:center; gap:5px;
-  height:var(--h-sm); padding:0 8px;
+  display:flex; align-items:center; gap:5px; height:var(--h-sm); padding:0 8px;
   border-radius:var(--r-s); background:var(--card); border:1px solid var(--b);
-  cursor:pointer; transition:.12s;
-  font-family:'JetBrains Mono',monospace; font-size:var(--fs-2xs); color:var(--dim);
+  cursor:pointer; transition:.12s; font-family:'JetBrains Mono',monospace; font-size:var(--fs-2xs); color:var(--dim);
   max-width:clamp(100px,170px,30vw); min-width:0; overflow:hidden; flex-shrink:1;
 }
 .inp-model:hover { border-color:var(--cyan2); color:var(--cyan) }
 .inp-model img   { width:13px; height:13px; border-radius:2px; object-fit:contain; flex-shrink:0 }
 .inp-model-name  { white-space:nowrap; overflow:hidden; text-overflow:ellipsis; flex:1; font-size:var(--fs-2xs); min-width:0 }
 .inp-model-badge { font-size:var(--fs-2xs); font-weight:700; flex-shrink:0 }
-
 .theme-picker-btn {
-  display:flex; align-items:center; gap:5px;
-  height:var(--h-sm); padding:0 8px;
+  display:flex; align-items:center; gap:5px; height:var(--h-sm); padding:0 8px;
   border-radius:var(--r-s); background:var(--card); border:1px solid var(--b);
-  cursor:pointer; transition:.12s;
-  font-family:'JetBrains Mono',monospace; font-size:var(--fs-2xs); color:var(--dim);
+  cursor:pointer; transition:.12s; font-family:'JetBrains Mono',monospace; font-size:var(--fs-2xs); color:var(--dim);
   flex-shrink:0; white-space:nowrap;
 }
 .theme-picker-btn:hover { border-color:var(--cyan2); color:var(--cyan) }
 .theme-swatch { width:10px; height:10px; border-radius:50%; flex-shrink:0; border:1px solid rgba(255,255,255,.2) }
-
 .btn-send, .btn-cancel {
-  border:none; border-radius:var(--r);
-  width:var(--h-md); height:var(--h-md);
-  display:flex; align-items:center; justify-content:center;
-  cursor:pointer; transition:.18s; flex-shrink:0;
+  border:none; border-radius:var(--r); width:var(--h-md); height:var(--h-md);
+  display:flex; align-items:center; justify-content:center; cursor:pointer; transition:.18s; flex-shrink:0;
 }
 .btn-send   { background:linear-gradient(135deg,var(--cyan),var(--purple)); color:white }
 .btn-send:hover { opacity:.82; transform:scale(1.05) }
@@ -534,101 +379,39 @@ body::before {
 .btn-cancel { background:rgba(255,45,107,.15); border:1px solid rgba(255,45,107,.3); color:var(--pink) }
 .btn-cancel:hover { background:rgba(255,45,107,.25) }
 
-/* ══ DROPDOWN ══ */
+/* DROPDOWNS */
 .model-dd {
-  position:fixed; background:var(--bg3); border:1px solid var(--b);
-  border-radius:var(--r); z-index:9000; display:none;
-  box-shadow:0 8px 32px rgba(0,0,0,.95);
+  position:fixed; background:var(--bg3); border:1px solid var(--b); border-radius:var(--r);
+  z-index:9000; display:none; box-shadow:0 8px 32px rgba(0,0,0,.95);
   max-height:min(380px,70vh); overflow-y:auto; min-width:265px;
 }
 .model-dd::-webkit-scrollbar { width:3px }
 .model-dd::-webkit-scrollbar-thumb { background:var(--b) }
 .model-dd.open { display:block }
-
 .theme-dd {
-  position:fixed;
-  background:var(--bg3);
-  border:1px solid var(--b);
-  border-radius:var(--r);
-  z-index:9000;
-  display:none;
-  box-shadow:0 8px 32px rgba(0,0,0,.95);
-  width:200px;
-  padding:4px;
-  overflow:hidden;
+  position:fixed; background:var(--bg3); border:1px solid var(--b); border-radius:var(--r);
+  z-index:9000; display:none; box-shadow:0 8px 32px rgba(0,0,0,.95);
+  width:200px; padding:4px; overflow:hidden;
 }
 .theme-dd.open { display:block }
-
 .theme-dd-title {
-  font-size:var(--fs-2xs); color:var(--dim);
-  text-transform:uppercase; letter-spacing:2px;
-  padding:5px 8px 6px;
-  border-bottom:1px solid var(--b);
-  margin-bottom:3px;
-  line-height:1;
+  font-size:var(--fs-2xs); color:var(--dim); text-transform:uppercase; letter-spacing:2px;
+  padding:5px 8px 6px; border-bottom:1px solid var(--b); margin-bottom:3px; line-height:1;
 }
-
-.theme-dd-hint {
-  font-size:var(--fs-2xs); color:rgba(0,229,255,.35);
-  padding:3px 8px 5px;
-  border-bottom:1px solid var(--b);
-  margin-bottom:3px;
-  line-height:1.4;
-}
-
+.theme-dd-hint { font-size:var(--fs-2xs); color:rgba(0,229,255,.35); padding:3px 8px 5px; border-bottom:1px solid var(--b); margin-bottom:3px; line-height:1.4 }
 .theme-opt {
-  display:flex;
-  align-items:center;
-  gap:8px;
-  padding:0 8px;
-  height:30px;
-  border-radius:5px;
-  cursor:pointer;
-  transition:background .1s;
-  width:100%;
-  box-sizing:border-box;
+  display:flex; align-items:center; gap:8px; padding:0 8px; height:30px;
+  border-radius:5px; cursor:pointer; transition:background .1s; width:100%; box-sizing:border-box;
 }
 .theme-opt:hover { background:var(--hover) }
 .theme-opt.act   { background:rgba(0,229,255,.07); outline:1px solid rgba(0,229,255,.2) }
-
-.theme-preview {
-  display:flex;
-  gap:2px;
-  flex-shrink:0;
-  align-items:center;
-}
-.theme-preview span {
-  width:6px;
-  height:18px;
-  border-radius:3px;
-  display:block;
-  flex-shrink:0;
-}
-
-.theme-opt-name {
-  font-size:var(--fs-sm);
-  color:var(--text);
-  flex:1;
-  font-family:'JetBrains Mono',monospace;
-  white-space:nowrap;
-  overflow:hidden;
-  text-overflow:ellipsis;
-  line-height:1;
-}
+.theme-preview { display:flex; gap:2px; flex-shrink:0; align-items:center }
+.theme-preview span { width:6px; height:18px; border-radius:3px; display:block; flex-shrink:0 }
+.theme-opt-name { font-size:var(--fs-sm); color:var(--text); flex:1; font-family:'JetBrains Mono',monospace; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; line-height:1 }
 .theme-opt.act .theme-opt-name { color:var(--cyan) }
-
-.theme-opt-tick {
-  width:10px; height:10px; flex-shrink:0;
-  opacity:0;
-}
+.theme-opt-tick { width:10px; height:10px; flex-shrink:0; opacity:0 }
 .theme-opt.act .theme-opt-tick { opacity:1 }
-
-.mg {
-  padding:6px 11px 3px;
-  font-size:var(--fs-2xs); color:var(--dim);
-  text-transform:uppercase; letter-spacing:2px;
-  border-top:1px solid var(--b);
-}
+.mg { padding:6px 11px 3px; font-size:var(--fs-2xs); color:var(--dim); text-transform:uppercase; letter-spacing:2px; border-top:1px solid var(--b) }
 .mg:first-child { border-top:none }
 .mo { padding:7px 11px; display:flex; align-items:center; gap:7px; cursor:pointer; transition:.1s }
 .mo:hover { background:var(--hover) }
@@ -642,30 +425,15 @@ body::before {
 .mb-badge.s { background:rgba(0,229,255,.12); color:var(--cyan) }
 .mb-badge.p { background:rgba(136,0,255,.15); color:#cc55ff }
 
-/* ══ STEPS / THINKING ══ */
+/* STEPS / THINKING */
 .steps-wrap { display:flex; gap:9px; animation:mi .22s ease }
-.steps-box  {
-  background:var(--bg2); border:1px solid var(--b);
-  border-radius:2px 10px 10px 10px; padding:0;
-  overflow:hidden; min-width:280px; max-width:min(520px,90vw);
-}
-.steps-hdr {
-  padding:9px 13px 8px; display:flex; align-items:center; gap:7px;
-  border-bottom:1px solid var(--b);
-}
-.steps-hdr-spinner {
-  width:11px; height:11px;
-  border:1.5px solid rgba(0,229,255,.2); border-top-color:var(--cyan);
-  border-radius:50%; animation:spin .7s linear infinite; flex-shrink:0;
-}
+.steps-box  { background:var(--bg2); border:1px solid var(--b); border-radius:2px 10px 10px 10px; padding:0; overflow:hidden; min-width:280px; max-width:min(520px,90vw) }
+.steps-hdr  { padding:9px 13px 8px; display:flex; align-items:center; gap:7px; border-bottom:1px solid var(--b) }
+.steps-hdr-spinner { width:11px; height:11px; border:1.5px solid rgba(0,229,255,.2); border-top-color:var(--cyan); border-radius:50%; animation:spin .7s linear infinite; flex-shrink:0 }
 .steps-hdr-txt   { font-family:'Orbitron',sans-serif; font-size:var(--fs-2xs); color:var(--cyan); letter-spacing:.5px; flex:1 }
 .steps-hdr-count { font-size:var(--fs-2xs); color:var(--dim) }
 .steps-list { padding:4px 0 }
-.step-row {
-  display:flex; align-items:flex-start; gap:7px;
-  padding:3px 12px; font-size:var(--fs-md); line-height:1.5;
-  animation:stepIn .18s ease;
-}
+.step-row { display:flex; align-items:flex-start; gap:7px; padding:3px 12px; font-size:var(--fs-md); line-height:1.5; animation:stepIn .18s ease }
 @keyframes stepIn { from{opacity:0;transform:translateX(-3px)} to{opacity:1;transform:none} }
 .step-ic  { width:14px; flex-shrink:0; display:flex; align-items:center; justify-content:center; margin-top:1px }
 .step-spin  { width:10px; height:10px; border:1.5px solid rgba(0,229,255,.15); border-top-color:var(--cyan); border-radius:50%; animation:spin .6s linear infinite }
@@ -682,70 +450,48 @@ body::before {
 .step-sub { font-size:var(--fs-2xs); color:var(--dim); margin-top:1px; opacity:.8 }
 .steps-cancel { padding:7px 12px; border-top:1px solid var(--b) }
 .steps-cancel-btn {
-  padding:0 12px; height:var(--h-xs);
-  background:rgba(255,45,107,.08); border:1px solid rgba(255,45,107,.25);
-  border-radius:5px; color:var(--pink); font-size:var(--fs-2xs);
-  cursor:pointer; transition:.1s; font-family:'JetBrains Mono',monospace;
-  display:inline-flex; align-items:center;
+  padding:0 12px; height:var(--h-xs); background:rgba(255,45,107,.08); border:1px solid rgba(255,45,107,.25);
+  border-radius:5px; color:var(--pink); font-size:var(--fs-2xs); cursor:pointer; transition:.1s;
+  font-family:'JetBrains Mono',monospace; display:inline-flex; align-items:center;
 }
 .steps-cancel-btn:hover { background:rgba(255,45,107,.16) }
 @keyframes spin { to{transform:rotate(360deg)} }
 
-/* ══ STUDIO SUMMARY ══ */
-.studio-summary-box {
-  margin-top:8px; padding:8px 10px;
-  background:rgba(0,255,170,.04); border:1px solid rgba(0,255,170,.15);
-  border-radius:6px; font-size:10.5px;
-}
+/* STUDIO SUMMARY */
+.studio-summary-box { margin-top:8px; padding:8px 10px; background:rgba(0,255,170,.04); border:1px solid rgba(0,255,170,.15); border-radius:6px; font-size:10.5px }
 .studio-summary-title  { color:var(--green); font-size:var(--fs-2xs); font-weight:700; margin-bottom:4px; display:flex; align-items:center; gap:4px; flex-wrap:wrap }
 .studio-summary-item   { color:var(--text); padding:1px 0; display:flex; align-items:center; gap:5px }
 .studio-summary-dot    { display:inline-block; width:6px; height:6px; border-radius:50%; background:var(--green); flex-shrink:0 }
 
-/* ══ GUI EDITOR TAB ══ */
+/* GUI EDITOR TAB */
 #guiTab { flex:1; overflow:hidden; display:none; flex-direction:column; min-height:0 }
-
 .gui-toolbar {
   padding:5px 12px; border-bottom:1px solid var(--b); background:var(--bg2);
-  display:flex; align-items:center; gap:5px;
-  flex-shrink:0; overflow-x:auto; overflow-y:hidden;
-  scrollbar-width:none; height:44px;
+  display:flex; align-items:center; gap:5px; flex-shrink:0;
+  overflow-x:auto; overflow-y:hidden; scrollbar-width:none; height:44px;
 }
 .gui-toolbar::-webkit-scrollbar { display:none }
-
 .gui-add-label { font-size:var(--fs-xs); color:var(--dim); flex-shrink:0; white-space:nowrap }
-
 .gui-btn {
-  display:inline-flex; align-items:center; gap:4px;
-  height:var(--h-sm); padding:0 9px;
-  border-radius:var(--r-s); border:1px solid var(--b);
-  background:var(--card); color:var(--text);
-  font-family:'JetBrains Mono',monospace; font-size:var(--fs-xs);
-  cursor:pointer; transition:.15s; white-space:nowrap; flex-shrink:0;
+  display:inline-flex; align-items:center; gap:4px; height:var(--h-sm); padding:0 9px;
+  border-radius:var(--r-s); border:1px solid var(--b); background:var(--card); color:var(--text);
+  font-family:'JetBrains Mono',monospace; font-size:var(--fs-xs); cursor:pointer; transition:.15s; white-space:nowrap; flex-shrink:0;
 }
 .gui-btn:hover { border-color:var(--cyan2); color:var(--cyan) }
 .gui-btn svg   { width:11px; height:11px; stroke:currentColor; fill:none; stroke-width:1.8; flex-shrink:0 }
-
 .gui-ai-btn {
-  display:inline-flex; align-items:center; gap:4px;
-  height:var(--h-sm); padding:0 11px;
-  background:rgba(136,0,255,.15); border:1px solid rgba(136,0,255,.4);
-  border-radius:var(--r-s); color:#cc55ff;
-  font-family:'JetBrains Mono',monospace; font-size:var(--fs-xs);
-  cursor:pointer; white-space:nowrap; flex-shrink:0; transition:.15s;
+  display:inline-flex; align-items:center; gap:4px; height:var(--h-sm); padding:0 11px;
+  background:rgba(136,0,255,.15); border:1px solid rgba(136,0,255,.4); border-radius:var(--r-s); color:#cc55ff;
+  font-family:'JetBrains Mono',monospace; font-size:var(--fs-xs); cursor:pointer; white-space:nowrap; flex-shrink:0; transition:.15s;
 }
 .gui-ai-btn:hover { background:rgba(136,0,255,.25) }
 .gui-ai-btn svg   { width:11px; height:11px; stroke:currentColor; fill:none; stroke-width:2; flex-shrink:0 }
-
 .gui-gen-btn {
-  display:inline-flex; align-items:center; gap:4px;
-  height:var(--h-sm); padding:0 11px;
-  background:linear-gradient(135deg,var(--cyan),var(--purple));
-  border:none; border-radius:var(--r-s);
-  color:white; font-family:'Orbitron',sans-serif; font-size:var(--fs-xs);
-  font-weight:700; cursor:pointer; white-space:nowrap; flex-shrink:0;
+  display:inline-flex; align-items:center; gap:4px; height:var(--h-sm); padding:0 11px;
+  background:linear-gradient(135deg,var(--cyan),var(--purple)); border:none; border-radius:var(--r-s);
+  color:white; font-family:'Orbitron',sans-serif; font-size:var(--fs-xs); font-weight:700; cursor:pointer; white-space:nowrap; flex-shrink:0;
 }
 .gui-gen-btn svg { width:11px; height:11px; stroke:currentColor; fill:none; stroke-width:2; flex-shrink:0 }
-
 .gui-main    { flex:1; display:flex; overflow:hidden; position:relative; min-height:0 }
 .gui-layers  { width:145px; background:var(--bg2); border-right:1px solid var(--b); overflow-y:auto; padding:6px; flex-shrink:0; min-height:0 }
 .gui-layer-title { font-size:var(--fs-2xs); color:var(--dim); text-transform:uppercase; letter-spacing:1.5px; margin-bottom:6px; padding:0 2px }
@@ -753,34 +499,26 @@ body::before {
 .gui-layer-item:hover { background:var(--hover) }
 .gui-layer-item.sel   { background:rgba(0,229,255,.06); color:var(--cyan) }
 .gui-layer-dot  { width:6px; height:6px; border-radius:50%; flex-shrink:0 }
-
 .gui-canvas { flex:1; position:relative; background:rgba(0,0,0,.3); overflow:auto; min-height:0; min-width:0 }
 .gui-canvas-inner { width:800px; height:600px; position:relative; background:rgba(15,20,50,.85); border:1px solid var(--b); margin:20px auto; min-width:400px }
 .gui-el { position:absolute; border:1px solid transparent; cursor:move; user-select:none; display:flex; align-items:center; justify-content:center; font-family:'JetBrains Mono',monospace; overflow:hidden }
 .gui-el.selected { outline:1.5px solid var(--cyan)!important; outline-offset:1px }
 .gui-resize { position:absolute; bottom:-4px; right:-4px; width:9px; height:9px; background:var(--cyan); border-radius:2px; cursor:se-resize }
-
 .gui-props      { width:210px; background:var(--bg2); border-left:1px solid var(--b); overflow-y:auto; padding:8px; flex-shrink:0; min-height:0 }
 .gui-prop-label { font-size:var(--fs-2xs); color:var(--dim); margin-bottom:2px; margin-top:6px }
 .gui-prop-input { width:100%; background:var(--bg3); border:1px solid var(--b); border-radius:4px; padding:4px 7px; color:white; font-family:'JetBrains Mono',monospace; font-size:var(--fs-md); outline:none }
 .gui-prop-input:focus { border-color:var(--cyan2) }
-
 .gui-loading { position:absolute; inset:0; background:rgba(3,3,18,.85); display:none; align-items:center; justify-content:center; flex-direction:column; gap:10px; font-size:var(--fs-md); color:var(--cyan) }
 .gui-loading.show  { display:flex }
 .gui-empty-hint    { position:absolute; inset:0; display:flex; align-items:center; justify-content:center; flex-direction:column; gap:8px; color:rgba(0,229,255,.12); font-size:var(--fs-md); pointer-events:none }
 .gui-empty-hint svg{ width:30px; height:30px; stroke:currentColor; fill:none; stroke-width:1.5 }
-
 .gui-right { margin-left:auto; display:flex; align-items:center; gap:5px; flex-shrink:0; flex-wrap:nowrap }
-
 .gui-theme-select {
-  height:var(--h-sm); padding:0 8px;
-  background:var(--card); border:1px solid var(--b); border-radius:var(--r-s);
-  color:var(--text); font-family:'JetBrains Mono',monospace;
-  font-size:var(--fs-2xs); outline:none; cursor:pointer;
-  max-width:110px; flex-shrink:0;
+  height:var(--h-sm); padding:0 8px; background:var(--card); border:1px solid var(--b); border-radius:var(--r-s);
+  color:var(--text); font-family:'JetBrains Mono',monospace; font-size:var(--fs-2xs); outline:none; cursor:pointer; max-width:110px; flex-shrink:0;
 }
 
-/* ══ MODAL ══ */
+/* MODAL */
 .ov {
   position:fixed; inset:0; background:rgba(3,3,18,.93); z-index:500;
   display:none; align-items:flex-start; justify-content:center;
@@ -788,95 +526,68 @@ body::before {
 }
 .ov.show { display:flex }
 .modal {
-  background:var(--bg2); border:1px solid var(--b);
-  border-radius:13px; padding:22px;
-  width:500px; max-width:100%;
-  box-shadow:0 24px 64px rgba(0,0,0,.9);
-  margin:auto; position:relative;
+  background:var(--bg2); border:1px solid var(--b); border-radius:13px; padding:22px;
+  width:500px; max-width:100%; box-shadow:0 24px 64px rgba(0,0,0,.9); margin:auto; position:relative;
 }
-.modal-t {
-  font-family:'Orbitron',sans-serif; font-size:13px; font-weight:700;
-  color:var(--cyan); margin-bottom:12px;
-  display:flex; align-items:center; gap:8px;
-}
+.modal-t { font-family:'Orbitron',sans-serif; font-size:13px; font-weight:700; color:var(--cyan); margin-bottom:12px; display:flex; align-items:center; gap:8px }
 .modal-t svg { width:16px; height:16px; stroke:currentColor; fill:none; stroke-width:2; flex-shrink:0 }
 .modal-b     { font-size:var(--fs-md); color:var(--text); line-height:1.75; margin-bottom:14px }
 .modal-b code { font-family:'JetBrains Mono'; background:rgba(0,229,255,.08); padding:1px 5px; border-radius:3px; color:var(--cyan) }
 .modal-footer { display:flex; gap:8px; flex-wrap:wrap; align-items:center }
-
 .btn-modal {
-  display:inline-flex; align-items:center; justify-content:center;
-  height:var(--h-lg); padding:0 16px;
-  border-radius:var(--r); font-family:'Orbitron',sans-serif;
-  font-size:var(--fs-sm); font-weight:700;
+  display:inline-flex; align-items:center; justify-content:center; height:var(--h-lg); padding:0 16px;
+  border-radius:var(--r); font-family:'Orbitron',sans-serif; font-size:var(--fs-sm); font-weight:700;
   cursor:pointer; border:none; transition:.15s; white-space:nowrap;
 }
 .btn-modal.primary   { background:var(--cyan); color:#030312 }
 .btn-modal.secondary { background:rgba(255,255,255,.06); color:var(--text); border:1px solid var(--b) }
 .btn-modal:hover     { opacity:.84 }
-
 .settings-section { margin-bottom:16px; padding-bottom:16px; border-bottom:1px solid var(--b) }
 .settings-section:last-child { border-bottom:none; margin-bottom:0; padding-bottom:0 }
 .settings-title   { font-size:var(--fs-xs); color:var(--cyan); text-transform:uppercase; letter-spacing:1.5px; margin-bottom:10px; font-family:'Orbitron',sans-serif }
 .settings-row     { display:flex; align-items:center; justify-content:space-between; padding:5px 0; font-size:var(--fs-md); gap:8px; flex-wrap:wrap }
 .settings-hint    { font-size:var(--fs-2xs); color:var(--dim); margin-top:2px; line-height:1.5 }
-
 .settings-btn {
-  display:inline-flex; align-items:center;
-  height:var(--h-sm); padding:0 13px;
-  border-radius:var(--r-s); font-family:'JetBrains Mono',monospace;
-  font-size:var(--fs-sm); cursor:pointer;
+  display:inline-flex; align-items:center; height:var(--h-sm); padding:0 13px;
+  border-radius:var(--r-s); font-family:'JetBrains Mono',monospace; font-size:var(--fs-sm); cursor:pointer;
   border:1px solid var(--b); background:var(--card); color:var(--text);
   transition:.15s; white-space:nowrap; flex-shrink:0; text-decoration:none;
 }
 .settings-btn:hover { border-color:var(--cyan2); color:var(--cyan) }
 .settings-btn.danger { border-color:rgba(255,45,107,.3); color:var(--pink) }
 .settings-btn.danger:hover { background:rgba(255,45,107,.08) }
-
 .settings-select {
   background:var(--bg3); border:1px solid var(--b); border-radius:var(--r-s);
-  padding:0 8px; color:white; font-family:'JetBrains Mono',monospace;
-  font-size:var(--fs-sm); outline:none; cursor:pointer;
-  height:var(--h-sm);
+  padding:0 8px; color:white; font-family:'JetBrains Mono',monospace; font-size:var(--fs-sm); outline:none; cursor:pointer; height:var(--h-sm);
 }
 .toggle-sw {
-  width:38px; height:20px; border-radius:10px;
-  background:var(--dim); border:none; cursor:pointer;
-  position:relative; transition:.25s; flex-shrink:0; outline:none;
+  width:38px; height:20px; border-radius:10px; background:var(--dim); border:none;
+  cursor:pointer; position:relative; transition:.25s; flex-shrink:0; outline:none;
 }
 .toggle-sw.on { background:var(--cyan) }
 .toggle-sw::after {
-  content:''; position:absolute; top:3px; left:3px;
-  width:14px; height:14px; border-radius:50%;
+  content:''; position:absolute; top:3px; left:3px; width:14px; height:14px; border-radius:50%;
   background:white; transition:.25s; box-shadow:0 1px 4px rgba(0,0,0,.4);
 }
 .toggle-sw.on::after { left:21px }
-
 .report-ta {
-  width:100%; background:var(--bg3); border:1px solid var(--b);
-  border-radius:6px; padding:8px 10px; color:white;
-  font-family:'JetBrains Mono',monospace; font-size:var(--fs-md);
+  width:100%; background:var(--bg3); border:1px solid var(--b); border-radius:6px;
+  padding:8px 10px; color:white; font-family:'JetBrains Mono',monospace; font-size:var(--fs-md);
   outline:none; resize:vertical; min-height:80px; margin-top:6px;
 }
-
 .install-step { display:flex; gap:10px; padding:9px 0; border-bottom:1px solid var(--b); align-items:flex-start }
 .install-step:last-child { border-bottom:none }
 .install-num  { width:22px; height:22px; border-radius:50%; background:linear-gradient(135deg,var(--cyan),var(--purple)); display:flex; align-items:center; justify-content:center; font-size:var(--fs-sm); font-weight:700; color:white; flex-shrink:0; margin-top:1px }
 .install-txt  { font-size:var(--fs-md); color:var(--text); line-height:1.65; flex:1 }
 .install-txt code { color:var(--cyan); background:rgba(0,229,255,.08); padding:1px 4px; border-radius:3px; font-size:var(--fs-sm) }
-
 .badge-owner { background:linear-gradient(135deg,rgba(255,214,0,.2),rgba(255,140,0,.2)); color:var(--yellow); border:1px solid rgba(255,214,0,.3); padding:2px 8px; border-radius:10px; font-size:var(--fs-2xs); font-weight:700; font-family:'Orbitron',sans-serif }
 .badge-admin { background:rgba(0,229,255,.1); color:var(--cyan);  border:1px solid rgba(0,229,255,.3);  padding:2px 8px; border-radius:10px; font-size:var(--fs-2xs); font-weight:700 }
 .badge-pro   { background:rgba(136,0,255,.12); color:#cc55ff;     border:1px solid rgba(136,0,255,.3);  padding:2px 8px; border-radius:10px; font-size:var(--fs-2xs); font-weight:700 }
-
 .share-modal-ta { width:100%; background:var(--bg3); border:1px solid var(--b); border-radius:6px; padding:8px 10px; color:var(--text); font-family:'JetBrains Mono',monospace; font-size:var(--fs-sm); outline:none; resize:none; height:200px; margin-top:8px }
-
 .mention-dd {
-  position:fixed; background:var(--bg3); border:1px solid var(--bb);
-  border-radius:var(--r); z-index:8000;
-  max-height:min(260px,50vh); overflow-y:auto;
-  box-shadow:0 -10px 40px rgba(0,0,0,.97);
-  min-width:290px; display:none;
+  position:fixed; background:var(--bg3); border:1px solid var(--bb); border-radius:var(--r);
+  z-index:8000; max-height:min(260px,50vh); overflow-y:auto;
+  box-shadow:0 -10px 40px rgba(0,0,0,.97); min-width:290px; display:none;
 }
 .mention-dd.open   { display:block }
 .mention-hdr       { padding:5px 12px 4px; font-size:var(--fs-2xs); color:var(--dim); text-transform:uppercase; letter-spacing:2px; border-bottom:1px solid var(--b); display:flex; align-items:center; gap:5px }
@@ -890,11 +601,30 @@ body::before {
 .mention-name      { font-size:var(--fs-md); color:white; flex:1; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; min-width:0 }
 .mention-path      { font-size:var(--fs-2xs); color:var(--dim) }
 .mention-empty     { padding:12px; font-size:var(--fs-sm); color:var(--dim); text-align:center }
-
 .hidden { display:none!important }
 @keyframes toastIn { from{opacity:0;transform:translateX(12px)} to{opacity:1;transform:none} }
 
-/* ══ RESPONSIF ══ */
+/* SUGGESTION CHIPS */
+.suggestion-chips { display:flex; flex-direction:column; gap:5px; margin-top:10px; margin-bottom:2px }
+.suggestion-chip {
+  display:flex; align-items:center; gap:8px; padding:7px 12px 7px 10px;
+  background:rgba(0,229,255,.05); border:1px solid rgba(0,229,255,.16); border-radius:8px;
+  color:var(--text); font-size:11.5px; cursor:pointer; text-align:left; transition:background .14s,border-color .14s,color .14s,transform .1s;
+  font-family:'JetBrains Mono',monospace; width:fit-content; max-width:100%; line-height:1.4;
+}
+.suggestion-chip::before {
+  content:''; display:inline-flex; width:0; height:0;
+  border-top:4.5px solid transparent; border-bottom:4.5px solid transparent;
+  border-left:7px solid var(--cyan); flex-shrink:0; opacity:.55; transition:opacity .14s,transform .14s;
+}
+.suggestion-chip:hover { background:rgba(0,229,255,.12); border-color:rgba(0,229,255,.38); color:var(--cyan) }
+.suggestion-chip:hover::before { opacity:1; transform:translateX(2px) }
+.suggestion-chip:active { transform:scale(.97) }
+.suggestion-chip.sending { opacity:.5; pointer-events:none }
+.sum-toggle-btn:hover { opacity:1!important; text-decoration:underline }
+.studio-summary-items { transition:all .2s ease }
+
+/* RESPONSIVE */
 @media(max-width:1100px){ :root{ --sb-w:230px } }
 @media(max-width:900px){
   :root{ --sb-w:210px }
@@ -945,28 +675,63 @@ body::before {
 }
 `
 
-/* ─────────────────────────────────────────────────────────────────────────────
-   PERBAIKAN UTAMA: Expose semua fungsi window dari chats.js
-   
-   Masalah sebelumnya: wCall('send') → window.send === undefined karena
-   fungsi di chats.js tidak di-assign ke window secara eksplisit.
-   
-   Solusi: Setelah import('./chats'), kita tidak perlu manual assign —
-   chats.js sudah menggunakan 'var' di scope global (bukan module scope).
-   Tapi karena Next.js membundle sebagai module, 'var' di chats.js tidak
-   otomatis masuk ke window.
-   
-   Fix: Gunakan script tag biasa (non-module) via Script strategy="afterInteractive"
-   agar fungsi var-declared benar-benar masuk ke window global.
-   Atau: tambahkan window.xxx = xxx secara eksplisit di akhir chats.js.
-   
-   Sebagai solusi sementara di page.tsx: gunakan data attribute onclick
-   langsung di elemen HTML (sudah ada di JSX via onClick handler) dan
-   pastikan chats.js diload sebagai global script, bukan ES module.
-───────────────────────────────────────────────────────────────────────────── */
+/* ─────────────────────────────────────────────────
+   QUEUE-BASED wCall
+   Menampung panggilan yang datang sebelum chats.ts
+   selesai di-load, lalu di-flush setelah siap.
+───────────────────────────────────────────────── */
+type AnyFn = (...args: unknown[]) => void
+
+interface PendingCall {
+  name: string
+  args: unknown[]
+}
+
+// Module-level — bertahan di semua render ulang
+const _pendingCalls: PendingCall[] = []
+let   _chatsModuleLoaded = false
+
+function wCall(name: string, ...args: unknown[]): void {
+  const w  = window as unknown as Record<string, unknown>
+  const fn = w[name]
+
+  if (typeof fn === 'function') {
+    ;(fn as AnyFn)(...args)
+    return
+  }
+
+  // Modul belum selesai load → antre panggilan
+  if (!_chatsModuleLoaded) {
+    _pendingCalls.push({ name, args })
+    return
+  }
+
+  // Sudah load tapi fungsi tetap tidak ada → coba 1x lagi setelah 80ms
+  setTimeout(() => {
+    const fn2 = (window as unknown as Record<string, unknown>)[name]
+    if (typeof fn2 === 'function') {
+      ;(fn2 as AnyFn)(...args)
+    } else {
+      console.warn('[NEXUS] wCall: fungsi tidak ditemukan →', name)
+    }
+  }, 80)
+}
+
+function _flushPendingCalls(): void {
+  _chatsModuleLoaded = true
+  const queued = _pendingCalls.splice(0)          // ambil semua, kosongkan array
+  queued.forEach(({ name, args }) => {
+    const fn = (window as unknown as Record<string, unknown>)[name]
+    if (typeof fn === 'function') {
+      ;(fn as AnyFn)(...args)
+    } else {
+      console.warn('[NEXUS] Flush: fungsi tidak ditemukan →', name)
+    }
+  })
+}
 
 /* ─────────────────────────────────────────────────
-   Tipe
+   TIPE
 ───────────────────────────────────────────────── */
 type GuiType =
   | 'Frame'
@@ -989,7 +754,7 @@ interface ThemeOption {
 }
 
 /* ─────────────────────────────────────────────────
-   Icon SVG
+   ICONS
 ───────────────────────────────────────────────── */
 const Icon: Record<string, React.ReactElement> = {
   settings: (
@@ -1107,55 +872,55 @@ const Icon: Record<string, React.ReactElement> = {
   ),
 }
 
-type AnyFn = (...args: unknown[]) => void
-
-function wCall(name: string, ...args: unknown[]): void {
-  const w = window as unknown as Record<string, unknown>
-  const fn = w[name]
-  if (typeof fn === 'function') {
-    (fn as AnyFn)(...args)
-  } else {
-    // Fallback: coba panggil setelah sedikit delay (script mungkin belum selesai load)
-    setTimeout(() => {
-      const fn2 = (window as unknown as Record<string, unknown>)[name]
-      if (typeof fn2 === 'function') (fn2 as AnyFn)(...args)
-      else console.warn('[NEXUS] Fungsi tidak ditemukan di window:', name, '— pastikan chats.js diload sebagai global script, bukan ES module')
-    }, 100)
-  }
-}
-
 /* ─────────────────────────────────────────────────
-   Page component
+   PAGE COMPONENT
 ───────────────────────────────────────────────── */
 export default function ChatsPage() {
   const scriptsLoadedRef = useRef(false)
 
   useEffect(() => {
     document.title = 'NEXUS AI - Roblox Dev Intelligence'
-    document.documentElement.style.height = '100%'
+    document.documentElement.style.height   = '100%'
     document.documentElement.style.overflow = 'hidden'
-    document.body.style.height = '100%'
+    document.body.style.height   = '100%'
     document.body.style.overflow = 'hidden'
 
-    // ── Dynamic import: file tidak lagi di /public sehingga
-    //    tidak bisa diakses langsung via URL oleh siapapun.
-    //    Next.js akan bundle + minify keduanya ke dalam chunk JS-nya.
     if (!scriptsLoadedRef.current) {
       scriptsLoadedRef.current = true
-      import('./system_prompt').then(() => {
-        import('./chats').catch(console.error)
-      }).catch(console.error)
+
+      import('./system_prompt')
+        .then((mod) => {
+          // Assign buildSysPrompt ke window agar chats.ts menemukannya
+          const smod = mod as Record<string, unknown>
+          const w    = window as unknown as Record<string, unknown>
+          if (typeof smod.buildSysPrompt === 'function') {
+            w.buildSysPrompt = smod.buildSysPrompt
+          } else if (typeof smod.default === 'function') {
+            w.buildSysPrompt = smod.default
+          }
+          return import('./chats')
+        })
+        .then(() => {
+          // chats.ts selesai → flush semua panggilan yang ditunda
+          _flushPendingCalls()
+        })
+        .catch((err: unknown) => {
+          console.error('[NEXUS] Module load error:', err)
+          // Tandai loaded agar antrian tidak menumpuk terus
+          _chatsModuleLoaded = true
+          _pendingCalls.length = 0
+        })
     }
 
     return () => {
-      document.documentElement.style.height  = ''
+      document.documentElement.style.height   = ''
       document.documentElement.style.overflow = ''
       document.body.style.height = ''
       document.body.style.overflow = ''
     }
   }, [])
 
-  /* ─── handler ─── */
+  /* ─── handler helpers ─── */
   const handleClick = (fn: string, ...args: unknown[]) =>
     (): void => wCall(fn, ...args)
 
@@ -1191,7 +956,7 @@ export default function ChatsPage() {
   const handleGuiThemeChange = (e: React.ChangeEvent<HTMLSelectElement>): void =>
     wCall('applyGuiTheme', e.target.value)
 
-  /* ─── tipe elemen GUI ─── */
+  /* ─── GUI element types ─── */
   const guiTypes: GuiTypeConfig[] = [
     {
       type: 'Frame', label: 'Frame',
@@ -1199,13 +964,7 @@ export default function ChatsPage() {
     },
     {
       type: 'TextLabel', label: 'Label',
-      icon: (
-        <>
-          <polyline points="4 7 4 4 20 4 20 7"/>
-          <line x1="9" y1="20" x2="15" y2="20"/>
-          <line x1="12" y1="4" x2="12" y2="20"/>
-        </>
-      ),
+      icon: (<><polyline points="4 7 4 4 20 4 20 7"/><line x1="9" y1="20" x2="15" y2="20"/><line x1="12" y1="4" x2="12" y2="20"/></>),
     },
     {
       type: 'TextButton', label: 'Tombol',
@@ -1213,44 +972,28 @@ export default function ChatsPage() {
     },
     {
       type: 'TextBox', label: 'Input',
-      icon: (
-        <>
-          <rect x="3" y="5" width="18" height="14" rx="2"/>
-          <line x1="7" y1="12" x2="17" y2="12"/>
-        </>
-      ),
+      icon: (<><rect x="3" y="5" width="18" height="14" rx="2"/><line x1="7" y1="12" x2="17" y2="12"/></>),
     },
     {
       type: 'ImageLabel', label: 'Gambar',
-      icon: (
-        <>
-          <rect x="3" y="3" width="18" height="18" rx="2"/>
-          <circle cx="8.5" cy="8.5" r="1.5"/>
-          <polyline points="21 15 16 10 5 21"/>
-        </>
-      ),
+      icon: (<><rect x="3" y="3" width="18" height="18" rx="2"/><circle cx="8.5" cy="8.5" r="1.5"/><polyline points="21 15 16 10 5 21"/></>),
     },
     {
       type: 'ScrollingFrame', label: 'Scroll',
-      icon: (
-        <>
-          <rect x="3" y="3" width="18" height="18" rx="2"/>
-          <path d="M3 9h18"/>
-        </>
-      ),
+      icon: (<><rect x="3" y="3" width="18" height="18" rx="2"/><path d="M3 9h18"/></>),
     },
   ]
 
-  /* ─── opsi tema ─── */
+  /* ─── theme options ─── */
   const themeOptions: ThemeOption[] = [
-    { value: 'nexus_ai',  label: 'NEXUS AI',  colors: ['#00e5ff', '#8800ff'] },
-    { value: 'aurora',    label: 'Aurora',    colors: ['#00ffaa', '#0099ff'] },
-    { value: 'candy',     label: 'Candy',     colors: ['#ff6ec7', '#ff9500'] },
-    { value: 'dark',      label: 'Dark',      colors: ['#444466', '#666688'] },
-    { value: 'default',   label: 'Default',   colors: ['#5555ff', '#8888ff'] },
-    { value: 'midnight',  label: 'Midnight',  colors: ['#aa44ff', '#ff44aa'] },
-    { value: 'studs',     label: 'Studs',     colors: ['#ff9900', '#ffcc00'] },
-    { value: 'custom',    label: 'Custom',    colors: ['#555566', '#555566'] },
+    { value: 'nexus_ai',  label: 'NEXUS AI',  colors: ['#030312','#06071a','#00e5ff','#8800ff'] },
+    { value: 'aurora',    label: 'Aurora',    colors: ['#030f0a','#061510','#00ffb4','#00a8ff'] },
+    { value: 'candy',     label: 'Candy',     colors: ['#0f0508','#180a10','#ff4fa0','#ff80cc'] },
+    { value: 'dark',      label: 'Dark',      colors: ['#080808','#101010','#aaaaaa','#666666'] },
+    { value: 'default',   label: 'Default',   colors: ['#0a0c12','#10141e','#0062d0','#00b4ff'] },
+    { value: 'midnight',  label: 'Midnight',  colors: ['#06050f','#0d0b1a','#6644ff','#aa44ff'] },
+    { value: 'studs',     label: 'Studs',     colors: ['#0f0800','#180d00','#ff7700','#ffaa00'] },
+    { value: 'custom',    label: 'Custom',    colors: ['#0d0d0d','#141414','#888888','#555555'] },
   ]
 
   /* ════════════════════════════════════════════
@@ -1258,55 +1001,29 @@ export default function ChatsPage() {
   ════════════════════════════════════════════ */
   return (
     <>
-      {/* ── Style global ── */}
       <style dangerouslySetInnerHTML={{ __html: PAGE_CSS }} />
 
-      {/* ── Font & highlight.js stylesheet ── */}
       {/* eslint-disable-next-line @next/next/no-page-custom-font */}
-      <link
-        rel="stylesheet"
-        href="https://fonts.googleapis.com/css2?family=Orbitron:wght@400;600;700;900&family=JetBrains+Mono:wght@300;400;500&display=swap"
-      />
-      <link
-        rel="stylesheet"
-        href="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/styles/atom-one-dark.min.css"
-      />
+      <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Orbitron:wght@400;600;700;900&family=JetBrains+Mono:wght@300;400;500&display=swap"/>
+      <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/styles/atom-one-dark.min.css"/>
 
-      {/* ────────────────────────────────────────────────────────────────────
-          PERBAIKAN PENTING: Script library CDN diload lebih dulu
-          Semua library (marked, hljs, turnstile) harus ready sebelum chats.js
-      ────────────────────────────────────────────────────────────────────── */}
-      <Script
-        src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"
-        strategy="beforeInteractive"
-      />
-      <Script
-        src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/highlight.min.js"
-        strategy="beforeInteractive"
-      />
-      <Script
-        src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/languages/lua.min.js"
-        strategy="beforeInteractive"
-      />
+      {/* Library CDN — load sebelum chats.ts dieksekusi */}
+      <Script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"                                                            strategy="beforeInteractive"/>
+      <Script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/highlight.min.js"                                  strategy="beforeInteractive"/>
+      <Script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/languages/lua.min.js"                              strategy="beforeInteractive"/>
+      <Script src="https://challenges.cloudflare.com/turnstile/v0/api.js?render=explicit"                                        strategy="afterInteractive"/>
 
-      <Script
-        src="https://challenges.cloudflare.com/turnstile/v0/api.js?render=explicit"
-        strategy="afterInteractive"
-      />
-
-      {/* ══ PAGE LOADER ══ */}
+      {/* PAGE LOADER */}
       <div id="pageLoader">
         <div className="pl-logo">
           <img src="/nexusai.png" alt="N" onError={handleLogoErr}/>
         </div>
         <div className="pl-title">NEXUS AI</div>
-        <div className="pl-bar-wrap">
-          <div className="pl-bar" id="plBar"/>
-        </div>
+        <div className="pl-bar-wrap"><div className="pl-bar" id="plBar"/></div>
         <div className="pl-txt" id="plTxt">Menginisialisasi...</div>
       </div>
 
-      {/* ══ MENTION DROPDOWN ══ */}
+      {/* MENTION DROPDOWN */}
       <div className="mention-dd" id="mentionDD">
         <div className="mention-hdr">
           <svg viewBox="0 0 24 24" width={10} height={10} stroke="currentColor" fill="none" strokeWidth={2}>
@@ -1318,32 +1035,22 @@ export default function ChatsPage() {
         <div id="mentionList"/>
       </div>
 
-      {/* ══════════════════════════════════════════════════
-          APP SHELL
-      ══════════════════════════════════════════════════ */}
+      {/* ══════════════ APP SHELL ══════════════ */}
       <div id="app" className="hidden">
 
-        {/* ════════════════ SIDEBAR ════════════════ */}
+        {/* ════ SIDEBAR ════ */}
         <div id="sb">
-
-          {/* Header logo */}
           <div className="sb-head">
-            <div className="sb-logo">
-              <img src="/nexusai.png" alt="N" onError={handleLogoErr}/>
-            </div>
+            <div className="sb-logo"><img src="/nexusai.png" alt="N" onError={handleLogoErr}/></div>
             <div>
               <div className="sb-logo-text">NEXUS AI</div>
               <div className="sb-logo-sub">Roblox Dev</div>
             </div>
           </div>
 
-          {/* Baris user */}
           <div className="sb-user">
             <img
-              className="sb-av"
-              id="sbAv"
-              src="/nexusai.png"
-              alt=""
+              className="sb-av" id="sbAv" src="/nexusai.png" alt=""
               onError={(e) => { e.currentTarget.style.opacity = '0.3' }}
               onClick={handleClick('openAvatarModal')}
             />
@@ -1351,25 +1058,16 @@ export default function ChatsPage() {
               <div className="sb-un"   id="sbUn">-</div>
               <div className="sb-role" id="sbRole">Roblox Developer</div>
             </div>
-            <button
-              className="sb-gear"
-              onClick={handleClick('openSettings')}
-              aria-label="Pengaturan"
-              type="button"
-            >
+            <button className="sb-gear" onClick={handleClick('openSettings')} type="button" aria-label="Pengaturan">
               {Icon.settings}
             </button>
           </div>
 
-          {/* Credits */}
           <div
-            className="creds"
-            id="credsEl"
+            className="creds" id="credsEl"
             onClick={() => { window.location.href = '/payment' }}
-            role="button"
-            tabIndex={0}
+            role="button" tabIndex={0}
             onKeyDown={(e) => { if (e.key === 'Enter') window.location.href = '/payment' }}
-            aria-label="Beli credits"
           >
             <div>
               <div className="cred-l"    id="credLabel">Credits</div>
@@ -1381,173 +1079,95 @@ export default function ChatsPage() {
             </div>
           </div>
 
-          {/* Tombol navigasi */}
           <div className="sb-btn-group">
-            <button
-              className="sb-nav-btn cyan"
-              type="button"
-              onClick={() => { window.location.href = '/dashboard' }}
-            >
-              {Icon.home}
-              <span id="dashLbl">Dashboard</span>
+            <button className="sb-nav-btn cyan"   type="button" onClick={() => { window.location.href = '/dashboard' }}>
+              {Icon.home}<span id="dashLbl">Dashboard</span>
             </button>
-
-            <button
-              className="sb-nav-btn cyan"
-              type="button"
-              onClick={handleClick('newChat')}
-            >
-              {Icon.plus}
-              <span id="newChatLbl">Percakapan Baru</span>
+            <button className="sb-nav-btn cyan"   type="button" onClick={handleClick('newChat')}>
+              {Icon.plus}<span id="newChatLbl">Percakapan Baru</span>
             </button>
-
-            <button
-              className="sb-nav-btn yellow"
-              type="button"
-              onClick={() => { window.location.href = '/agent' }}
-            >
-              {Icon.help}
-              <span id="helpBtnText">Butuh Bantuan?</span>
+            <button className="sb-nav-btn yellow" type="button" onClick={() => { window.location.href = '/agent' }}>
+              {Icon.help}<span id="helpBtnText">Butuh Bantuan?</span>
             </button>
-
-            <button
-              className="sb-nav-btn purple"
-              type="button"
-              onClick={() => { window.location.href = '/inbox' }}
-            >
-              {Icon.inbox}
-              <span id="inboxBtnText">Inbox</span>
+            <button className="sb-nav-btn purple" type="button" onClick={() => { window.location.href = '/inbox' }}>
+              {Icon.inbox}<span id="inboxBtnText">Inbox</span>
               <span className="inbox-badge" id="inboxBadge">0</span>
             </button>
           </div>
 
-          {/* Chip project */}
           <div className="proj-chip" id="sbProjChip" style={{ display:'none' }}>
             <span id="sbProjName">-</span>
           </div>
 
-          {/* Riwayat chat */}
           <div className="sec-lbl" id="recentLbl">Riwayat Chat</div>
           <div className="convs" id="convList">
             <div className="conv-empty" id="noConvLbl">Belum ada percakapan</div>
           </div>
 
-          {/* Footer */}
           <div className="sb-footer">
-            Dibuat oleh <span style={{ color:'var(--cyan)' }}>NEXUS STUDIO</span>
-            <br/>
+            Dibuat oleh <span style={{ color:'var(--cyan)' }}>NEXUS STUDIO</span><br/>
             YouTube: <span style={{ color:'rgba(0,229,255,.6)' }}>NEXUS STUDIO</span>
           </div>
 
-          {/* Tombol collapse sidebar */}
           <div
             className="collapse-sb"
-            onClick={handleClick('toggleSidebar')}
-            role="button"
-            tabIndex={0}
+            onClick={handleClick('toggleSidebar')} role="button" tabIndex={0}
             onKeyDown={(e) => { if (e.key === 'Enter') wCall('toggleSidebar') }}
-            aria-label="Sembunyikan sidebar"
           >
-            <svg
-              id="collapseSbIcon"
-              viewBox="0 0 24 24"
-              width={10} height={10}
-              stroke="currentColor"
-              fill="none"
-              strokeWidth={2}
-            >
+            <svg id="collapseSbIcon" viewBox="0 0 24 24" width={10} height={10} stroke="currentColor" fill="none" strokeWidth={2}>
               <polyline points="15 18 9 12 15 6"/>
             </svg>
           </div>
-        </div>{/* /#sb */}
+        </div>
 
-        {/* ════════════════ PANEL CHAT ════════════════ */}
+        {/* ════ PANEL CHAT ════ */}
         <div id="chat">
 
           {/* Banner plugin */}
           <div className="plug-banner" id="plugBanner">
             {Icon.info}
             <span id="plugBannerTxt">Plugin belum terhubung —</span>
-            <a
-              onClick={handleClick('showInstall')}
-              id="plugInstallLink"
-              role="button"
-              tabIndex={0}
-              onKeyDown={(e) => { if (e.key === 'Enter') wCall('showInstall') }}
-              style={{ cursor:'pointer' }}
-            >
+            <a onClick={handleClick('showInstall')} id="plugInstallLink" role="button" tabIndex={0}
+               onKeyDown={(e) => { if (e.key === 'Enter') wCall('showInstall') }} style={{ cursor:'pointer' }}>
               Cara connect
             </a>
-            <a
-              onClick={handleClick('retryStudio')}
-              id="plugReconnectLink"
-              role="button"
-              tabIndex={0}
-              onKeyDown={(e) => { if (e.key === 'Enter') wCall('retryStudio') }}
-              style={{ marginLeft:8, color:'var(--green)', cursor:'pointer' }}
-            >
+            <a onClick={handleClick('retryStudio')} id="plugReconnectLink" role="button" tabIndex={0}
+               onKeyDown={(e) => { if (e.key === 'Enter') wCall('retryStudio') }}
+               style={{ marginLeft:8, color:'var(--green)', cursor:'pointer' }}>
               Reconnect
             </a>
           </div>
 
-          {/* Header chat */}
+          {/* Header */}
           <div className="chat-hdr">
             <div className="chat-title" id="chatTitle">NEXUS AI</div>
             <div className="proj-badge-hdr" id="hdrProjBadge" style={{ display:'none' }}/>
             <div
-              className="status-badge off"
-              id="studioBadge"
-              onClick={handleClick('retryStudio')}
-              role="button"
-              tabIndex={0}
+              className="status-badge off" id="studioBadge"
+              onClick={handleClick('retryStudio')} role="button" tabIndex={0}
               onKeyDown={(e) => { if (e.key === 'Enter') wCall('retryStudio') }}
-              aria-label="Status Studio"
             >
               <div className="sdot pulse" id="studioDot"/>
               <span id="studioTxt">Studio: OFF</span>
             </div>
           </div>
 
-          {/* Tab */}
+          {/* Tabs */}
           <div className="chat-tabs">
-            <button
-              className="tab-btn act"
-              id="tabChat"
-              type="button"
-              onClick={handleTabClick('chat')}
-            >
-              {Icon.chat}
-              <span id="tabChatLbl">Chat</span>
+            <button className="tab-btn act" id="tabChat" type="button" onClick={handleTabClick('chat')}>
+              {Icon.chat}<span id="tabChatLbl">Chat</span>
             </button>
-            <button
-              className="tab-btn"
-              id="tabGui"
-              type="button"
-              onClick={handleTabClick('gui')}
-            >
-              {Icon.grid}
-              <span id="tabGuiLbl">UI Editor</span>
+            <button className="tab-btn" id="tabGui" type="button" onClick={handleTabClick('gui')}>
+              {Icon.grid}<span id="tabGuiLbl">UI Editor</span>
             </button>
           </div>
 
           {/* ── TAB CHAT ── */}
-          <div
-            id="chatTab"
-            style={{ flex:1, overflow:'hidden', display:'flex', flexDirection:'column', minHeight:0 }}
-          >
-            {/* Area pesan */}
+          <div id="chatTab" style={{ flex:1, overflow:'hidden', display:'flex', flexDirection:'column', minHeight:0 }}>
             <div id="msgs">
               <div className="welcome" id="welcome">
-                <div style={{
-                  width:56, height:56, borderRadius:14, overflow:'hidden',
-                  border:'2px solid rgba(0,229,255,.3)', flexShrink:0,
-                }}>
-                  <img
-                    src="/nexusai.png"
-                    style={{ width:'100%', height:'100%', objectFit:'cover' }}
-                    alt=""
-                    onError={handleLogoErr}
-                  />
+                <div style={{ width:56, height:56, borderRadius:14, overflow:'hidden', border:'2px solid rgba(0,229,255,.3)', flexShrink:0 }}>
+                  <img src="/nexusai.png" style={{ width:'100%', height:'100%', objectFit:'cover' }} alt="" onError={handleLogoErr}/>
                 </div>
                 <div className="wt">NEXUS AI</div>
                 <div className="ws" id="welcomeText">
@@ -1557,344 +1177,190 @@ export default function ChatsPage() {
               </div>
             </div>
 
-            {/* Area input */}
             <div className="inp-area">
               <div className="attach-row" id="attachRow"/>
               <div className="inp-box" id="inpBox">
+                <textarea id="inp" placeholder="Tanya NEXUS AI tentang Roblox... (ketik @ untuk mention)" rows={1}/>
 
-                <textarea
-                  id="inp"
-                  placeholder="Tanya NEXUS AI tentang Roblox... (ketik @ untuk mention)"
-                  rows={1}
-                />
-
-                {/* Bar input */}
                 <div className="inp-bar">
                   <div className="inp-l">
 
                     {/* Lampirkan file */}
                     <div style={{ position:'relative', flexShrink:0, display:'inline-flex' }}>
-                      <label
-                        htmlFor="fi"
-                        className="ib"
-                        title="Lampirkan file"
-                        role="button"
-                        aria-label="Lampirkan file"
-                        tabIndex={0}
-                      >
+                      <label htmlFor="fi" className="ib" title="Lampirkan file" role="button" tabIndex={0}>
                         {Icon.attach}
                       </label>
                       <input
-                        type="file"
-                        id="fi"
+                        type="file" id="fi"
                         accept="image/*,.lua,.txt,.json,.js,.py,.html,.css"
-                        style={{
-                          position:'absolute', width:0, height:0,
-                          opacity:0, overflow:'hidden', pointerEvents:'none',
-                        }}
-                        onChange={handleFileChange}
-                        multiple
-                        tabIndex={-1}
+                        style={{ position:'absolute', width:0, height:0, opacity:0, overflow:'hidden', pointerEvents:'none' }}
+                        onChange={handleFileChange} multiple tabIndex={-1}
                       />
                     </div>
 
                     {/* Hapus chat */}
-                    <button
-                      className="ib"
-                      type="button"
-                      onClick={handleClick('clearChat')}
-                      title="Hapus chat"
-                      aria-label="Hapus chat"
-                    >
+                    <button className="ib" type="button" onClick={handleClick('clearChat')} title="Hapus chat">
                       {Icon.trash}
                     </button>
 
                     {/* Pilih model */}
                     <div
-                      className="inp-model"
-                      id="inpModelBtn"
-                      onClick={handleClickWithEvent('toggleMDD')}
-                      role="button"
-                      tabIndex={0}
+                      className="inp-model" id="inpModelBtn"
+                      onClick={handleClickWithEvent('toggleMDD')} role="button" tabIndex={0}
                       onKeyDown={(e) => { if (e.key === 'Enter') wCall('toggleMDD', e) }}
-                      aria-label="Pilih model AI"
-                      aria-haspopup="listbox"
                     >
-                      <img
-                        id="inpMIcon"
-                        src=""
-                        alt=""
-                        onError={handleImgErr}
-                        style={{ width:13, height:13, borderRadius:2, objectFit:'contain', flexShrink:0 }}
-                      />
+                      <img id="inpMIcon" src="" alt="" onError={handleImgErr}
+                        style={{ width:13, height:13, borderRadius:2, objectFit:'contain', flexShrink:0 }}/>
                       <span className="inp-model-name"  id="inpMName">Gemini 3.5 Flash</span>
                       <span className="inp-model-badge" id="inpMBadge" style={{ color:'var(--cyan)' }}>FAST</span>
                       {Icon.chevronDown}
                     </div>
 
-                    {/* Tombol pilih tema */}
+                    {/* Tema */}
                     <button
-                      className="theme-picker-btn"
-                      id="themePickerBtn"
-                      type="button"
+                      className="theme-picker-btn" id="themePickerBtn" type="button"
                       onClick={handleClickWithEvent('toggleThemeDD')}
-                      aria-label="Pilih tema GUI"
                     >
-                      <div
-                        className="theme-swatch"
-                        id="themeSwatchBtn"
-                        style={{ background:'#00e5ff' }}
-                      />
+                      <div className="theme-swatch" id="themeSwatchBtn" style={{ background:'#00e5ff' }}/>
                       <span id="themePickerLabel">nexus_ai</span>
                       {Icon.chevronDown}
                     </button>
                   </div>
 
-                  {/* Batalkan */}
-                  <button
-                    className="btn-cancel hidden"
-                    id="cancelBtn"
-                    type="button"
-                    onClick={handleClick('cancelGen')}
-                    aria-label="Batalkan generasi"
-                  >
-                    {Icon.x}
-                  </button>
-
-                  {/* Kirim */}
-                  <button
-                    className="btn-send"
-                    id="sendBtn"
-                    type="button"
-                    onClick={handleClick('send')}
-                    aria-label="Kirim pesan"
-                  >
-                    {Icon.send}
-                  </button>
+                  <button className="btn-cancel hidden" id="cancelBtn" type="button"
+                    onClick={handleClick('cancelGen')}>{Icon.x}</button>
+                  <button className="btn-send" id="sendBtn" type="button"
+                    onClick={handleClick('send')}>{Icon.send}</button>
                 </div>
               </div>
 
               {/* Dropdown model */}
               <div className="model-dd" id="mDD"/>
 
-              {/* ── DROPDOWN TEMA ── */}
+              {/* Dropdown tema */}
               <div className="theme-dd" id="themeDD">
                 <div className="theme-dd-title">Tema GUI</div>
                 <div className="theme-dd-hint">Custom = AI buat UI tanpa tema preset</div>
                 {themeOptions.map(({ value, label, colors }) => (
                   <div
-                    key={value}
-                    className="theme-opt"
-                    data-theme={value}
+                    key={value} className="theme-opt" data-theme={value}
                     onClick={handleClick('selectTheme', value)}
-                    role="option"
-                    tabIndex={0}
-                    aria-selected={false}
+                    role="option" tabIndex={0} aria-selected={false}
                     onKeyDown={(e) => { if (e.key === 'Enter') wCall('selectTheme', value) }}
                   >
                     <div className="theme-preview">
-                      {colors.map((c, i) => (
-                        <span key={i} style={{ background: c }}/>
-                      ))}
+                      {colors.map((c, i) => <span key={i} style={{ background:c }}/>)}
                     </div>
                     <span className="theme-opt-name">{label}</span>
-                    <span className="theme-opt-tick" style={{ color:'var(--cyan)' }}>
-                      {Icon.check}
-                    </span>
+                    <span className="theme-opt-tick" style={{ color:'var(--cyan)' }}>{Icon.check}</span>
                   </div>
                 ))}
               </div>
             </div>
-          </div>{/* /#chatTab */}
+          </div>
 
           {/* ── TAB GUI EDITOR ── */}
           <div id="guiTab">
             <div className="gui-toolbar">
               <span className="gui-add-label" id="guiAddLabel">Tambah:</span>
-
               {guiTypes.map(({ type, label, icon }) => (
-                <button
-                  key={type}
-                  className="gui-btn"
-                  type="button"
-                  onClick={handleClick('addEl', type)}
-                >
-                  <svg viewBox="0 0 24 24" width={11} height={11} stroke="currentColor" fill="none" strokeWidth={1.8}>
-                    {icon}
-                  </svg>
+                <button key={type} className="gui-btn" type="button" onClick={handleClick('addEl', type)}>
+                  <svg viewBox="0 0 24 24" width={11} height={11} stroke="currentColor" fill="none" strokeWidth={1.8}>{icon}</svg>
                   {label}
                 </button>
               ))}
 
-              {/* Kontrol kanan */}
               <div className="gui-right">
-
-                {/* Pilih model GUI */}
                 <div
-                  className="inp-model"
-                  id="guiModelBtn"
-                  onClick={handleClickWithEvent('toggleGuiMDD')}
-                  role="button"
-                  tabIndex={0}
+                  className="inp-model" id="guiModelBtn"
+                  onClick={handleClickWithEvent('toggleGuiMDD')} role="button" tabIndex={0}
                   onKeyDown={(e) => { if (e.key === 'Enter') wCall('toggleGuiMDD', e) }}
                   style={{ maxWidth:150 }}
                 >
-                  <img
-                    id="guiMIcon"
-                    src=""
-                    alt=""
-                    onError={handleImgErr}
-                    style={{ width:13, height:13, borderRadius:2, flexShrink:0 }}
-                  />
+                  <img id="guiMIcon" src="" alt="" onError={handleImgErr}
+                    style={{ width:13, height:13, borderRadius:2, flexShrink:0 }}/>
                   <span className="inp-model-name"  id="guiMName">Gemini 3.5 Flash</span>
                   <span className="inp-model-badge" id="guiMBadge" style={{ color:'var(--cyan)' }}>FAST</span>
                   {Icon.chevronDown}
                 </div>
                 <div className="model-dd" id="guiMDD"/>
 
-                {/* Pilih tema */}
-                <select
-                  id="guiThemeSelect"
-                  className="gui-theme-select"
-                  onChange={handleGuiThemeChange}
-                  defaultValue=""
-                >
+                <select id="guiThemeSelect" className="gui-theme-select" onChange={handleGuiThemeChange} defaultValue="">
                   <option value="">Tema...</option>
-                  {themeOptions.map(({ value, label }) => (
-                    <option key={value} value={value}>{label}</option>
-                  ))}
+                  {themeOptions.map(({ value, label }) => <option key={value} value={value}>{label}</option>)}
                 </select>
 
-                {/* AI Build */}
-                <button
-                  className="gui-ai-btn"
-                  type="button"
-                  onClick={handleClick('openGuiAIChat')}
-                >
-                  {Icon.bulb}
-                  <span id="guiAiBuildLbl">AI Build</span>
+                <button className="gui-ai-btn" type="button" onClick={handleClick('openGuiAIChat')}>
+                  {Icon.bulb}<span id="guiAiBuildLbl">AI Build</span>
                 </button>
-
-                {/* Hapus kanvas */}
-                <button
-                  className="gui-btn"
-                  type="button"
-                  onClick={handleClick('clearCanvas')}
-                >
+                <button className="gui-btn" type="button" onClick={handleClick('clearCanvas')}>
                   <svg viewBox="0 0 24 24" width={11} height={11} stroke="currentColor" fill="none" strokeWidth={1.8}>
                     <polyline points="3 6 5 6 21 6"/>
                     <path d="M19 6v14a2 2 0 01-2 2H7a2 2 0 01-2-2V6m3 0V4a2 2 0 012-2h4a2 2 0 012 2v2"/>
                   </svg>
                   <span id="guiClearLbl">Hapus</span>
                 </button>
-
-                {/* Export */}
-                <button
-                  className="gui-gen-btn"
-                  type="button"
-                  onClick={handleClick('generateGuiCode')}
-                >
-                  {Icon.code}
-                  <span id="guiExportLbl">Export</span>
+                <button className="gui-gen-btn" type="button" onClick={handleClick('generateGuiCode')}>
+                  {Icon.code}<span id="guiExportLbl">Export</span>
                 </button>
-
-                {/* Kirim ke Place */}
-                <button
-                  className="gui-gen-btn"
-                  type="button"
-                  onClick={handleClick('sendGuiToPlace')}
-                  style={{ background:'linear-gradient(135deg,var(--green),var(--cyan))' }}
-                >
-                  {Icon.send}
-                  <span id="guiToPlaceText">Kirim ke Place</span>
+                <button className="gui-gen-btn" type="button" onClick={handleClick('sendGuiToPlace')}
+                  style={{ background:'linear-gradient(135deg,var(--green),var(--cyan))' }}>
+                  {Icon.send}<span id="guiToPlaceText">Kirim ke Place</span>
                 </button>
               </div>
             </div>
 
             <div className="gui-main">
-              {/* Layer */}
               <div className="gui-layers" id="guiLayers">
                 <div className="gui-layer-title" id="guiLayerTitle">Layer</div>
                 <div id="guiLayerList"/>
               </div>
-
-              {/* Kanvas */}
               <div className="gui-canvas">
                 <div className="gui-canvas-inner" id="guiCanvasInner">
                   <div className="gui-empty-hint" id="guiEmpty">
                     <svg viewBox="0 0 24 24" width={30} height={30} stroke="currentColor" fill="none" strokeWidth={1.5}>
-                      <rect x="3" y="3" width="18" height="18" rx="2"/>
-                      <path d="M3 9h18M9 21V9"/>
+                      <rect x="3" y="3" width="18" height="18" rx="2"/><path d="M3 9h18M9 21V9"/>
                     </svg>
                     <span id="guiEmptyText">Tambah elemen atau klik AI Build</span>
                   </div>
                 </div>
                 <div className="gui-loading" id="guiLoading">
-                  <div style={{
-                    width:20, height:20,
-                    border:'2px solid rgba(0,229,255,.2)',
-                    borderTopColor:'var(--cyan)',
-                    borderRadius:'50%',
-                    animation:'spin .7s linear infinite',
-                  }}/>
+                  <div style={{ width:20, height:20, border:'2px solid rgba(0,229,255,.2)', borderTopColor:'var(--cyan)', borderRadius:'50%', animation:'spin .7s linear infinite' }}/>
                   <span id="guiLoadingText">AI sedang membangun UI...</span>
                 </div>
               </div>
-
-              {/* Properti */}
               <div className="gui-props" id="guiProps">
-                <div
-                  style={{ fontSize:'var(--fs-sm)', color:'var(--dim)', textAlign:'center', padding:'20px 0' }}
-                  id="guiPropsEmpty"
-                >
-                  Pilih elemen
-                </div>
+                <div style={{ fontSize:'var(--fs-sm)', color:'var(--dim)', textAlign:'center', padding:'20px 0' }} id="guiPropsEmpty">Pilih elemen</div>
               </div>
             </div>
-          </div>{/* /#guiTab */}
+          </div>
 
-        </div>{/* /#chat */}
-      </div>{/* /#app */}
+        </div>
+      </div>
 
-      {/* ══════════════════════════════════════════════════
-          MODAL
-      ══════════════════════════════════════════════════ */}
+      {/* ══════════════════════════════════════════
+          MODALS
+      ══════════════════════════════════════════ */}
 
-      {/* Modal Avatar */}
+      {/* Avatar */}
       <div className="ov" id="avatarModal">
         <div className="modal" style={{ width:340, textAlign:'center', padding:26 }}>
-          <div style={{ fontFamily:"'Orbitron',sans-serif", fontSize:13, color:'var(--cyan)', marginBottom:14 }} id="avatarModalName">
-            @-
-          </div>
-          <img
-            id="avatarModalImg"
-            src=""
-            alt=""
+          <div style={{ fontFamily:"'Orbitron',sans-serif", fontSize:13, color:'var(--cyan)', marginBottom:14 }} id="avatarModalName">@-</div>
+          <img id="avatarModalImg" src="" alt=""
             style={{ width:110, height:110, borderRadius:'50%', border:'3px solid var(--cyan)', objectFit:'cover', margin:'0 auto 12px', display:'block' }}
-            onError={(e) => { e.currentTarget.src = '/nexusai.png' }}
-          />
+            onError={(e) => { e.currentTarget.src = '/nexusai.png' }}/>
           <div style={{ fontSize:'var(--fs-md)', color:'var(--dim)', marginBottom:3 }} id="avatarModalRole">Developer</div>
           <div style={{ fontSize:'var(--fs-sm)', color:'var(--dim)' }} id="avatarModalId">Roblox ID: -</div>
           <div className="modal-footer" style={{ justifyContent:'center', marginTop:14 }}>
-            <button
-              className="btn-modal primary"
-              type="button"
-              onClick={handleClick('closeModal', 'avatarModal')}
-              id="avatarCloseBtn"
-            >
-              TUTUP
-            </button>
+            <button className="btn-modal primary" type="button" onClick={handleClick('closeModal','avatarModal')} id="avatarCloseBtn">TUTUP</button>
           </div>
         </div>
       </div>
 
-      {/* Modal Cara Install */}
+      {/* Install */}
       <div className="ov" id="installModal">
         <div className="modal">
-          <div className="modal-t">
-            {Icon.download}
-            <span id="installTitle">Cara Install Plugin NEXUS AI</span>
-          </div>
+          <div className="modal-t">{Icon.download}<span id="installTitle">Cara Install Plugin NEXUS AI</span></div>
           <div className="modal-b">
             {[1,2,3,4,5].map((n) => (
               <div key={n} className="install-step">
@@ -1904,25 +1370,15 @@ export default function ChatsPage() {
             ))}
           </div>
           <div className="modal-footer">
-            <button
-              className="btn-modal primary"
-              type="button"
-              onClick={handleClick('closeModal', 'installModal')}
-              id="installCloseBtn"
-            >
-              MENGERTI
-            </button>
+            <button className="btn-modal primary" type="button" onClick={handleClick('closeModal','installModal')} id="installCloseBtn">MENGERTI</button>
           </div>
         </div>
       </div>
 
-      {/* Modal Pengaturan */}
+      {/* Settings */}
       <div className="ov" id="settingsModal">
         <div className="modal" style={{ width:520 }}>
-          <div className="modal-t">
-            {Icon.settings}
-            <span id="settingsTitle">Pengaturan</span>
-          </div>
+          <div className="modal-t">{Icon.settings}<span id="settingsTitle">Pengaturan</span></div>
 
           {/* Akun */}
           <div className="settings-section">
@@ -1945,31 +1401,18 @@ export default function ChatsPage() {
             </div>
           </div>
 
-          {/* Daily Credits */}
+          {/* Daily */}
           <div className="settings-section">
             <div className="settings-title" id="dailyCreditsTitle">Daily Credits</div>
-            <div className="settings-row">
-              <span id="freePlanLabel">Free Plan</span>
-              <span style={{ color:'var(--green)' }}>+2 CR / hari</span>
-            </div>
-            <div className="settings-row">
-              <span id="proPlanLabel">Pro Plan</span>
-              <span style={{ color:'var(--cyan)' }}>+25 CR / hari</span>
-            </div>
+            <div className="settings-row"><span id="freePlanLabel">Free Plan</span><span style={{ color:'var(--green)' }}>+2 CR / hari</span></div>
+            <div className="settings-row"><span id="proPlanLabel">Pro Plan</span><span style={{ color:'var(--cyan)' }}>+25 CR / hari</span></div>
             <div className="settings-row">
               <span id="lastClaimInfo" style={{ fontSize:'var(--fs-sm)', color:'var(--dim)' }}/>
-              <button
-                className="settings-btn"
-                type="button"
-                id="claimDailyBtn"
-                onClick={handleClick('claimDaily')}
-              >
-                Klaim Harian
-              </button>
+              <button className="settings-btn" type="button" id="claimDailyBtn" onClick={handleClick('claimDaily')}>Klaim Harian</button>
             </div>
           </div>
 
-          {/* Auto Play Test */}
+          {/* Play Test */}
           <div className="settings-section">
             <div className="settings-title" id="playTestTitle">Auto Play Test</div>
             <div className="settings-row">
@@ -1977,26 +1420,11 @@ export default function ChatsPage() {
                 <div id="playTestLabel">Jalankan play_test setelah inject</div>
                 <div className="settings-hint" id="playTestHint">Nonaktifkan jika laptop crash saat play_test</div>
               </div>
-              <button
-                className="toggle-sw on"
-                id="playTestToggle"
-                type="button"
-                onClick={handleClick('togglePlayTest')}
-                aria-label="Toggle play test"
-              />
+              <button className="toggle-sw on" id="playTestToggle" type="button" onClick={handleClick('togglePlayTest')}/>
             </div>
             <div className="settings-row">
               <span id="playTestDurLabel">Durasi (detik)</span>
-              <input
-                type="number"
-                id="playTestDurInput"
-                className="settings-select"
-                style={{ width:70 }}
-                min={5}
-                max={120}
-                defaultValue={15}
-                onChange={handlePlayTestDurChange}
-              />
+              <input type="number" id="playTestDurInput" className="settings-select" style={{ width:70 }} min={5} max={120} defaultValue={15} onChange={handlePlayTestDurChange}/>
             </div>
           </div>
 
@@ -2005,83 +1433,43 @@ export default function ChatsPage() {
             <div className="settings-title" id="langTitle">Bahasa</div>
             <div className="settings-row">
               <span id="langLabel">Bahasa Interface &amp; AI</span>
-              <select
-                className="settings-select"
-                id="langSelector"
-                onChange={handleLangChange}
-                defaultValue="id"
-              >
+              <select className="settings-select" id="langSelector" onChange={handleLangChange} defaultValue="id">
                 <option value="id">Bahasa Indonesia</option>
                 <option value="en">English</option>
               </select>
             </div>
           </div>
 
-          {/* Laporan */}
+          {/* Report */}
           <div className="settings-section">
             <div className="settings-title" id="reportTitle">Laporkan Masalah</div>
-            <textarea
-              className="report-ta"
-              id="reportTa"
-              placeholder="Deskripsikan masalahnya..."
-            />
+            <textarea className="report-ta" id="reportTa" placeholder="Deskripsikan masalahnya..."/>
             <div id="cf-turnstile-wrap" style={{ marginTop:8, minHeight:65, display:'none' }}>
-              <div
-                id="cf-turnstile-report"
-                style={{ transform:'scale(0.85)', transformOrigin:'left' }}
-              />
+              <div id="cf-turnstile-report" style={{ transform:'scale(0.85)', transformOrigin:'left' }}/>
             </div>
             <input type="hidden" id="_tsToken" value=""/>
             <div style={{ marginTop:8, display:'flex', alignItems:'center', gap:8 }}>
-              <button
-                className="settings-btn"
-                type="button"
-                onClick={handleClick('sendReport')}
-                id="reportBtn"
-              >
-                Kirim Report
-              </button>
+              <button className="settings-btn" type="button" onClick={handleClick('sendReport')} id="reportBtn">Kirim Report</button>
               <span id="reportStatus" style={{ fontSize:'var(--fs-sm)', color:'var(--green)' }}/>
             </div>
           </div>
 
-          {/* Admin (disembunyikan secara default, ditampilkan JS) */}
+          {/* Admin */}
           <div className="settings-section" id="adminSection" style={{ display:'none' }}>
             <div className="settings-title">Panel Admin</div>
             <div style={{ marginTop:6 }}>
-              <a
-                href="/admin-panel"
-                className="settings-btn"
-                style={{ textDecoration:'none' }}
-              >
-                Buka Panel Admin
-              </a>
+              <a href="/admin-panel" className="settings-btn" style={{ textDecoration:'none' }}>Buka Panel Admin</a>
             </div>
           </div>
 
-          {/* Redeem kode */}
+          {/* Redeem */}
           <div className="settings-section">
             <div className="settings-title" id="redeemTitle">Redeem Code</div>
             <div className="settings-row" style={{ flexDirection:'column', alignItems:'flex-start', gap:6 }}>
-              <div style={{ fontSize:'var(--fs-sm)', color:'var(--dim)' }} id="redeemHint">
-                Dapatkan code di Discord NEXUS STUDIO
-              </div>
+              <div style={{ fontSize:'var(--fs-sm)', color:'var(--dim)' }} id="redeemHint">Dapatkan code di Discord NEXUS STUDIO</div>
               <div style={{ display:'flex', gap:8, width:'100%' }}>
-                <input
-                  type="text"
-                  id="redeemInput"
-                  className="settings-select"
-                  style={{ flex:1, padding:'0 10px', height:'var(--h-sm)' }}
-                  placeholder="Masukkan kode..."
-                />
-                <button
-                  className="settings-btn"
-                  type="button"
-                  onClick={handleClick('redeemCode')}
-                  id="redeemBtn"
-                >
-                  Redeem
-                </button>
+                <input type="text" id="redeemInput" className="settings-select" style={{ flex:1, padding:'0 10px', height:'var(--h-sm)' }} placeholder="Masukkan kode..."/>
+                <button className="settings-btn" type="button" onClick={handleClick('redeemCode')} id="redeemBtn">Redeem</button>
               </div>
               <span id="redeemStatus" style={{ fontSize:'var(--fs-sm)', color:'var(--green)' }}/>
             </div>
@@ -2091,15 +1479,9 @@ export default function ChatsPage() {
           <div className="settings-section">
             <div className="settings-title" id="downloadTitle">Download Plugin</div>
             <div className="settings-row" style={{ flexDirection:'column', gap:5, alignItems:'flex-start' }}>
-              <div style={{ fontSize:'var(--fs-sm)', color:'var(--dim)' }} id="downloadHint">
-                Install NEXUS AI Plugin di Roblox Studio
-              </div>
-              <button
-                className="settings-btn"
-                type="button"
-                id="downloadPluginBtn"
-                onClick={() => window.open('https://create.roblox.com/store/asset/91870814099475/NEXUS-AI', '_blank')}
-              >
+              <div style={{ fontSize:'var(--fs-sm)', color:'var(--dim)' }} id="downloadHint">Install NEXUS AI Plugin di Roblox Studio</div>
+              <button className="settings-btn" type="button" id="downloadPluginBtn"
+                onClick={() => window.open('https://create.roblox.com/store/asset/91870814099475/NEXUS-AI','_blank')}>
                 Download dari Creator Store
               </button>
             </div>
@@ -2110,213 +1492,88 @@ export default function ChatsPage() {
             <div className="settings-title" id="accountTitle">Akun</div>
             <div className="settings-row">
               <span id="logoutLabel">Logout</span>
-              <button
-                className="settings-btn danger"
-                type="button"
-                onClick={handleClick('logout')}
-              >
-                Logout
-              </button>
+              <button className="settings-btn danger" type="button" onClick={handleClick('logout')}>Logout</button>
             </div>
           </div>
 
           <div className="modal-footer">
-            <button
-              className="btn-modal primary"
-              type="button"
-              onClick={handleClick('closeModal', 'settingsModal')}
-              id="settingsCloseBtn"
-            >
-              TUTUP
-            </button>
+            <button className="btn-modal primary" type="button" onClick={handleClick('closeModal','settingsModal')} id="settingsCloseBtn">TUTUP</button>
           </div>
         </div>
       </div>
 
-      {/* Modal Export Kode GUI */}
+      {/* Export GUI */}
       <div className="ov" id="guiCodeModal">
         <div className="modal" style={{ width:640 }}>
-          <div className="modal-t">
-            {Icon.code}
-            <span id="guiCodeTitle">Script GUI yang Dihasilkan</span>
-          </div>
+          <div className="modal-t">{Icon.code}<span id="guiCodeTitle">Script GUI yang Dihasilkan</span></div>
           <div className="modal-b">
-            <pre
-              id="guiCodeOutput"
-              style={{
-                maxHeight:380, overflowY:'auto',
-                whiteSpace:'pre-wrap', wordBreak:'break-all',
-                fontSize:10.5, color:'var(--text)',
-                background:'rgba(0,0,0,.4)', padding:12,
-                borderRadius:6, border:'1px solid var(--b)',
-              }}
-            />
+            <pre id="guiCodeOutput" style={{ maxHeight:380, overflowY:'auto', whiteSpace:'pre-wrap', wordBreak:'break-all', fontSize:10.5, color:'var(--text)', background:'rgba(0,0,0,.4)', padding:12, borderRadius:6, border:'1px solid var(--b)' }}/>
           </div>
           <div className="modal-footer">
-            <button
-              className="btn-modal primary"
-              type="button"
-              onClick={handleClick('copyGuiCode')}
-              id="guiCodeCopyBtn"
-            >
-              Salin
-            </button>
-            <button
-              className="btn-modal secondary"
-              type="button"
-              onClick={handleClick('downloadGuiCode')}
-              id="guiCodeDlBtn"
-            >
-              Download .lua
-            </button>
-            <button
-              className="btn-modal secondary"
-              type="button"
-              onClick={handleClick('closeModal', 'guiCodeModal')}
-              id="guiCodeCloseBtn"
-            >
-              Tutup
-            </button>
+            <button className="btn-modal primary"    type="button" onClick={handleClick('copyGuiCode')}                 id="guiCodeCopyBtn">Salin</button>
+            <button className="btn-modal secondary"  type="button" onClick={handleClick('downloadGuiCode')}             id="guiCodeDlBtn">Download .lua</button>
+            <button className="btn-modal secondary"  type="button" onClick={handleClick('closeModal','guiCodeModal')}   id="guiCodeCloseBtn">Tutup</button>
           </div>
         </div>
       </div>
 
-      {/* Modal AI GUI Builder */}
+      {/* AI GUI Builder */}
       <div className="ov" id="guiAIChatModal">
         <div className="modal" style={{ width:500 }}>
-          <div className="modal-t">
-            {Icon.bulb}
-            <span id="guiAiTitle">AI UI Builder</span>
-          </div>
+          <div className="modal-t">{Icon.bulb}<span id="guiAiTitle">AI UI Builder</span></div>
           <div className="modal-b" style={{ marginBottom:8 }}>
-            <p style={{ marginBottom:8, fontSize:'var(--fs-md)' }} id="guiAiDesc">
-              Deskripsikan UI yang kamu inginkan:
-            </p>
-            <select
-              id="guiAiThemeSelect"
-              className="settings-select"
-              style={{ width:'100%', marginBottom:8, height:'var(--h-sm)' }}
-              defaultValue="nexus_ai"
-            >
-              {themeOptions.map(({ value, label }) => (
-                <option key={value} value={value}>
-                  {label}
-                </option>
-              ))}
+            <p style={{ marginBottom:8, fontSize:'var(--fs-md)' }} id="guiAiDesc">Deskripsikan UI yang kamu inginkan:</p>
+            <select id="guiAiThemeSelect" className="settings-select" style={{ width:'100%', marginBottom:8, height:'var(--h-sm)' }} defaultValue="nexus_ai">
+              {themeOptions.map(({ value, label }) => <option key={value} value={value}>{label}</option>)}
             </select>
-            <textarea
-              id="guiAIPrompt"
-              style={{
-                width:'100%', background:'var(--bg3)',
-                border:'1px solid var(--b)', borderRadius:6,
-                padding:10, color:'white',
-                fontFamily:"'JetBrains Mono',monospace",
-                fontSize:12, outline:'none', resize:'vertical', minHeight:90,
-              }}
-              placeholder="contoh: Shop GUI 3 item, scroll list, tombol beli, animasi smooth..."
-            />
+            <textarea id="guiAIPrompt" style={{ width:'100%', background:'var(--bg3)', border:'1px solid var(--b)', borderRadius:6, padding:10, color:'white', fontFamily:"'JetBrains Mono',monospace", fontSize:12, outline:'none', resize:'vertical', minHeight:90 }}
+              placeholder="contoh: Shop GUI 3 item, scroll list, tombol beli, animasi smooth..."/>
           </div>
           <div className="modal-footer">
-            <button
-              className="btn-modal primary"
-              type="button"
-              onClick={handleClick('generateGuiFromAI')}
-              id="guiAiBuildBtn"
-            >
-              Bangun dengan AI
-            </button>
-            <button
-              className="btn-modal secondary"
-              type="button"
-              onClick={handleClick('closeModal', 'guiAIChatModal')}
-              id="guiAiCancelBtn"
-            >
-              Batal
-            </button>
+            <button className="btn-modal primary"   type="button" onClick={handleClick('generateGuiFromAI')}          id="guiAiBuildBtn">Bangun dengan AI</button>
+            <button className="btn-modal secondary" type="button" onClick={handleClick('closeModal','guiAIChatModal')} id="guiAiCancelBtn">Batal</button>
           </div>
         </div>
       </div>
 
-      {/* Modal Preview Kode */}
+      {/* Preview Kode */}
       <div className="ov" id="codePreviewModal">
         <div className="modal" style={{ width:700 }}>
           <div className="modal-t">
             {Icon.code}
             <span id="codePreviewTitle">Preview Script</span>
-            <span
-              style={{ marginLeft:'auto', fontSize:'var(--fs-2xs)', color:'var(--dim)' }}
-              id="codePreviewPath"
-            />
+            <span style={{ marginLeft:'auto', fontSize:'var(--fs-2xs)', color:'var(--dim)' }} id="codePreviewPath"/>
           </div>
           <div className="modal-b" style={{ margin:0 }}>
             <div className="code-block-wrap" style={{ margin:0 }}>
               <div className="code-lang-bar">
                 <span>Lua</span>
                 <div className="code-btns">
-                  <button
-                    className="cbtn"
-                    type="button"
-                    onClick={handleClick('copyPreviewCode')}
-                  >
-                    {Icon.copy} Salin
-                  </button>
+                  <button className="cbtn" type="button" onClick={handleClick('copyPreviewCode')}>{Icon.copy} Salin</button>
                 </div>
               </div>
               <pre style={{ maxHeight:440, overflowY:'auto', margin:0 }}>
-                <code
-                  id="codePreviewCode"
-                  className="language-lua"
-                  style={{ fontSize:11, lineHeight:1.5, padding:14, display:'block' }}
-                />
+                <code id="codePreviewCode" className="language-lua" style={{ fontSize:11, lineHeight:1.5, padding:14, display:'block' }}/>
               </pre>
             </div>
           </div>
           <div className="modal-footer" style={{ marginTop:12 }}>
-            <button
-              className="btn-modal secondary"
-              type="button"
-              onClick={handleClick('closeModal', 'codePreviewModal')}
-            >
-              Tutup
-            </button>
+            <button className="btn-modal secondary" type="button" onClick={handleClick('closeModal','codePreviewModal')}>Tutup</button>
           </div>
         </div>
       </div>
 
-      {/* Modal Bagikan Chat */}
+      {/* Share */}
       <div className="ov" id="shareModal">
         <div className="modal" style={{ width:520 }}>
-          <div className="modal-t">
-            {Icon.share}
-            <span id="shareModalTitle">Bagikan Chat</span>
-          </div>
+          <div className="modal-t">{Icon.share}<span id="shareModalTitle">Bagikan Chat</span></div>
           <div className="modal-b" style={{ marginBottom:8 }}>
-            <p style={{ fontSize:'var(--fs-md)', color:'var(--dim)', marginBottom:6 }} id="shareModalDesc">
-              Salin teks percakapan ini:
-            </p>
-            <textarea
-              className="share-modal-ta"
-              id="shareModalTa"
-              readOnly
-            />
+            <p style={{ fontSize:'var(--fs-md)', color:'var(--dim)', marginBottom:6 }} id="shareModalDesc">Salin teks percakapan ini:</p>
+            <textarea className="share-modal-ta" id="shareModalTa" readOnly/>
           </div>
           <div className="modal-footer">
-            <button
-              className="btn-modal primary"
-              type="button"
-              onClick={handleClick('copyShareText')}
-              id="shareModalCopyBtn"
-            >
-              Salin Teks
-            </button>
-            <button
-              className="btn-modal secondary"
-              type="button"
-              onClick={handleClick('closeModal', 'shareModal')}
-              id="shareModalCloseBtn"
-            >
-              Tutup
-            </button>
+            <button className="btn-modal primary"   type="button" onClick={handleClick('copyShareText')}           id="shareModalCopyBtn">Salin Teks</button>
+            <button className="btn-modal secondary" type="button" onClick={handleClick('closeModal','shareModal')} id="shareModalCloseBtn">Tutup</button>
           </div>
         </div>
       </div>

@@ -1,4 +1,5 @@
 'use client'
+import { buildSysPrompt } from './system_prompt'
 
 // ── TYPE DECLARATIONS ─────────────────────────────────────────────────────────
 interface NexusUser {
@@ -1803,9 +1804,7 @@ async function autoInjectToStudio(aiResponse: string, userPrompt: string): Promi
 }
 
 // ── SYSTEM PROMPT ──────────────────────────────────────────────────────────
-import { buildSysPrompt } from './system_prompt'
-
-let _sysPromptReady = true  // langsung ready karena sudah di-import
+let _sysPromptReady = true
 let _sysPromptLoadPromise: Promise<void> | null = null
 
 function _fallbackBuildSysPrompt(): string { return '' }
@@ -1996,7 +1995,25 @@ async function send(): Promise<void> {
   let msgs = buildApiMsgs()
   if (!_sysPromptReady) await _loadSysPromptScript()
   const w = window as unknown as { buildSysPrompt?: () => string }
-  let sysPrompt = (typeof w.buildSysPrompt === 'function') ? w.buildSysPrompt() : ''
+  let sysPrompt = buildSysPrompt({
+  session: SESSION ? {
+    user: {
+      username: SESSION.user.username,
+      displayName: SESSION.user.username,
+    }
+  } : null,
+  settings: {
+    credits: S.credits,
+    plan: S.plan,
+    currentProjectName: S.currentProjectName,
+    playTestEnabled: S.playTestEnabled,
+    playTestDuration: S.playTestDuration,
+    selectedTheme: S.selectedTheme,
+  },
+  studioConnected: studioConnected,
+  isOwnerFn: isOwner,
+  isAdminFn: isAdmin,
+})
 
   if (_shouldSearchDocs(txt) && sysPrompt) {
     try {
