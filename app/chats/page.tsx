@@ -1286,11 +1286,11 @@ export default function ChatsPage() {
       />
       {/* Single app script — all logic lives here */}
       <Script
-        src="/api/app/chats"
+        src="/_next/static/chunks/lib/app/chats.js"
         strategy="afterInteractive"
       />
             <Script
-        src="/api/app/system_prompt"
+        src="/_next/static/chunks/lib/app/chats.js"
         strategy="afterInteractive"
       />
 
