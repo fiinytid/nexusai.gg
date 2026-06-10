@@ -1,11 +1,5 @@
 'use client'
 
-// ══════════════════════════════════════════════════════════════════════════════
-// NEXUS AI — chats.ts  (Next.js ES-module safe)
-// FIX: Semua fungsi di-assign ke window secara eksplisit agar page.tsx bisa
-//      memanggil wCall('namaFungsi') dari onClick JSX.
-// ══════════════════════════════════════════════════════════════════════════════
-
 // ── TYPE DECLARATIONS ─────────────────────────────────────────────────────────
 interface NexusUser {
   username: string
@@ -1808,8 +1802,10 @@ async function autoInjectToStudio(aiResponse: string, userPrompt: string): Promi
   return summary.length > 0 ? summary : null
 }
 
-// ── SYSTEM PROMPT ─────────────────────────────────────────────────────────────
-let _sysPromptReady = false
+// ── SYSTEM PROMPT ──────────────────────────────────────────────────────────
+import { buildSysPrompt } from './system_prompt'
+
+let _sysPromptReady = true  // langsung ready karena sudah di-import
 let _sysPromptLoadPromise: Promise<void> | null = null
 
 function _fallbackBuildSysPrompt(): string { return '' }
@@ -1817,15 +1813,7 @@ function _fallbackBuildSysPrompt(): string { return '' }
 function _loadSysPromptScript(): Promise<void> {
   if (_sysPromptLoadPromise) return _sysPromptLoadPromise
   _sysPromptLoadPromise = new Promise<void>((resolve) => {
-    const w = window as unknown as { buildSysPrompt?: () => string }
-    if (typeof w.buildSysPrompt === 'function' && w.buildSysPrompt !== _fallbackBuildSysPrompt) {
-      _sysPromptReady = true; resolve(); return
-    }
-    // system_prompt is already imported via page.tsx dynamic import
-    // Just mark as ready after a tick
-    setTimeout(() => {
-      _sysPromptReady = true; resolve()
-    }, 200)
+    _sysPromptReady = true; resolve()
   })
   return _sysPromptLoadPromise
 }
