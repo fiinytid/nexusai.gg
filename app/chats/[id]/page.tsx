@@ -2,13 +2,13 @@
 
 import React, { useEffect, useRef } from 'react'
 import Script from 'next/script'
-  
+
 /* ─────────────────────────────────────────────────────────────────────────────
    CSS — NEXUS AI · v7
-   Fixed: theme dropdown layout, consistent hover sizes, unified height system
+   Perbaikan: layout dropdown tema, ukuran hover konsisten, sistem tinggi unified
 ───────────────────────────────────────────────────────────────────────────── */
 const PAGE_CSS = `
-/* ── TOKENS ── */
+/* ── TOKEN ── */
 :root {
   --bg:    #030312;
   --bg2:   #06071a;
@@ -166,7 +166,6 @@ body::before {
 .sb-gear:hover { color:var(--cyan); border-color:var(--b); background:var(--hover) }
 .sb-gear svg { width:15px; height:15px; stroke:currentColor; fill:none; stroke-width:2 }
 
-/* credits */
 .creds {
   margin:8px 12px 2px;
   padding:8px 12px; border-radius:var(--r);
@@ -182,7 +181,6 @@ body::before {
 .cred-l      { font-size:var(--fs-2xs); color:rgba(255,214,0,.6); text-transform:uppercase; letter-spacing:1.5px }
 .cred-hint   { font-size:var(--fs-2xs); color:rgba(255,214,0,.45); margin-top:2px }
 
-/* nav buttons */
 .sb-btn-group {
   display:flex; flex-direction:column; gap:3px;
   padding:8px 12px 4px; flex-shrink:0;
@@ -231,7 +229,6 @@ body::before {
   text-transform:uppercase; letter-spacing:2px; flex-shrink:0;
 }
 
-/* conversation list */
 .convs {
   flex:1; overflow-y:auto; padding:3px 8px; min-height:0;
 }
@@ -315,7 +312,6 @@ body::before {
 .sdot.pulse { animation:pd 1.8s infinite }
 @keyframes pd { 0%,100%{opacity:1} 50%{opacity:.25} }
 
-/* chat tabs */
 .chat-tabs {
   display:flex; gap:4px; padding:5px 14px;
   border-bottom:1px solid var(--b); background:var(--bg2);
@@ -336,7 +332,7 @@ body::before {
 .tab-btn.act { background:rgba(0,229,255,.08); border-color:var(--b); color:var(--cyan) }
 .tab-btn:hover:not(.act) { color:var(--text) }
 
-/* ══ MESSAGES ══ */
+/* ══ PESAN ══ */
 #msgs {
   flex:1; overflow-y:auto;
   padding:14px 16px;
@@ -367,7 +363,6 @@ body::before {
 .sugg-title { color:var(--cyan); display:flex; align-items:center; gap:5px; margin-bottom:3px; font-size:var(--fs-sm); font-weight:700 }
 .sugg-title svg { width:12px; height:12px; stroke:currentColor; fill:none; stroke-width:2; flex-shrink:0 }
 
-/* message rows */
 .msg       { display:flex; gap:9px; animation:mi .22s ease }
 .msg.user  { flex-direction:row-reverse }
 @keyframes mi { from{opacity:0;transform:translateY(5px)} to{opacity:1;transform:none} }
@@ -396,7 +391,6 @@ body::before {
 }
 .msg-img:hover { border-color:var(--cyan); transform:scale(1.02) }
 
-/* code blocks */
 .code-block-wrap   { position:relative; margin:8px 0; border-radius:7px; overflow:hidden; border:1px solid rgba(0,229,255,.1) }
 .code-lang-bar     {
   display:flex; align-items:center; justify-content:space-between;
@@ -428,7 +422,6 @@ body::before {
 .bubble th,.bubble td { padding:5px 9px; border:1px solid var(--b) }
 .bubble th  { background:rgba(0,229,255,.06); color:var(--cyan) }
 
-/* message actions */
 .msg-acts { display:flex; gap:2px; padding:2px; flex-wrap:wrap }
 .mab {
   font-size:var(--fs-2xs); color:var(--dim); background:none;
@@ -443,7 +436,6 @@ body::before {
 .mab.disliked { color:var(--pink);  border-color:rgba(255,45,107,.3) }
 .mab svg      { width:11px; height:11px; stroke:currentColor; fill:none; stroke-width:2 }
 
-/* attachments */
 .attach-row { display:flex; gap:6px; margin-bottom:6px; flex-wrap:wrap; padding:0 2px }
 .attach-row:empty { display:none }
 .attach-item { position:relative }
@@ -462,7 +454,7 @@ body::before {
   display:flex; align-items:center; justify-content:center; z-index:2;
 }
 
-/* ══ INPUT AREA ══ */
+/* ══ AREA INPUT ══ */
 .inp-area {
   padding:8px 14px 10px;
   border-top:1px solid var(--b); background:var(--bg2);
@@ -483,7 +475,6 @@ body::before {
 }
 #inp::placeholder { color:var(--dim) }
 
-/* input bar */
 .inp-bar {
   display:flex; align-items:center;
   height:var(--h-inp); padding:0 10px;
@@ -494,7 +485,6 @@ body::before {
   gap:5px; flex:1; min-width:0; overflow:hidden;
 }
 
-/* icon buttons */
 .ib {
   width:var(--h-sm); height:var(--h-sm);
   border-radius:var(--r-s); border:1px solid var(--b);
@@ -508,7 +498,6 @@ body::before {
 .ib:hover { color:var(--cyan); border-color:var(--cyan2) }
 .ib svg   { width:14px; height:14px; stroke:currentColor; fill:none; stroke-width:1.5; flex-shrink:0; pointer-events:none }
 
-/* model selector */
 .inp-model {
   display:flex; align-items:center; gap:5px;
   height:var(--h-sm); padding:0 8px;
@@ -522,7 +511,6 @@ body::before {
 .inp-model-name  { white-space:nowrap; overflow:hidden; text-overflow:ellipsis; flex:1; font-size:var(--fs-2xs); min-width:0 }
 .inp-model-badge { font-size:var(--fs-2xs); font-weight:700; flex-shrink:0 }
 
-/* theme button */
 .theme-picker-btn {
   display:flex; align-items:center; gap:5px;
   height:var(--h-sm); padding:0 8px;
@@ -534,7 +522,6 @@ body::before {
 .theme-picker-btn:hover { border-color:var(--cyan2); color:var(--cyan) }
 .theme-swatch { width:10px; height:10px; border-radius:50%; flex-shrink:0; border:1px solid rgba(255,255,255,.2) }
 
-/* send / cancel */
 .btn-send, .btn-cancel {
   border:none; border-radius:var(--r);
   width:var(--h-md); height:var(--h-md);
@@ -547,7 +534,7 @@ body::before {
 .btn-cancel { background:rgba(255,45,107,.15); border:1px solid rgba(255,45,107,.3); color:var(--pink) }
 .btn-cancel:hover { background:rgba(255,45,107,.25) }
 
-/* ══ DROPDOWNS ══ */
+/* ══ DROPDOWN ══ */
 .model-dd {
   position:fixed; background:var(--bg3); border:1px solid var(--b);
   border-radius:var(--r); z-index:9000; display:none;
@@ -558,7 +545,6 @@ body::before {
 .model-dd::-webkit-scrollbar-thumb { background:var(--b) }
 .model-dd.open { display:block }
 
-/* ── THEME DROPDOWN — fixed layout ── */
 .theme-dd {
   position:fixed;
   background:var(--bg3);
@@ -582,7 +568,6 @@ body::before {
   line-height:1;
 }
 
-/* hint line under title */
 .theme-dd-hint {
   font-size:var(--fs-2xs); color:rgba(0,229,255,.35);
   padding:3px 8px 5px;
@@ -632,7 +617,6 @@ body::before {
 }
 .theme-opt.act .theme-opt-name { color:var(--cyan) }
 
-/* active tick */
 .theme-opt-tick {
   width:10px; height:10px; flex-shrink:0;
   opacity:0;
@@ -796,7 +780,7 @@ body::before {
   max-width:110px; flex-shrink:0;
 }
 
-/* ══ MODALS ══ */
+/* ══ MODAL ══ */
 .ov {
   position:fixed; inset:0; background:rgba(3,3,18,.93); z-index:500;
   display:none; align-items:flex-start; justify-content:center;
@@ -831,7 +815,6 @@ body::before {
 .btn-modal.secondary { background:rgba(255,255,255,.06); color:var(--text); border:1px solid var(--b) }
 .btn-modal:hover     { opacity:.84 }
 
-/* settings */
 .settings-section { margin-bottom:16px; padding-bottom:16px; border-bottom:1px solid var(--b) }
 .settings-section:last-child { border-bottom:none; margin-bottom:0; padding-bottom:0 }
 .settings-title   { font-size:var(--fs-xs); color:var(--cyan); text-transform:uppercase; letter-spacing:1.5px; margin-bottom:10px; font-family:'Orbitron',sans-serif }
@@ -876,22 +859,18 @@ body::before {
   outline:none; resize:vertical; min-height:80px; margin-top:6px;
 }
 
-/* install steps */
 .install-step { display:flex; gap:10px; padding:9px 0; border-bottom:1px solid var(--b); align-items:flex-start }
 .install-step:last-child { border-bottom:none }
 .install-num  { width:22px; height:22px; border-radius:50%; background:linear-gradient(135deg,var(--cyan),var(--purple)); display:flex; align-items:center; justify-content:center; font-size:var(--fs-sm); font-weight:700; color:white; flex-shrink:0; margin-top:1px }
 .install-txt  { font-size:var(--fs-md); color:var(--text); line-height:1.65; flex:1 }
 .install-txt code { color:var(--cyan); background:rgba(0,229,255,.08); padding:1px 4px; border-radius:3px; font-size:var(--fs-sm) }
 
-/* badges */
 .badge-owner { background:linear-gradient(135deg,rgba(255,214,0,.2),rgba(255,140,0,.2)); color:var(--yellow); border:1px solid rgba(255,214,0,.3); padding:2px 8px; border-radius:10px; font-size:var(--fs-2xs); font-weight:700; font-family:'Orbitron',sans-serif }
 .badge-admin { background:rgba(0,229,255,.1); color:var(--cyan);  border:1px solid rgba(0,229,255,.3);  padding:2px 8px; border-radius:10px; font-size:var(--fs-2xs); font-weight:700 }
 .badge-pro   { background:rgba(136,0,255,.12); color:#cc55ff;     border:1px solid rgba(136,0,255,.3);  padding:2px 8px; border-radius:10px; font-size:var(--fs-2xs); font-weight:700 }
 
-/* share modal */
 .share-modal-ta { width:100%; background:var(--bg3); border:1px solid var(--b); border-radius:6px; padding:8px 10px; color:var(--text); font-family:'JetBrains Mono',monospace; font-size:var(--fs-sm); outline:none; resize:none; height:200px; margin-top:8px }
 
-/* mention dropdown */
 .mention-dd {
   position:fixed; background:var(--bg3); border:1px solid var(--bb);
   border-radius:var(--r); z-index:8000;
@@ -912,11 +891,10 @@ body::before {
 .mention-path      { font-size:var(--fs-2xs); color:var(--dim) }
 .mention-empty     { padding:12px; font-size:var(--fs-sm); color:var(--dim); text-align:center }
 
-/* utils */
 .hidden { display:none!important }
 @keyframes toastIn { from{opacity:0;transform:translateX(12px)} to{opacity:1;transform:none} }
 
-/* ══ RESPONSIVE ══ */
+/* ══ RESPONSIF ══ */
 @media(max-width:1100px){ :root{ --sb-w:230px } }
 @media(max-width:900px){
   :root{ --sb-w:210px }
@@ -967,8 +945,28 @@ body::before {
 }
 `
 
+/* ─────────────────────────────────────────────────────────────────────────────
+   PERBAIKAN UTAMA: Expose semua fungsi window dari chats.js
+   
+   Masalah sebelumnya: wCall('send') → window.send === undefined karena
+   fungsi di chats.js tidak di-assign ke window secara eksplisit.
+   
+   Solusi: Setelah import('./chats'), kita tidak perlu manual assign —
+   chats.js sudah menggunakan 'var' di scope global (bukan module scope).
+   Tapi karena Next.js membundle sebagai module, 'var' di chats.js tidak
+   otomatis masuk ke window.
+   
+   Fix: Gunakan script tag biasa (non-module) via Script strategy="afterInteractive"
+   agar fungsi var-declared benar-benar masuk ke window global.
+   Atau: tambahkan window.xxx = xxx secara eksplisit di akhir chats.js.
+   
+   Sebagai solusi sementara di page.tsx: gunakan data attribute onclick
+   langsung di elemen HTML (sudah ada di JSX via onClick handler) dan
+   pastikan chats.js diload sebagai global script, bukan ES module.
+───────────────────────────────────────────────────────────────────────────── */
+
 /* ─────────────────────────────────────────────────
-   Types
+   Tipe
 ───────────────────────────────────────────────── */
 type GuiType =
   | 'Frame'
@@ -991,7 +989,7 @@ interface ThemeOption {
 }
 
 /* ─────────────────────────────────────────────────
-   SVG Icon map
+   Icon SVG
 ───────────────────────────────────────────────── */
 const Icon: Record<string, React.ReactElement> = {
   settings: (
@@ -1032,11 +1030,6 @@ const Icon: Record<string, React.ReactElement> = {
     <svg width={8} height={8} viewBox="0 0 24 24" stroke="currentColor" fill="none" strokeWidth={2}
       style={{ color:'var(--dim)', flexShrink:0 }}>
       <polyline points="6 9 12 15 18 9"/>
-    </svg>
-  ),
-  chevronLeft: (
-    <svg viewBox="0 0 24 24" width={10} height={10} stroke="currentColor" fill="none" strokeWidth={2}>
-      <polyline points="15 18 9 12 15 6"/>
     </svg>
   ),
   check: (
@@ -1114,18 +1107,37 @@ const Icon: Record<string, React.ReactElement> = {
   ),
 }
 
-/* ─────────────────────────────────────────────────
-   Helper: safely call window function by name
-───────────────────────────────────────────────── */
+/* ─────────────────────────────────────────────────────────────────────────────
+   PERBAIKAN UTAMA: wCall — panggil fungsi dari window dengan aman
+   
+   Masalah: chats.js di-import sebagai ES module via import('./chats'),
+   sehingga deklarasi 'var' di dalamnya TIDAK masuk ke window global.
+   
+   Solusi yang benar: chats.js harus diload sebagai script global (non-module)
+   menggunakan tag <Script src="/js/chats.js"> agar semua 'var funcName'
+   otomatis menjadi window.funcName.
+   
+   Di sini kita tetap support keduanya — jika ada di window, panggil langsung.
+───────────────────────────────────────────────────────────────────────────── */
 type AnyFn = (...args: unknown[]) => void
 
 function wCall(name: string, ...args: unknown[]): void {
-  const fn = (window as unknown as Record<string, unknown>)[name]
-  if (typeof fn === 'function') (fn as AnyFn)(...args)
+  const w = window as unknown as Record<string, unknown>
+  const fn = w[name]
+  if (typeof fn === 'function') {
+    (fn as AnyFn)(...args)
+  } else {
+    // Fallback: coba panggil setelah sedikit delay (script mungkin belum selesai load)
+    setTimeout(() => {
+      const fn2 = (window as unknown as Record<string, unknown>)[name]
+      if (typeof fn2 === 'function') (fn2 as AnyFn)(...args)
+      else console.warn('[NEXUS] Fungsi tidak ditemukan di window:', name, '— pastikan chats.js diload sebagai global script, bukan ES module')
+    }, 100)
+  }
 }
 
 /* ─────────────────────────────────────────────────
-   Page component
+   Komponen halaman utama
 ───────────────────────────────────────────────── */
 export default function ChatsPage() {
   const scriptsLoadedRef = useRef(false)
@@ -1137,16 +1149,6 @@ export default function ChatsPage() {
     document.body.style.height = '100%'
     document.body.style.overflow = 'hidden'
 
-    // ── Dynamic import: file tidak lagi di /public sehingga
-    //    tidak bisa diakses langsung via URL oleh siapapun.
-    //    Next.js akan bundle + minify keduanya ke dalam chunk JS-nya.
-    if (!scriptsLoadedRef.current) {
-      scriptsLoadedRef.current = true
-      import('./system_prompt').then(() => {
-        import('./chats').catch(console.error)
-      }).catch(console.error)
-    }
-
     return () => {
       document.documentElement.style.height  = ''
       document.documentElement.style.overflow = ''
@@ -1155,7 +1157,7 @@ export default function ChatsPage() {
     }
   }, [])
 
-  /* handler helpers */
+  /* ─── handler ─── */
   const handleClick = (fn: string, ...args: unknown[]) =>
     (): void => wCall(fn, ...args)
 
@@ -1191,7 +1193,7 @@ export default function ChatsPage() {
   const handleGuiThemeChange = (e: React.ChangeEvent<HTMLSelectElement>): void =>
     wCall('applyGuiTheme', e.target.value)
 
-  /* GUI element type definitions */
+  /* ─── tipe elemen GUI ─── */
   const guiTypes: GuiTypeConfig[] = [
     {
       type: 'Frame', label: 'Frame',
@@ -1208,7 +1210,7 @@ export default function ChatsPage() {
       ),
     },
     {
-      type: 'TextButton', label: 'Button',
+      type: 'TextButton', label: 'Tombol',
       icon: <rect x="2" y="7" width="20" height="10" rx="3"/>,
     },
     {
@@ -1221,7 +1223,7 @@ export default function ChatsPage() {
       ),
     },
     {
-      type: 'ImageLabel', label: 'Image',
+      type: 'ImageLabel', label: 'Gambar',
       icon: (
         <>
           <rect x="3" y="3" width="18" height="18" rx="2"/>
@@ -1241,7 +1243,7 @@ export default function ChatsPage() {
     },
   ]
 
-  /* Theme options with preview colors */
+  /* ─── opsi tema ─── */
   const themeOptions: ThemeOption[] = [
     { value: 'nexus_ai',  label: 'NEXUS AI',  colors: ['#00e5ff', '#8800ff'] },
     { value: 'aurora',    label: 'Aurora',    colors: ['#00ffaa', '#0099ff'] },
@@ -1253,13 +1255,15 @@ export default function ChatsPage() {
     { value: 'custom',    label: 'Custom',    colors: ['#555566', '#555566'] },
   ]
 
-  /* ── RENDER ── */
+  /* ════════════════════════════════════════════
+     RENDER
+  ════════════════════════════════════════════ */
   return (
     <>
-      {/* ── Global styles ── */}
+      {/* ── Style global ── */}
       <style dangerouslySetInnerHTML={{ __html: PAGE_CSS }} />
 
-      {/* ── External stylesheets ── */}
+      {/* ── Font & highlight.js stylesheet ── */}
       {/* eslint-disable-next-line @next/next/no-page-custom-font */}
       <link
         rel="stylesheet"
@@ -1270,19 +1274,43 @@ export default function ChatsPage() {
         href="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/styles/atom-one-dark.min.css"
       />
 
-      {/* ── External CDN Scripts (library pihak ketiga, aman di public) ── */}
+      {/* ────────────────────────────────────────────────────────────────────
+          PERBAIKAN PENTING: Script library CDN diload lebih dulu
+          Semua library (marked, hljs, turnstile) harus ready sebelum chats.js
+      ────────────────────────────────────────────────────────────────────── */}
       <Script
         src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"
-        strategy="afterInteractive"
+        strategy="beforeInteractive"
       />
       <Script
         src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/highlight.min.js"
-        strategy="afterInteractive"
+        strategy="beforeInteractive"
       />
       <Script
         src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/languages/lua.min.js"
+        strategy="beforeInteractive"
+      />
+
+      {/* ────────────────────────────────────────────────────────────────────
+          PERBAIKAN UTAMA: system_prompt.js & chats.js diload sebagai
+          GLOBAL SCRIPT (bukan ES module) menggunakan strategy="afterInteractive"
+          dengan src langsung ke /js/ folder.
+          
+          Ini memastikan semua 'var funcName = ...' di chats.js terdaftar
+          sebagai window.funcName sehingga wCall('funcName') berhasil.
+          
+          HAPUS import('./chats') dari useEffect karena itu menyebabkan
+          chats.js dibundle sebagai module dan fungsinya tidak masuk window.
+      ────────────────────────────────────────────────────────────────────── */}
+      <Script
+        src="/js/system_prompt.js"
         strategy="afterInteractive"
       />
+      <Script
+        src="/js/chats.js"
+        strategy="afterInteractive"
+      />
+
       <Script
         src="https://challenges.cloudflare.com/turnstile/v0/api.js?render=explicit"
         strategy="afterInteractive"
@@ -1297,7 +1325,7 @@ export default function ChatsPage() {
         <div className="pl-bar-wrap">
           <div className="pl-bar" id="plBar"/>
         </div>
-        <div className="pl-txt" id="plTxt">Initializing...</div>
+        <div className="pl-txt" id="plTxt">Menginisialisasi...</div>
       </div>
 
       {/* ══ MENTION DROPDOWN ══ */}
@@ -1307,7 +1335,7 @@ export default function ChatsPage() {
             <circle cx="12" cy="8" r="4"/>
             <path d="M20 21a8 8 0 10-16 0"/>
           </svg>
-          <span id="mentionHdrTxt">Scripts &amp; Objects in Place</span>
+          <span id="mentionHdrTxt">Scripts &amp; Objek di Place</span>
         </div>
         <div id="mentionList"/>
       </div>
@@ -1320,7 +1348,7 @@ export default function ChatsPage() {
         {/* ════════════════ SIDEBAR ════════════════ */}
         <div id="sb">
 
-          {/* Logo header */}
+          {/* Header logo */}
           <div className="sb-head">
             <div className="sb-logo">
               <img src="/nexusai.png" alt="N" onError={handleLogoErr}/>
@@ -1331,7 +1359,7 @@ export default function ChatsPage() {
             </div>
           </div>
 
-          {/* User row */}
+          {/* Baris user */}
           <div className="sb-user">
             <img
               className="sb-av"
@@ -1348,7 +1376,7 @@ export default function ChatsPage() {
             <button
               className="sb-gear"
               onClick={handleClick('openSettings')}
-              aria-label="Settings"
+              aria-label="Pengaturan"
               type="button"
             >
               {Icon.settings}
@@ -1363,11 +1391,11 @@ export default function ChatsPage() {
             role="button"
             tabIndex={0}
             onKeyDown={(e) => { if (e.key === 'Enter') window.location.href = '/payment' }}
-            aria-label="Buy credits"
+            aria-label="Beli credits"
           >
             <div>
               <div className="cred-l"    id="credLabel">Credits</div>
-              <div className="cred-hint" id="credHint">Click to buy more</div>
+              <div className="cred-hint" id="credHint">Klik untuk beli lebih</div>
             </div>
             <div style={{ textAlign:'right' }}>
               <div className="cred-v" id="credDisp">30</div>
@@ -1375,7 +1403,7 @@ export default function ChatsPage() {
             </div>
           </div>
 
-          {/* Navigation buttons */}
+          {/* Tombol navigasi */}
           <div className="sb-btn-group">
             <button
               className="sb-nav-btn cyan"
@@ -1392,7 +1420,7 @@ export default function ChatsPage() {
               onClick={handleClick('newChat')}
             >
               {Icon.plus}
-              <span id="newChatLbl">New Chat</span>
+              <span id="newChatLbl">Percakapan Baru</span>
             </button>
 
             <button
@@ -1401,7 +1429,7 @@ export default function ChatsPage() {
               onClick={() => { window.location.href = '/agent' }}
             >
               {Icon.help}
-              <span id="helpBtnText">Need Help?</span>
+              <span id="helpBtnText">Butuh Bantuan?</span>
             </button>
 
             <button
@@ -1415,32 +1443,32 @@ export default function ChatsPage() {
             </button>
           </div>
 
-          {/* Project chip */}
+          {/* Chip project */}
           <div className="proj-chip" id="sbProjChip" style={{ display:'none' }}>
             <span id="sbProjName">-</span>
           </div>
 
-          {/* History */}
-          <div className="sec-lbl" id="recentLbl">Chat History</div>
+          {/* Riwayat chat */}
+          <div className="sec-lbl" id="recentLbl">Riwayat Chat</div>
           <div className="convs" id="convList">
-            <div className="conv-empty" id="noConvLbl">No conversations yet</div>
+            <div className="conv-empty" id="noConvLbl">Belum ada percakapan</div>
           </div>
 
           {/* Footer */}
           <div className="sb-footer">
-            Made by <span style={{ color:'var(--cyan)' }}>NEXUS STUDIO</span>
+            Dibuat oleh <span style={{ color:'var(--cyan)' }}>NEXUS STUDIO</span>
             <br/>
             YouTube: <span style={{ color:'rgba(0,229,255,.6)' }}>NEXUS STUDIO</span>
           </div>
 
-          {/* Collapse toggle */}
+          {/* Tombol collapse sidebar */}
           <div
             className="collapse-sb"
             onClick={handleClick('toggleSidebar')}
             role="button"
             tabIndex={0}
             onKeyDown={(e) => { if (e.key === 'Enter') wCall('toggleSidebar') }}
-            aria-label="Toggle sidebar"
+            aria-label="Sembunyikan sidebar"
           >
             <svg
               id="collapseSbIcon"
@@ -1455,13 +1483,13 @@ export default function ChatsPage() {
           </div>
         </div>{/* /#sb */}
 
-        {/* ════════════════ CHAT PANEL ════════════════ */}
+        {/* ════════════════ PANEL CHAT ════════════════ */}
         <div id="chat">
 
-          {/* Plugin banner */}
+          {/* Banner plugin */}
           <div className="plug-banner" id="plugBanner">
             {Icon.info}
-            <span id="plugBannerTxt">Plugin not connected —</span>
+            <span id="plugBannerTxt">Plugin belum terhubung —</span>
             <a
               onClick={handleClick('showInstall')}
               id="plugInstallLink"
@@ -1470,7 +1498,7 @@ export default function ChatsPage() {
               onKeyDown={(e) => { if (e.key === 'Enter') wCall('showInstall') }}
               style={{ cursor:'pointer' }}
             >
-              How to connect
+              Cara connect
             </a>
             <a
               onClick={handleClick('retryStudio')}
@@ -1484,7 +1512,7 @@ export default function ChatsPage() {
             </a>
           </div>
 
-          {/* Chat header */}
+          {/* Header chat */}
           <div className="chat-hdr">
             <div className="chat-title" id="chatTitle">NEXUS AI</div>
             <div className="proj-badge-hdr" id="hdrProjBadge" style={{ display:'none' }}/>
@@ -1495,14 +1523,14 @@ export default function ChatsPage() {
               role="button"
               tabIndex={0}
               onKeyDown={(e) => { if (e.key === 'Enter') wCall('retryStudio') }}
-              aria-label="Studio status"
+              aria-label="Status Studio"
             >
               <div className="sdot pulse" id="studioDot"/>
               <span id="studioTxt">Studio: OFF</span>
             </div>
           </div>
 
-          {/* Tabs */}
+          {/* Tab */}
           <div className="chat-tabs">
             <button
               className="tab-btn act"
@@ -1524,12 +1552,12 @@ export default function ChatsPage() {
             </button>
           </div>
 
-          {/* ── CHAT TAB ── */}
+          {/* ── TAB CHAT ── */}
           <div
             id="chatTab"
             style={{ flex:1, overflow:'hidden', display:'flex', flexDirection:'column', minHeight:0 }}
           >
-            {/* Messages */}
+            {/* Area pesan */}
             <div id="msgs">
               <div className="welcome" id="welcome">
                 <div style={{
@@ -1545,35 +1573,35 @@ export default function ChatsPage() {
                 </div>
                 <div className="wt">NEXUS AI</div>
                 <div className="ws" id="welcomeText">
-                  Smart Roblox AI — write Lua, debug scripts, build GUIs.
+                  AI Roblox cerdas — tulis Lua, debug script, buat GUI. Connect plugin untuk inject langsung ke Studio!
                 </div>
                 <div className="suggs" id="suggGrid"/>
               </div>
             </div>
 
-            {/* Input area */}
+            {/* Area input */}
             <div className="inp-area">
               <div className="attach-row" id="attachRow"/>
               <div className="inp-box" id="inpBox">
 
                 <textarea
                   id="inp"
-                  placeholder="Ask NEXUS AI about Roblox..."
+                  placeholder="Tanya NEXUS AI tentang Roblox... (ketik @ untuk mention)"
                   rows={1}
                 />
 
-                {/* Input bar */}
+                {/* Bar input */}
                 <div className="inp-bar">
                   <div className="inp-l">
 
-                    {/* Attach */}
+                    {/* Lampirkan file */}
                     <div style={{ position:'relative', flexShrink:0, display:'inline-flex' }}>
                       <label
                         htmlFor="fi"
                         className="ib"
-                        title="Attach file"
+                        title="Lampirkan file"
                         role="button"
-                        aria-label="Attach file"
+                        aria-label="Lampirkan file"
                         tabIndex={0}
                       >
                         {Icon.attach}
@@ -1592,18 +1620,18 @@ export default function ChatsPage() {
                       />
                     </div>
 
-                    {/* Clear */}
+                    {/* Hapus chat */}
                     <button
                       className="ib"
                       type="button"
                       onClick={handleClick('clearChat')}
-                      title="Clear chat"
-                      aria-label="Clear chat"
+                      title="Hapus chat"
+                      aria-label="Hapus chat"
                     >
                       {Icon.trash}
                     </button>
 
-                    {/* Model selector */}
+                    {/* Pilih model */}
                     <div
                       className="inp-model"
                       id="inpModelBtn"
@@ -1611,7 +1639,7 @@ export default function ChatsPage() {
                       role="button"
                       tabIndex={0}
                       onKeyDown={(e) => { if (e.key === 'Enter') wCall('toggleMDD', e) }}
-                      aria-label="Select model"
+                      aria-label="Pilih model AI"
                       aria-haspopup="listbox"
                     >
                       <img
@@ -1621,18 +1649,18 @@ export default function ChatsPage() {
                         onError={handleImgErr}
                         style={{ width:13, height:13, borderRadius:2, objectFit:'contain', flexShrink:0 }}
                       />
-                      <span className="inp-model-name"  id="inpMName">Gemini 2.5 Flash</span>
+                      <span className="inp-model-name"  id="inpMName">Gemini 3.5 Flash</span>
                       <span className="inp-model-badge" id="inpMBadge" style={{ color:'var(--cyan)' }}>FAST</span>
                       {Icon.chevronDown}
                     </div>
 
-                    {/* Theme picker button */}
+                    {/* Tombol pilih tema */}
                     <button
                       className="theme-picker-btn"
                       id="themePickerBtn"
                       type="button"
                       onClick={handleClickWithEvent('toggleThemeDD')}
-                      aria-label="Select theme"
+                      aria-label="Pilih tema GUI"
                     >
                       <div
                         className="theme-swatch"
@@ -1644,37 +1672,37 @@ export default function ChatsPage() {
                     </button>
                   </div>
 
-                  {/* Cancel */}
+                  {/* Batalkan */}
                   <button
                     className="btn-cancel hidden"
                     id="cancelBtn"
                     type="button"
                     onClick={handleClick('cancelGen')}
-                    aria-label="Cancel generation"
+                    aria-label="Batalkan generasi"
                   >
                     {Icon.x}
                   </button>
 
-                  {/* Send */}
+                  {/* Kirim */}
                   <button
                     className="btn-send"
                     id="sendBtn"
                     type="button"
                     onClick={handleClick('send')}
-                    aria-label="Send message"
+                    aria-label="Kirim pesan"
                   >
                     {Icon.send}
                   </button>
                 </div>
               </div>
 
-              {/* Model dropdown */}
+              {/* Dropdown model */}
               <div className="model-dd" id="mDD"/>
 
-              {/* ── THEME DROPDOWN ── */}
+              {/* ── DROPDOWN TEMA ── */}
               <div className="theme-dd" id="themeDD">
-                <div className="theme-dd-title">GUI Theme</div>
-                <div className="theme-dd-hint">Custom = AI builds UI without a preset theme</div>
+                <div className="theme-dd-title">Tema GUI</div>
+                <div className="theme-dd-hint">Custom = AI buat UI tanpa tema preset</div>
                 {themeOptions.map(({ value, label, colors }) => (
                   <div
                     key={value}
@@ -1701,10 +1729,10 @@ export default function ChatsPage() {
             </div>
           </div>{/* /#chatTab */}
 
-          {/* ── GUI EDITOR TAB ── */}
+          {/* ── TAB GUI EDITOR ── */}
           <div id="guiTab">
             <div className="gui-toolbar">
-              <span className="gui-add-label" id="guiAddLabel">Add:</span>
+              <span className="gui-add-label" id="guiAddLabel">Tambah:</span>
 
               {guiTypes.map(({ type, label, icon }) => (
                 <button
@@ -1720,10 +1748,10 @@ export default function ChatsPage() {
                 </button>
               ))}
 
-              {/* Right-side controls */}
+              {/* Kontrol kanan */}
               <div className="gui-right">
 
-                {/* Model selector */}
+                {/* Pilih model GUI */}
                 <div
                   className="inp-model"
                   id="guiModelBtn"
@@ -1740,20 +1768,20 @@ export default function ChatsPage() {
                     onError={handleImgErr}
                     style={{ width:13, height:13, borderRadius:2, flexShrink:0 }}
                   />
-                  <span className="inp-model-name"  id="guiMName">Gemini 2.5 Flash</span>
+                  <span className="inp-model-name"  id="guiMName">Gemini 3.5 Flash</span>
                   <span className="inp-model-badge" id="guiMBadge" style={{ color:'var(--cyan)' }}>FAST</span>
                   {Icon.chevronDown}
                 </div>
                 <div className="model-dd" id="guiMDD"/>
 
-                {/* Theme select */}
+                {/* Pilih tema */}
                 <select
                   id="guiThemeSelect"
                   className="gui-theme-select"
                   onChange={handleGuiThemeChange}
                   defaultValue=""
                 >
-                  <option value="">Theme...</option>
+                  <option value="">Tema...</option>
                   {themeOptions.map(({ value, label }) => (
                     <option key={value} value={value}>{label}</option>
                   ))}
@@ -1769,7 +1797,7 @@ export default function ChatsPage() {
                   <span id="guiAiBuildLbl">AI Build</span>
                 </button>
 
-                {/* Clear canvas */}
+                {/* Hapus kanvas */}
                 <button
                   className="gui-btn"
                   type="button"
@@ -1779,7 +1807,7 @@ export default function ChatsPage() {
                     <polyline points="3 6 5 6 21 6"/>
                     <path d="M19 6v14a2 2 0 01-2 2H7a2 2 0 01-2-2V6m3 0V4a2 2 0 012-2h4a2 2 0 012 2v2"/>
                   </svg>
-                  <span id="guiClearLbl">Clear</span>
+                  <span id="guiClearLbl">Hapus</span>
                 </button>
 
                 {/* Export */}
@@ -1792,7 +1820,7 @@ export default function ChatsPage() {
                   <span id="guiExportLbl">Export</span>
                 </button>
 
-                {/* Send to Place */}
+                {/* Kirim ke Place */}
                 <button
                   className="gui-gen-btn"
                   type="button"
@@ -1800,19 +1828,19 @@ export default function ChatsPage() {
                   style={{ background:'linear-gradient(135deg,var(--green),var(--cyan))' }}
                 >
                   {Icon.send}
-                  <span id="guiToPlaceText">Send to Place</span>
+                  <span id="guiToPlaceText">Kirim ke Place</span>
                 </button>
               </div>
             </div>
 
             <div className="gui-main">
-              {/* Layers */}
+              {/* Layer */}
               <div className="gui-layers" id="guiLayers">
-                <div className="gui-layer-title" id="guiLayerTitle">Layers</div>
+                <div className="gui-layer-title" id="guiLayerTitle">Layer</div>
                 <div id="guiLayerList"/>
               </div>
 
-              {/* Canvas */}
+              {/* Kanvas */}
               <div className="gui-canvas">
                 <div className="gui-canvas-inner" id="guiCanvasInner">
                   <div className="gui-empty-hint" id="guiEmpty">
@@ -1820,7 +1848,7 @@ export default function ChatsPage() {
                       <rect x="3" y="3" width="18" height="18" rx="2"/>
                       <path d="M3 9h18M9 21V9"/>
                     </svg>
-                    <span id="guiEmptyText">Add elements or click AI Build</span>
+                    <span id="guiEmptyText">Tambah elemen atau klik AI Build</span>
                   </div>
                 </div>
                 <div className="gui-loading" id="guiLoading">
@@ -1831,17 +1859,17 @@ export default function ChatsPage() {
                     borderRadius:'50%',
                     animation:'spin .7s linear infinite',
                   }}/>
-                  <span id="guiLoadingText">AI is building UI...</span>
+                  <span id="guiLoadingText">AI sedang membangun UI...</span>
                 </div>
               </div>
 
-              {/* Properties */}
+              {/* Properti */}
               <div className="gui-props" id="guiProps">
                 <div
                   style={{ fontSize:'var(--fs-sm)', color:'var(--dim)', textAlign:'center', padding:'20px 0' }}
                   id="guiPropsEmpty"
                 >
-                  Select element
+                  Pilih elemen
                 </div>
               </div>
             </div>
@@ -1851,10 +1879,10 @@ export default function ChatsPage() {
       </div>{/* /#app */}
 
       {/* ══════════════════════════════════════════════════
-          MODALS
+          MODAL
       ══════════════════════════════════════════════════ */}
 
-      {/* Avatar */}
+      {/* Modal Avatar */}
       <div className="ov" id="avatarModal">
         <div className="modal" style={{ width:340, textAlign:'center', padding:26 }}>
           <div style={{ fontFamily:"'Orbitron',sans-serif", fontSize:13, color:'var(--cyan)', marginBottom:14 }} id="avatarModalName">
@@ -1876,24 +1904,24 @@ export default function ChatsPage() {
               onClick={handleClick('closeModal', 'avatarModal')}
               id="avatarCloseBtn"
             >
-              CLOSE
+              TUTUP
             </button>
           </div>
         </div>
       </div>
 
-      {/* Install */}
+      {/* Modal Cara Install */}
       <div className="ov" id="installModal">
         <div className="modal">
           <div className="modal-t">
             {Icon.download}
-            <span id="installTitle">Install NEXUS AI Plugin</span>
+            <span id="installTitle">Cara Install Plugin NEXUS AI</span>
           </div>
           <div className="modal-b">
             {[1,2,3,4,5].map((n) => (
               <div key={n} className="install-step">
                 <div className="install-num">{n}</div>
-                <div className="install-txt" id={`installStep${n}`}>Step {n}</div>
+                <div className="install-txt" id={`installStep${n}`}>Langkah {n}</div>
               </div>
             ))}
           </div>
@@ -1904,23 +1932,23 @@ export default function ChatsPage() {
               onClick={handleClick('closeModal', 'installModal')}
               id="installCloseBtn"
             >
-              GOT IT
+              MENGERTI
             </button>
           </div>
         </div>
       </div>
 
-      {/* Settings */}
+      {/* Modal Pengaturan */}
       <div className="ov" id="settingsModal">
         <div className="modal" style={{ width:520 }}>
           <div className="modal-t">
             {Icon.settings}
-            <span id="settingsTitle">Settings</span>
+            <span id="settingsTitle">Pengaturan</span>
           </div>
 
-          {/* Account */}
+          {/* Akun */}
           <div className="settings-section">
-            <div className="settings-title" id="settingsAccountTitle">Account</div>
+            <div className="settings-title" id="settingsAccountTitle">Akun</div>
             <div className="settings-row">
               <span style={{ color:'white', fontWeight:600 }} id="settingsUsername">@-</span>
               <span id="settingsBadge"/>
@@ -1944,11 +1972,11 @@ export default function ChatsPage() {
             <div className="settings-title" id="dailyCreditsTitle">Daily Credits</div>
             <div className="settings-row">
               <span id="freePlanLabel">Free Plan</span>
-              <span style={{ color:'var(--green)' }}>+2 CR / day</span>
+              <span style={{ color:'var(--green)' }}>+2 CR / hari</span>
             </div>
             <div className="settings-row">
               <span id="proPlanLabel">Pro Plan</span>
-              <span style={{ color:'var(--cyan)' }}>+25 CR / day</span>
+              <span style={{ color:'var(--cyan)' }}>+25 CR / hari</span>
             </div>
             <div className="settings-row">
               <span id="lastClaimInfo" style={{ fontSize:'var(--fs-sm)', color:'var(--dim)' }}/>
@@ -1958,7 +1986,7 @@ export default function ChatsPage() {
                 id="claimDailyBtn"
                 onClick={handleClick('claimDaily')}
               >
-                Claim Daily
+                Klaim Harian
               </button>
             </div>
           </div>
@@ -1968,8 +1996,8 @@ export default function ChatsPage() {
             <div className="settings-title" id="playTestTitle">Auto Play Test</div>
             <div className="settings-row">
               <div>
-                <div id="playTestLabel">Run play_test after inject</div>
-                <div className="settings-hint" id="playTestHint">Disable if PC crashes during play_test</div>
+                <div id="playTestLabel">Jalankan play_test setelah inject</div>
+                <div className="settings-hint" id="playTestHint">Nonaktifkan jika laptop crash saat play_test</div>
               </div>
               <button
                 className="toggle-sw on"
@@ -1980,7 +2008,7 @@ export default function ChatsPage() {
               />
             </div>
             <div className="settings-row">
-              <span id="playTestDurLabel">Duration (seconds)</span>
+              <span id="playTestDurLabel">Durasi (detik)</span>
               <input
                 type="number"
                 id="playTestDurInput"
@@ -1994,11 +2022,11 @@ export default function ChatsPage() {
             </div>
           </div>
 
-          {/* Language */}
+          {/* Bahasa */}
           <div className="settings-section">
-            <div className="settings-title" id="langTitle">Language</div>
+            <div className="settings-title" id="langTitle">Bahasa</div>
             <div className="settings-row">
-              <span id="langLabel">Interface &amp; AI Language</span>
+              <span id="langLabel">Bahasa Interface &amp; AI</span>
               <select
                 className="settings-select"
                 id="langSelector"
@@ -2011,13 +2039,13 @@ export default function ChatsPage() {
             </div>
           </div>
 
-          {/* Report */}
+          {/* Laporan */}
           <div className="settings-section">
-            <div className="settings-title" id="reportTitle">Report Issue</div>
+            <div className="settings-title" id="reportTitle">Laporkan Masalah</div>
             <textarea
               className="report-ta"
               id="reportTa"
-              placeholder="Describe the issue..."
+              placeholder="Deskripsikan masalahnya..."
             />
             <div id="cf-turnstile-wrap" style={{ marginTop:8, minHeight:65, display:'none' }}>
               <div
@@ -2033,32 +2061,32 @@ export default function ChatsPage() {
                 onClick={handleClick('sendReport')}
                 id="reportBtn"
               >
-                Send Report
+                Kirim Report
               </button>
               <span id="reportStatus" style={{ fontSize:'var(--fs-sm)', color:'var(--green)' }}/>
             </div>
           </div>
 
-          {/* Admin (hidden by default, shown by JS) */}
+          {/* Admin (disembunyikan secara default, ditampilkan JS) */}
           <div className="settings-section" id="adminSection" style={{ display:'none' }}>
-            <div className="settings-title">Admin Panel</div>
+            <div className="settings-title">Panel Admin</div>
             <div style={{ marginTop:6 }}>
               <a
                 href="/admin-panel"
                 className="settings-btn"
                 style={{ textDecoration:'none' }}
               >
-                Open Admin Panel
+                Buka Panel Admin
               </a>
             </div>
           </div>
 
-          {/* Redeem */}
+          {/* Redeem kode */}
           <div className="settings-section">
             <div className="settings-title" id="redeemTitle">Redeem Code</div>
             <div className="settings-row" style={{ flexDirection:'column', alignItems:'flex-start', gap:6 }}>
               <div style={{ fontSize:'var(--fs-sm)', color:'var(--dim)' }} id="redeemHint">
-                Get codes on Discord
+                Dapatkan code di Discord NEXUS STUDIO
               </div>
               <div style={{ display:'flex', gap:8, width:'100%' }}>
                 <input
@@ -2066,7 +2094,7 @@ export default function ChatsPage() {
                   id="redeemInput"
                   className="settings-select"
                   style={{ flex:1, padding:'0 10px', height:'var(--h-sm)' }}
-                  placeholder="Enter code..."
+                  placeholder="Masukkan kode..."
                 />
                 <button
                   className="settings-btn"
@@ -2086,7 +2114,7 @@ export default function ChatsPage() {
             <div className="settings-title" id="downloadTitle">Download Plugin</div>
             <div className="settings-row" style={{ flexDirection:'column', gap:5, alignItems:'flex-start' }}>
               <div style={{ fontSize:'var(--fs-sm)', color:'var(--dim)' }} id="downloadHint">
-                Install NEXUS AI Plugin in Roblox Studio
+                Install NEXUS AI Plugin di Roblox Studio
               </div>
               <button
                 className="settings-btn"
@@ -2094,14 +2122,14 @@ export default function ChatsPage() {
                 id="downloadPluginBtn"
                 onClick={() => window.open('https://create.roblox.com/store/asset/91870814099475/NEXUS-AI', '_blank')}
               >
-                Download from Creator Store
+                Download dari Creator Store
               </button>
             </div>
           </div>
 
           {/* Logout */}
           <div className="settings-section">
-            <div className="settings-title" id="accountTitle">Account</div>
+            <div className="settings-title" id="accountTitle">Akun</div>
             <div className="settings-row">
               <span id="logoutLabel">Logout</span>
               <button
@@ -2121,18 +2149,18 @@ export default function ChatsPage() {
               onClick={handleClick('closeModal', 'settingsModal')}
               id="settingsCloseBtn"
             >
-              CLOSE
+              TUTUP
             </button>
           </div>
         </div>
       </div>
 
-      {/* GUI Code Export */}
+      {/* Modal Export Kode GUI */}
       <div className="ov" id="guiCodeModal">
         <div className="modal" style={{ width:640 }}>
           <div className="modal-t">
             {Icon.code}
-            <span id="guiCodeTitle">Generated GUI Script</span>
+            <span id="guiCodeTitle">Script GUI yang Dihasilkan</span>
           </div>
           <div className="modal-b">
             <pre
@@ -2153,7 +2181,7 @@ export default function ChatsPage() {
               onClick={handleClick('copyGuiCode')}
               id="guiCodeCopyBtn"
             >
-              Copy
+              Salin
             </button>
             <button
               className="btn-modal secondary"
@@ -2169,13 +2197,13 @@ export default function ChatsPage() {
               onClick={handleClick('closeModal', 'guiCodeModal')}
               id="guiCodeCloseBtn"
             >
-              Close
+              Tutup
             </button>
           </div>
         </div>
       </div>
 
-      {/* GUI AI Build */}
+      {/* Modal AI GUI Builder */}
       <div className="ov" id="guiAIChatModal">
         <div className="modal" style={{ width:500 }}>
           <div className="modal-t">
@@ -2184,7 +2212,7 @@ export default function ChatsPage() {
           </div>
           <div className="modal-b" style={{ marginBottom:8 }}>
             <p style={{ marginBottom:8, fontSize:'var(--fs-md)' }} id="guiAiDesc">
-              Describe the UI you want:
+              Deskripsikan UI yang kamu inginkan:
             </p>
             <select
               id="guiAiThemeSelect"
@@ -2207,7 +2235,7 @@ export default function ChatsPage() {
                 fontFamily:"'JetBrains Mono',monospace",
                 fontSize:12, outline:'none', resize:'vertical', minHeight:90,
               }}
-              placeholder="e.g. Shop GUI with 3 item cards, scroll list, buy button..."
+              placeholder="contoh: Shop GUI 3 item, scroll list, tombol beli, animasi smooth..."
             />
           </div>
           <div className="modal-footer">
@@ -2217,7 +2245,7 @@ export default function ChatsPage() {
               onClick={handleClick('generateGuiFromAI')}
               id="guiAiBuildBtn"
             >
-              Build with AI
+              Bangun dengan AI
             </button>
             <button
               className="btn-modal secondary"
@@ -2225,18 +2253,18 @@ export default function ChatsPage() {
               onClick={handleClick('closeModal', 'guiAIChatModal')}
               id="guiAiCancelBtn"
             >
-              Cancel
+              Batal
             </button>
           </div>
         </div>
       </div>
 
-      {/* Code Preview */}
+      {/* Modal Preview Kode */}
       <div className="ov" id="codePreviewModal">
         <div className="modal" style={{ width:700 }}>
           <div className="modal-t">
             {Icon.code}
-            <span id="codePreviewTitle">Script Preview</span>
+            <span id="codePreviewTitle">Preview Script</span>
             <span
               style={{ marginLeft:'auto', fontSize:'var(--fs-2xs)', color:'var(--dim)' }}
               id="codePreviewPath"
@@ -2252,7 +2280,7 @@ export default function ChatsPage() {
                     type="button"
                     onClick={handleClick('copyPreviewCode')}
                   >
-                    {Icon.copy} Copy
+                    {Icon.copy} Salin
                   </button>
                 </div>
               </div>
@@ -2271,22 +2299,22 @@ export default function ChatsPage() {
               type="button"
               onClick={handleClick('closeModal', 'codePreviewModal')}
             >
-              Close
+              Tutup
             </button>
           </div>
         </div>
       </div>
 
-      {/* Share */}
+      {/* Modal Bagikan Chat */}
       <div className="ov" id="shareModal">
         <div className="modal" style={{ width:520 }}>
           <div className="modal-t">
             {Icon.share}
-            <span id="shareModalTitle">Share Chat</span>
+            <span id="shareModalTitle">Bagikan Chat</span>
           </div>
           <div className="modal-b" style={{ marginBottom:8 }}>
             <p style={{ fontSize:'var(--fs-md)', color:'var(--dim)', marginBottom:6 }} id="shareModalDesc">
-              Copy conversation text:
+              Salin teks percakapan ini:
             </p>
             <textarea
               className="share-modal-ta"
@@ -2301,7 +2329,7 @@ export default function ChatsPage() {
               onClick={handleClick('copyShareText')}
               id="shareModalCopyBtn"
             >
-              Copy Text
+              Salin Teks
             </button>
             <button
               className="btn-modal secondary"
@@ -2309,7 +2337,7 @@ export default function ChatsPage() {
               onClick={handleClick('closeModal', 'shareModal')}
               id="shareModalCloseBtn"
             >
-              Close
+              Tutup
             </button>
           </div>
         </div>
