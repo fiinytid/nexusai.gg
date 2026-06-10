@@ -3851,3 +3851,4 @@ document.addEventListener('visibilitychange', function () {
 });
 
 initApp();
+export {};
