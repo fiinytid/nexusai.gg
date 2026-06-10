@@ -204,28 +204,37 @@ body::before {
 .plug-banner svg { width:11px; height:11px; stroke:currentColor; fill:none; stroke-width:2; flex-shrink:0 }
 .plug-banner a   { color:var(--cyan); cursor:pointer; text-decoration:none }
 .plug-banner.connected { background:rgba(0,255,170,.05); border-color:rgba(0,255,170,.2); color:var(--green) }
+
+/* ── HEADER ── */
 .chat-hdr {
-  padding:0 16px; border-bottom:1px solid var(--b); background:var(--bg2);
-  display:flex; align-items:center; gap:9px; flex-shrink:0; height:48px; min-width:0;
+  padding:0 12px 0 16px; border-bottom:1px solid var(--b); background:var(--bg2);
+  display:flex; align-items:center; gap:8px; flex-shrink:0; height:48px; min-width:0;
 }
+/* Title: takes leftover space, truncates */
 .chat-title {
   font-family:'Orbitron',sans-serif; font-size:11px; font-weight:700;
-  color:white; flex:1; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; min-width:0;
+  color:white; flex:1 1 0; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; min-width:0;
 }
+/* Project badge: fixed size, only shows when set */
 .proj-badge-hdr {
-  font-size:var(--fs-2xs); padding:3px 9px; border-radius:10px;
+  font-size:var(--fs-2xs); padding:2px 8px; border-radius:10px; height:20px; line-height:16px;
   background:rgba(255,170,50,.07); border:1px solid rgba(255,170,50,.2);
-  color:rgba(255,170,50,.8); white-space:nowrap; overflow:hidden; text-overflow:ellipsis; max-width:130px; flex-shrink:0;
+  color:rgba(255,170,50,.85); white-space:nowrap; overflow:hidden; text-overflow:ellipsis;
+  max-width:120px; flex-shrink:0; display:flex; align-items:center;
 }
+/* Studio badge: compact, never grows */
 .status-badge {
-  display:flex; align-items:center; gap:5px; padding:0 10px; border-radius:20px; border:1px solid;
-  font-size:var(--fs-2xs); cursor:pointer; flex-shrink:0; transition:.2s; white-space:nowrap; height:var(--h-sm);
+  display:flex; align-items:center; gap:4px; padding:0 8px;
+  border-radius:20px; border:1px solid; height:22px;
+  font-size:var(--fs-2xs); cursor:pointer; flex-shrink:0; transition:.2s;
+  white-space:nowrap; max-width:110px; overflow:hidden;
 }
 .status-badge.off { border-color:rgba(255,45,107,.3); color:var(--pink); background:rgba(255,45,107,.06) }
 .status-badge.on  { border-color:rgba(0,255,170,.3);  color:var(--green); background:rgba(0,255,170,.06) }
 .sdot { width:5px; height:5px; border-radius:50%; background:currentColor; flex-shrink:0 }
 .sdot.pulse { animation:pd 1.8s infinite }
 @keyframes pd { 0%,100%{opacity:1} 50%{opacity:.25} }
+
 .chat-tabs {
   display:flex; gap:4px; padding:5px 14px; border-bottom:1px solid var(--b); background:var(--bg2);
   flex-shrink:0; align-items:center; overflow-x:auto; overflow-y:hidden; scrollbar-width:none; height:42px;
@@ -365,9 +374,10 @@ body::before {
   display:flex; align-items:center; gap:5px; height:var(--h-sm); padding:0 8px;
   border-radius:var(--r-s); background:var(--card); border:1px solid var(--b);
   cursor:pointer; transition:.12s; font-family:'JetBrains Mono',monospace; font-size:var(--fs-2xs); color:var(--dim);
-  flex-shrink:0; white-space:nowrap;
+  flex-shrink:0; white-space:nowrap; max-width:100px; overflow:hidden;
 }
 .theme-picker-btn:hover { border-color:var(--cyan2); color:var(--cyan) }
+.theme-picker-label { overflow:hidden; text-overflow:ellipsis; white-space:nowrap; flex:1; min-width:0 }
 .theme-swatch { width:10px; height:10px; border-radius:50%; flex-shrink:0; border:1px solid rgba(255,255,255,.2) }
 .btn-send, .btn-cancel {
   border:none; border-radius:var(--r); width:var(--h-md); height:var(--h-md);
@@ -388,17 +398,24 @@ body::before {
 .model-dd::-webkit-scrollbar { width:3px }
 .model-dd::-webkit-scrollbar-thumb { background:var(--b) }
 .model-dd.open { display:block }
+
+/* ── THEME DROPDOWN — fully rendered by chats.ts ── */
 .theme-dd {
   position:fixed; background:var(--bg3); border:1px solid var(--b); border-radius:var(--r);
   z-index:9000; display:none; box-shadow:0 8px 32px rgba(0,0,0,.95);
-  width:200px; padding:4px; overflow:hidden;
+  width:215px; padding:4px; overflow-y:auto; max-height:min(400px,75vh);
 }
+.theme-dd::-webkit-scrollbar { width:3px }
+.theme-dd::-webkit-scrollbar-thumb { background:var(--b) }
 .theme-dd.open { display:block }
 .theme-dd-title {
   font-size:var(--fs-2xs); color:var(--dim); text-transform:uppercase; letter-spacing:2px;
   padding:5px 8px 6px; border-bottom:1px solid var(--b); margin-bottom:3px; line-height:1;
 }
-.theme-dd-hint { font-size:var(--fs-2xs); color:rgba(0,229,255,.35); padding:3px 8px 5px; border-bottom:1px solid var(--b); margin-bottom:3px; line-height:1.4 }
+.theme-dd-hint {
+  font-size:var(--fs-2xs); color:rgba(0,229,255,.35); padding:3px 8px 5px;
+  border-bottom:1px solid var(--b); margin-bottom:3px; line-height:1.4;
+}
 .theme-opt {
   display:flex; align-items:center; gap:8px; padding:0 8px; height:30px;
   border-radius:5px; cursor:pointer; transition:background .1s; width:100%; box-sizing:border-box;
@@ -409,8 +426,12 @@ body::before {
 .theme-preview span { width:6px; height:18px; border-radius:3px; display:block; flex-shrink:0 }
 .theme-opt-name { font-size:var(--fs-sm); color:var(--text); flex:1; font-family:'JetBrains Mono',monospace; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; line-height:1 }
 .theme-opt.act .theme-opt-name { color:var(--cyan) }
-.theme-opt-tick { width:10px; height:10px; flex-shrink:0; opacity:0 }
-.theme-opt.act .theme-opt-tick { opacity:1 }
+/* check icon — hidden by default, visible on active via chats.ts inline SVG */
+.theme-opt-check {
+  width:10px; height:10px; flex-shrink:0;
+  color:var(--cyan); stroke:currentColor; fill:none; stroke-width:2.5;
+}
+
 .mg { padding:6px 11px 3px; font-size:var(--fs-2xs); color:var(--dim); text-transform:uppercase; letter-spacing:2px; border-top:1px solid var(--b) }
 .mg:first-child { border-top:none }
 .mo { padding:7px 11px; display:flex; align-items:center; gap:7px; cursor:pointer; transition:.1s }
@@ -609,7 +630,8 @@ body::before {
 .suggestion-chip {
   display:flex; align-items:center; gap:8px; padding:7px 12px 7px 10px;
   background:rgba(0,229,255,.05); border:1px solid rgba(0,229,255,.16); border-radius:8px;
-  color:var(--text); font-size:11.5px; cursor:pointer; text-align:left; transition:background .14s,border-color .14s,color .14s,transform .1s;
+  color:var(--text); font-size:11.5px; cursor:pointer; text-align:left;
+  transition:background .14s,border-color .14s,color .14s,transform .1s;
   font-family:'JetBrains Mono',monospace; width:fit-content; max-width:100%; line-height:1.4;
 }
 .suggestion-chip::before {
@@ -630,7 +652,7 @@ body::before {
   :root{ --sb-w:210px }
   .inp-model{ max-width:135px }
   .theme-picker-btn{ display:none }
-  .proj-badge-hdr{ max-width:100px }
+  .proj-badge-hdr{ max-width:90px }
 }
 @media(max-width:768px){
   #app{ display:flex!important; flex-direction:column; height:100vh; height:100dvh; grid-template-columns:none!important; overflow:hidden }
@@ -677,8 +699,6 @@ body::before {
 
 /* ─────────────────────────────────────────────────
    QUEUE-BASED wCall
-   Menampung panggilan yang datang sebelum chats.ts
-   selesai di-load, lalu di-flush setelah siap.
 ───────────────────────────────────────────────── */
 type AnyFn = (...args: unknown[]) => void
 
@@ -687,71 +707,38 @@ interface PendingCall {
   args: unknown[]
 }
 
-// Module-level — bertahan di semua render ulang
 const _pendingCalls: PendingCall[] = []
 let   _chatsModuleLoaded = false
 
 function wCall(name: string, ...args: unknown[]): void {
   const w  = window as unknown as Record<string, unknown>
   const fn = w[name]
-
-  if (typeof fn === 'function') {
-    ;(fn as AnyFn)(...args)
-    return
-  }
-
-  // Modul belum selesai load → antre panggilan
-  if (!_chatsModuleLoaded) {
-    _pendingCalls.push({ name, args })
-    return
-  }
-
-  // Sudah load tapi fungsi tetap tidak ada → coba 1x lagi setelah 80ms
+  if (typeof fn === 'function') { ;(fn as AnyFn)(...args); return }
+  if (!_chatsModuleLoaded) { _pendingCalls.push({ name, args }); return }
   setTimeout(() => {
     const fn2 = (window as unknown as Record<string, unknown>)[name]
-    if (typeof fn2 === 'function') {
-      ;(fn2 as AnyFn)(...args)
-    } else {
-      console.warn('[NEXUS] wCall: fungsi tidak ditemukan →', name)
-    }
+    if (typeof fn2 === 'function') { ;(fn2 as AnyFn)(...args) }
+    else console.warn('[NEXUS] wCall: fungsi tidak ditemukan →', name)
   }, 80)
 }
 
 function _flushPendingCalls(): void {
   _chatsModuleLoaded = true
-  const queued = _pendingCalls.splice(0)          // ambil semua, kosongkan array
+  const queued = _pendingCalls.splice(0)
   queued.forEach(({ name, args }) => {
     const fn = (window as unknown as Record<string, unknown>)[name]
-    if (typeof fn === 'function') {
-      ;(fn as AnyFn)(...args)
-    } else {
-      console.warn('[NEXUS] Flush: fungsi tidak ditemukan →', name)
-    }
+    if (typeof fn === 'function') { ;(fn as AnyFn)(...args) }
+    else console.warn('[NEXUS] Flush: fungsi tidak ditemukan →', name)
   })
 }
 
 /* ─────────────────────────────────────────────────
-   TIPE
+   TYPES
 ───────────────────────────────────────────────── */
-type GuiType =
-  | 'Frame'
-  | 'TextLabel'
-  | 'TextButton'
-  | 'TextBox'
-  | 'ImageLabel'
-  | 'ScrollingFrame'
+type GuiType = 'Frame' | 'TextLabel' | 'TextButton' | 'TextBox' | 'ImageLabel' | 'ScrollingFrame'
 
-interface GuiTypeConfig {
-  type:  GuiType
-  label: string
-  icon:  React.ReactNode
-}
-
-interface ThemeOption {
-  value:  string
-  label:  string
-  colors: string[]
-}
+interface GuiTypeConfig { type: GuiType; label: string; icon: React.ReactNode }
+interface ThemeOption   { value: string; label: string; colors: string[] }
 
 /* ─────────────────────────────────────────────────
    ICONS
@@ -763,113 +750,23 @@ const Icon: Record<string, React.ReactElement> = {
       <path d="M19.4 15a1.65 1.65 0 00.33 1.82l.06.06a2 2 0 010 2.83 2 2 0 01-2.83 0l-.06-.06a1.65 1.65 0 00-1.82-.33 1.65 1.65 0 00-1 1.51V21a2 2 0 01-4 0v-.09A1.65 1.65 0 009 19.4a1.65 1.65 0 00-1.82.33l-.06.06a2 2 0 01-2.83-2.83l.06-.06A1.65 1.65 0 004.68 15a1.65 1.65 0 00-1.51-1H3a2 2 0 010-4h.09A1.65 1.65 0 004.6 9a1.65 1.65 0 00-.33-1.82l-.06-.06a2 2 0 012.83-2.83l.06.06A1.65 1.65 0 009 4.68a1.65 1.65 0 001-1.51V3a2 2 0 014 0v.09a1.65 1.65 0 001 1.51 1.65 1.65 0 001.82-.33l.06-.06a2 2 0 012.83 2.83l-.06.06A1.65 1.65 0 0019.4 9a1.65 1.65 0 001.51 1H21a2 2 0 010 4h-.09a1.65 1.65 0 00-1.51 1z"/>
     </svg>
   ),
-  chat: (
-    <svg viewBox="0 0 24 24" width={11} height={11} stroke="currentColor" fill="none" strokeWidth={2}>
-      <path d="M21 15a2 2 0 01-2 2H7l-4 4V5a2 2 0 012-2h14a2 2 0 012 2z"/>
-    </svg>
-  ),
-  code: (
-    <svg viewBox="0 0 24 24" width={11} height={11} stroke="currentColor" fill="none" strokeWidth={2}>
-      <polyline points="16 18 22 12 16 6"/><polyline points="8 6 2 12 8 18"/>
-    </svg>
-  ),
-  grid: (
-    <svg viewBox="0 0 24 24" width={11} height={11} stroke="currentColor" fill="none" strokeWidth={2}>
-      <rect x="3" y="3" width="18" height="18" rx="2"/>
-      <path d="M3 9h18M9 21V9"/>
-    </svg>
-  ),
-  send: (
-    <svg viewBox="0 0 24 24" width={14} height={14} stroke="currentColor" fill="none" strokeWidth={2}>
-      <line x1="22" y1="2" x2="11" y2="13"/>
-      <polygon points="22 2 15 22 11 13 2 9 22 2"/>
-    </svg>
-  ),
-  x: (
-    <svg viewBox="0 0 24 24" width={14} height={14} stroke="currentColor" fill="none" strokeWidth={2}>
-      <line x1="18" y1="6" x2="6" y2="18"/>
-      <line x1="6" y1="6" x2="18" y2="18"/>
-    </svg>
-  ),
-  chevronDown: (
-    <svg width={8} height={8} viewBox="0 0 24 24" stroke="currentColor" fill="none" strokeWidth={2}
-      style={{ color:'var(--dim)', flexShrink:0 }}>
-      <polyline points="6 9 12 15 18 9"/>
-    </svg>
-  ),
-  check: (
-    <svg viewBox="0 0 24 24" width={10} height={10} stroke="currentColor" fill="none" strokeWidth={2.5}>
-      <polyline points="20 6 9 17 4 12"/>
-    </svg>
-  ),
-  attach: (
-    <svg viewBox="0 0 24 24" width={14} height={14} stroke="currentColor" fill="none" strokeWidth={1.5}>
-      <path d="M21.44 11.05l-9.19 9.19a6 6 0 01-8.49-8.49l9.19-9.19a4 4 0 015.66 5.66l-9.2 9.19a2 2 0 01-2.83-2.83l8.49-8.48"/>
-    </svg>
-  ),
-  trash: (
-    <svg viewBox="0 0 24 24" width={14} height={14} stroke="currentColor" fill="none" strokeWidth={1.5}>
-      <polyline points="3 6 5 6 21 6"/>
-      <path d="M19 6v14a2 2 0 01-2 2H7a2 2 0 01-2-2V6m3 0V4a2 2 0 012-2h4a2 2 0 012 2v2"/>
-    </svg>
-  ),
-  bulb: (
-    <svg viewBox="0 0 24 24" width={11} height={11} stroke="currentColor" fill="none" strokeWidth={2}>
-      <path d="M9 18h6M12 2a7 7 0 017 7c0 2.38-1.19 4.47-3 5.74V17H8v-2.26C6.19 13.47 5 11.38 5 9a7 7 0 017-7z"/>
-    </svg>
-  ),
-  download: (
-    <svg viewBox="0 0 24 24" width={16} height={16} stroke="currentColor" fill="none" strokeWidth={2}>
-      <path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4"/>
-      <polyline points="7 10 12 15 17 10"/>
-      <line x1="12" y1="15" x2="12" y2="3"/>
-    </svg>
-  ),
-  share: (
-    <svg viewBox="0 0 24 24" width={16} height={16} stroke="currentColor" fill="none" strokeWidth={2}>
-      <circle cx="18" cy="5" r="3"/><circle cx="6" cy="12" r="3"/><circle cx="18" cy="19" r="3"/>
-      <line x1="8.59" y1="13.51" x2="15.42" y2="17.49"/>
-      <line x1="15.41" y1="6.51" x2="8.59" y2="10.49"/>
-    </svg>
-  ),
-  info: (
-    <svg viewBox="0 0 24 24" width={11} height={11} stroke="currentColor" fill="none" strokeWidth={2}>
-      <circle cx="12" cy="12" r="10"/>
-      <line x1="12" y1="8" x2="12" y2="12"/>
-      <line x1="12" y1="16" x2="12.01" y2="16"/>
-    </svg>
-  ),
-  copy: (
-    <svg viewBox="0 0 24 24" width={11} height={11} stroke="currentColor" fill="none" strokeWidth={2}>
-      <rect x="9" y="9" width="13" height="13" rx="2"/>
-      <path d="M5 15H4a2 2 0 01-2-2V4a2 2 0 012-2h9a2 2 0 012 2v1"/>
-    </svg>
-  ),
-  home: (
-    <svg viewBox="0 0 24 24" width={13} height={13} stroke="currentColor" fill="none" strokeWidth={2}>
-      <path d="M3 9l9-7 9 7v11a2 2 0 01-2 2H5a2 2 0 01-2-2z"/>
-      <polyline points="9 22 9 12 15 12 15 22"/>
-    </svg>
-  ),
-  plus: (
-    <svg viewBox="0 0 24 24" width={13} height={13} stroke="currentColor" fill="none" strokeWidth={2}>
-      <line x1="12" y1="5" x2="12" y2="19"/>
-      <line x1="5" y1="12" x2="19" y2="12"/>
-    </svg>
-  ),
-  help: (
-    <svg viewBox="0 0 24 24" width={13} height={13} stroke="currentColor" fill="none" strokeWidth={2}>
-      <circle cx="12" cy="12" r="10"/>
-      <path d="M9.09 9a3 3 0 015.83 1c0 2-3 3-3 3"/>
-      <line x1="12" y1="17" x2="12.01" y2="17"/>
-    </svg>
-  ),
-  inbox: (
-    <svg viewBox="0 0 24 24" width={13} height={13} stroke="currentColor" fill="none" strokeWidth={2}>
-      <polyline points="22 12 16 12 14 15 10 15 8 12 2 12"/>
-      <path d="M5.45 5.11L2 12v6a2 2 0 002 2h16a2 2 0 002-2v-6l-3.45-6.89A2 2 0 0016.76 4H7.24a2 2 0 00-1.79 1.11z"/>
-    </svg>
-  ),
+  chat: (<svg viewBox="0 0 24 24" width={11} height={11} stroke="currentColor" fill="none" strokeWidth={2}><path d="M21 15a2 2 0 01-2 2H7l-4 4V5a2 2 0 012-2h14a2 2 0 012 2z"/></svg>),
+  code: (<svg viewBox="0 0 24 24" width={11} height={11} stroke="currentColor" fill="none" strokeWidth={2}><polyline points="16 18 22 12 16 6"/><polyline points="8 6 2 12 8 18"/></svg>),
+  grid: (<svg viewBox="0 0 24 24" width={11} height={11} stroke="currentColor" fill="none" strokeWidth={2}><rect x="3" y="3" width="18" height="18" rx="2"/><path d="M3 9h18M9 21V9"/></svg>),
+  send: (<svg viewBox="0 0 24 24" width={14} height={14} stroke="currentColor" fill="none" strokeWidth={2}><line x1="22" y1="2" x2="11" y2="13"/><polygon points="22 2 15 22 11 13 2 9 22 2"/></svg>),
+  x:    (<svg viewBox="0 0 24 24" width={14} height={14} stroke="currentColor" fill="none" strokeWidth={2}><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>),
+  chevronDown: (<svg width={8} height={8} viewBox="0 0 24 24" stroke="currentColor" fill="none" strokeWidth={2} style={{ color:'var(--dim)', flexShrink:0 }}><polyline points="6 9 12 15 18 9"/></svg>),
+  attach: (<svg viewBox="0 0 24 24" width={14} height={14} stroke="currentColor" fill="none" strokeWidth={1.5}><path d="M21.44 11.05l-9.19 9.19a6 6 0 01-8.49-8.49l9.19-9.19a4 4 0 015.66 5.66l-9.2 9.19a2 2 0 01-2.83-2.83l8.49-8.48"/></svg>),
+  trash: (<svg viewBox="0 0 24 24" width={14} height={14} stroke="currentColor" fill="none" strokeWidth={1.5}><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 01-2 2H7a2 2 0 01-2-2V6m3 0V4a2 2 0 012-2h4a2 2 0 012 2v2"/></svg>),
+  bulb: (<svg viewBox="0 0 24 24" width={11} height={11} stroke="currentColor" fill="none" strokeWidth={2}><path d="M9 18h6M12 2a7 7 0 017 7c0 2.38-1.19 4.47-3 5.74V17H8v-2.26C6.19 13.47 5 11.38 5 9a7 7 0 017-7z"/></svg>),
+  download: (<svg viewBox="0 0 24 24" width={16} height={16} stroke="currentColor" fill="none" strokeWidth={2}><path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>),
+  share: (<svg viewBox="0 0 24 24" width={16} height={16} stroke="currentColor" fill="none" strokeWidth={2}><circle cx="18" cy="5" r="3"/><circle cx="6" cy="12" r="3"/><circle cx="18" cy="19" r="3"/><line x1="8.59" y1="13.51" x2="15.42" y2="17.49"/><line x1="15.41" y1="6.51" x2="8.59" y2="10.49"/></svg>),
+  info: (<svg viewBox="0 0 24 24" width={11} height={11} stroke="currentColor" fill="none" strokeWidth={2}><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>),
+  copy: (<svg viewBox="0 0 24 24" width={11} height={11} stroke="currentColor" fill="none" strokeWidth={2}><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 01-2-2V4a2 2 0 012-2h9a2 2 0 012 2v1"/></svg>),
+  home: (<svg viewBox="0 0 24 24" width={13} height={13} stroke="currentColor" fill="none" strokeWidth={2}><path d="M3 9l9-7 9 7v11a2 2 0 01-2 2H5a2 2 0 01-2-2z"/><polyline points="9 22 9 12 15 12 15 22"/></svg>),
+  plus: (<svg viewBox="0 0 24 24" width={13} height={13} stroke="currentColor" fill="none" strokeWidth={2}><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>),
+  help: (<svg viewBox="0 0 24 24" width={13} height={13} stroke="currentColor" fill="none" strokeWidth={2}><circle cx="12" cy="12" r="10"/><path d="M9.09 9a3 3 0 015.83 1c0 2-3 3-3 3"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>),
+  inbox: (<svg viewBox="0 0 24 24" width={13} height={13} stroke="currentColor" fill="none" strokeWidth={2}><polyline points="22 12 16 12 14 15 10 15 8 12 2 12"/><path d="M5.45 5.11L2 12v6a2 2 0 002 2h16a2 2 0 002-2v-6l-3.45-6.89A2 2 0 0016.76 4H7.24a2 2 0 00-1.79 1.11z"/></svg>),
 }
 
 /* ─────────────────────────────────────────────────
@@ -887,26 +784,17 @@ export default function ChatsPage() {
 
     if (!scriptsLoadedRef.current) {
       scriptsLoadedRef.current = true
-
       import('./system_prompt')
         .then((mod) => {
-          // Assign buildSysPrompt ke window agar chats.ts menemukannya
           const smod = mod as Record<string, unknown>
           const w    = window as unknown as Record<string, unknown>
-          if (typeof smod.buildSysPrompt === 'function') {
-            w.buildSysPrompt = smod.buildSysPrompt
-          } else if (typeof smod.default === 'function') {
-            w.buildSysPrompt = smod.default
-          }
+          if (typeof smod.buildSysPrompt === 'function') w.buildSysPrompt = smod.buildSysPrompt
+          else if (typeof smod.default === 'function')   w.buildSysPrompt = smod.default
           return import('./chats')
         })
-        .then(() => {
-          // chats.ts selesai → flush semua panggilan yang ditunda
-          _flushPendingCalls()
-        })
+        .then(() => { _flushPendingCalls() })
         .catch((err: unknown) => {
           console.error('[NEXUS] Module load error:', err)
-          // Tandai loaded agar antrian tidak menumpuk terus
           _chatsModuleLoaded = true
           _pendingCalls.length = 0
         })
@@ -915,85 +803,54 @@ export default function ChatsPage() {
     return () => {
       document.documentElement.style.height   = ''
       document.documentElement.style.overflow = ''
-      document.body.style.height = ''
+      document.body.style.height   = ''
       document.body.style.overflow = ''
     }
   }, [])
 
-  /* ─── handler helpers ─── */
+  /* ─── handlers ─── */
   const handleClick = (fn: string, ...args: unknown[]) =>
     (): void => wCall(fn, ...args)
 
   const handleClickWithEvent = (fn: string, ...args: unknown[]) =>
-    (e: React.MouseEvent<HTMLElement>): void => {
-      e.stopPropagation()
-      wCall(fn, e, ...args)
-    }
+    (e: React.MouseEvent<HTMLElement>): void => { e.stopPropagation(); wCall(fn, e, ...args) }
 
   const handleTabClick = (tab: string) =>
-    (e: React.MouseEvent<HTMLButtonElement>): void =>
-      wCall('switchTab', tab, e.currentTarget)
+    (e: React.MouseEvent<HTMLButtonElement>): void => wCall('switchTab', tab, e.currentTarget)
 
   const handleImgErr = (e: React.SyntheticEvent<HTMLImageElement>): void => {
     e.currentTarget.style.display = 'none'
   }
-
   const handleLogoErr = (e: React.SyntheticEvent<HTMLImageElement>): void => {
     const p = e.currentTarget.parentElement
     if (p) p.style.background = 'linear-gradient(135deg,#00e5ff,#8800ff)'
     e.currentTarget.style.display = 'none'
   }
-
-  const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>): void =>
-    wCall('handleFile', e)
-
-  const handlePlayTestDurChange = (e: React.ChangeEvent<HTMLInputElement>): void =>
-    wCall('setPlayTestDur', e.target.value)
-
-  const handleLangChange = (e: React.ChangeEvent<HTMLSelectElement>): void =>
-    wCall('changeLang', e.target.value)
-
-  const handleGuiThemeChange = (e: React.ChangeEvent<HTMLSelectElement>): void =>
-    wCall('applyGuiTheme', e.target.value)
+  const handleFileChange          = (e: React.ChangeEvent<HTMLInputElement>): void => wCall('handleFile', e)
+  const handlePlayTestDurChange   = (e: React.ChangeEvent<HTMLInputElement>): void => wCall('setPlayTestDur', e.target.value)
+  const handleLangChange          = (e: React.ChangeEvent<HTMLSelectElement>): void => wCall('changeLang', e.target.value)
+  const handleGuiThemeChange      = (e: React.ChangeEvent<HTMLSelectElement>): void => wCall('applyGuiTheme', e.target.value)
 
   /* ─── GUI element types ─── */
   const guiTypes: GuiTypeConfig[] = [
-    {
-      type: 'Frame', label: 'Frame',
-      icon: <rect x="3" y="3" width="18" height="18" rx="2"/>,
-    },
-    {
-      type: 'TextLabel', label: 'Label',
-      icon: (<><polyline points="4 7 4 4 20 4 20 7"/><line x1="9" y1="20" x2="15" y2="20"/><line x1="12" y1="4" x2="12" y2="20"/></>),
-    },
-    {
-      type: 'TextButton', label: 'Tombol',
-      icon: <rect x="2" y="7" width="20" height="10" rx="3"/>,
-    },
-    {
-      type: 'TextBox', label: 'Input',
-      icon: (<><rect x="3" y="5" width="18" height="14" rx="2"/><line x1="7" y1="12" x2="17" y2="12"/></>),
-    },
-    {
-      type: 'ImageLabel', label: 'Gambar',
-      icon: (<><rect x="3" y="3" width="18" height="18" rx="2"/><circle cx="8.5" cy="8.5" r="1.5"/><polyline points="21 15 16 10 5 21"/></>),
-    },
-    {
-      type: 'ScrollingFrame', label: 'Scroll',
-      icon: (<><rect x="3" y="3" width="18" height="18" rx="2"/><path d="M3 9h18"/></>),
-    },
+    { type:'Frame',          label:'Frame',  icon:<rect x="3" y="3" width="18" height="18" rx="2"/> },
+    { type:'TextLabel',      label:'Label',  icon:<><polyline points="4 7 4 4 20 4 20 7"/><line x1="9" y1="20" x2="15" y2="20"/><line x1="12" y1="4" x2="12" y2="20"/></> },
+    { type:'TextButton',     label:'Tombol', icon:<rect x="2" y="7" width="20" height="10" rx="3"/> },
+    { type:'TextBox',        label:'Input',  icon:<><rect x="3" y="5" width="18" height="14" rx="2"/><line x1="7" y1="12" x2="17" y2="12"/></> },
+    { type:'ImageLabel',     label:'Gambar', icon:<><rect x="3" y="3" width="18" height="18" rx="2"/><circle cx="8.5" cy="8.5" r="1.5"/><polyline points="21 15 16 10 5 21"/></> },
+    { type:'ScrollingFrame', label:'Scroll', icon:<><rect x="3" y="3" width="18" height="18" rx="2"/><path d="M3 9h18"/></> },
   ]
 
-  /* ─── theme options ─── */
+  /* ─── theme options (for select dropdowns only, NOT for theme-dd) ─── */
   const themeOptions: ThemeOption[] = [
-    { value: 'nexus_ai',  label: 'NEXUS AI',  colors: ['#030312','#06071a','#00e5ff','#8800ff'] },
-    { value: 'aurora',    label: 'Aurora',    colors: ['#030f0a','#061510','#00ffb4','#00a8ff'] },
-    { value: 'candy',     label: 'Candy',     colors: ['#0f0508','#180a10','#ff4fa0','#ff80cc'] },
-    { value: 'dark',      label: 'Dark',      colors: ['#080808','#101010','#aaaaaa','#666666'] },
-    { value: 'default',   label: 'Default',   colors: ['#0a0c12','#10141e','#0062d0','#00b4ff'] },
-    { value: 'midnight',  label: 'Midnight',  colors: ['#06050f','#0d0b1a','#6644ff','#aa44ff'] },
-    { value: 'studs',     label: 'Studs',     colors: ['#0f0800','#180d00','#ff7700','#ffaa00'] },
-    { value: 'custom',    label: 'Custom',    colors: ['#0d0d0d','#141414','#888888','#555555'] },
+    { value:'nexus_ai', label:'NEXUS AI', colors:['#030312','#06071a','#00e5ff','#8800ff'] },
+    { value:'aurora',   label:'Aurora',   colors:['#030f0a','#061510','#00ffb4','#00a8ff'] },
+    { value:'candy',    label:'Candy',    colors:['#0f0508','#180a10','#ff4fa0','#ff80cc'] },
+    { value:'dark',     label:'Dark',     colors:['#080808','#101010','#aaaaaa','#666666'] },
+    { value:'default',  label:'Default',  colors:['#0a0c12','#10141e','#0062d0','#00b4ff'] },
+    { value:'midnight', label:'Midnight', colors:['#06050f','#0d0b1a','#6644ff','#aa44ff'] },
+    { value:'studs',    label:'Studs',    colors:['#0f0800','#180d00','#ff7700','#ffaa00'] },
+    { value:'custom',   label:'Custom',   colors:['#0d0d0d','#141414','#888888','#555555'] },
   ]
 
   /* ════════════════════════════════════════════
@@ -1007,17 +864,14 @@ export default function ChatsPage() {
       <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Orbitron:wght@400;600;700;900&family=JetBrains+Mono:wght@300;400;500&display=swap"/>
       <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/styles/atom-one-dark.min.css"/>
 
-      {/* Library CDN — load sebelum chats.ts dieksekusi */}
-      <Script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"                                                            strategy="beforeInteractive"/>
-      <Script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/highlight.min.js"                                  strategy="beforeInteractive"/>
-      <Script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/languages/lua.min.js"                              strategy="beforeInteractive"/>
-      <Script src="https://challenges.cloudflare.com/turnstile/v0/api.js?render=explicit"                                        strategy="afterInteractive"/>
+      <Script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"                                               strategy="beforeInteractive"/>
+      <Script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/highlight.min.js"                     strategy="beforeInteractive"/>
+      <Script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/languages/lua.min.js"                 strategy="beforeInteractive"/>
+      <Script src="https://challenges.cloudflare.com/turnstile/v0/api.js?render=explicit"                           strategy="afterInteractive"/>
 
       {/* PAGE LOADER */}
       <div id="pageLoader">
-        <div className="pl-logo">
-          <img src="/nexusai.png" alt="N" onError={handleLogoErr}/>
-        </div>
+        <div className="pl-logo"><img src="/nexusai.png" alt="N" onError={handleLogoErr}/></div>
         <div className="pl-title">NEXUS AI</div>
         <div className="pl-bar-wrap"><div className="pl-bar" id="plBar"/></div>
         <div className="pl-txt" id="plTxt">Menginisialisasi...</div>
@@ -1027,8 +881,7 @@ export default function ChatsPage() {
       <div className="mention-dd" id="mentionDD">
         <div className="mention-hdr">
           <svg viewBox="0 0 24 24" width={10} height={10} stroke="currentColor" fill="none" strokeWidth={2}>
-            <circle cx="12" cy="8" r="4"/>
-            <path d="M20 21a8 8 0 10-16 0"/>
+            <circle cx="12" cy="8" r="4"/><path d="M20 21a8 8 0 10-16 0"/>
           </svg>
           <span id="mentionHdrTxt">Scripts &amp; Objek di Place</span>
         </div>
@@ -1049,11 +902,9 @@ export default function ChatsPage() {
           </div>
 
           <div className="sb-user">
-            <img
-              className="sb-av" id="sbAv" src="/nexusai.png" alt=""
+            <img className="sb-av" id="sbAv" src="/nexusai.png" alt=""
               onError={(e) => { e.currentTarget.style.opacity = '0.3' }}
-              onClick={handleClick('openAvatarModal')}
-            />
+              onClick={handleClick('openAvatarModal')}/>
             <div style={{ minWidth:0, flex:1 }}>
               <div className="sb-un"   id="sbUn">-</div>
               <div className="sb-role" id="sbRole">Roblox Developer</div>
@@ -1063,12 +914,10 @@ export default function ChatsPage() {
             </button>
           </div>
 
-          <div
-            className="creds" id="credsEl"
+          <div className="creds" id="credsEl"
             onClick={() => { window.location.href = '/payment' }}
             role="button" tabIndex={0}
-            onKeyDown={(e) => { if (e.key === 'Enter') window.location.href = '/payment' }}
-          >
+            onKeyDown={(e) => { if (e.key === 'Enter') window.location.href = '/payment' }}>
             <div>
               <div className="cred-l"    id="credLabel">Credits</div>
               <div className="cred-hint" id="credHint">Klik untuk beli lebih</div>
@@ -1109,11 +958,8 @@ export default function ChatsPage() {
             YouTube: <span style={{ color:'rgba(0,229,255,.6)' }}>NEXUS STUDIO</span>
           </div>
 
-          <div
-            className="collapse-sb"
-            onClick={handleClick('toggleSidebar')} role="button" tabIndex={0}
-            onKeyDown={(e) => { if (e.key === 'Enter') wCall('toggleSidebar') }}
-          >
+          <div className="collapse-sb" onClick={handleClick('toggleSidebar')} role="button" tabIndex={0}
+            onKeyDown={(e) => { if (e.key === 'Enter') wCall('toggleSidebar') }}>
             <svg id="collapseSbIcon" viewBox="0 0 24 24" width={10} height={10} stroke="currentColor" fill="none" strokeWidth={2}>
               <polyline points="15 18 9 12 15 6"/>
             </svg>
@@ -1138,15 +984,18 @@ export default function ChatsPage() {
             </a>
           </div>
 
-          {/* Header */}
+          {/* ── HEADER: title | project badge | studio badge ── */}
           <div className="chat-hdr">
+            {/* Chat title — takes all leftover space */}
             <div className="chat-title" id="chatTitle">NEXUS AI</div>
+
+            {/* Project badge — compact, hidden until set */}
             <div className="proj-badge-hdr" id="hdrProjBadge" style={{ display:'none' }}/>
-            <div
-              className="status-badge off" id="studioBadge"
+
+            {/* Studio status — always compact, never overshadows title */}
+            <div className="status-badge off" id="studioBadge"
               onClick={handleClick('retryStudio')} role="button" tabIndex={0}
-              onKeyDown={(e) => { if (e.key === 'Enter') wCall('retryStudio') }}
-            >
+              onKeyDown={(e) => { if (e.key === 'Enter') wCall('retryStudio') }}>
               <div className="sdot pulse" id="studioDot"/>
               <span id="studioTxt">Studio: OFF</span>
             </div>
@@ -1184,31 +1033,26 @@ export default function ChatsPage() {
 
                 <div className="inp-bar">
                   <div className="inp-l">
-
-                    {/* Lampirkan file */}
+                    {/* Attach file */}
                     <div style={{ position:'relative', flexShrink:0, display:'inline-flex' }}>
                       <label htmlFor="fi" className="ib" title="Lampirkan file" role="button" tabIndex={0}>
                         {Icon.attach}
                       </label>
-                      <input
-                        type="file" id="fi"
+                      <input type="file" id="fi"
                         accept="image/*,.lua,.txt,.json,.js,.py,.html,.css"
                         style={{ position:'absolute', width:0, height:0, opacity:0, overflow:'hidden', pointerEvents:'none' }}
-                        onChange={handleFileChange} multiple tabIndex={-1}
-                      />
+                        onChange={handleFileChange} multiple tabIndex={-1}/>
                     </div>
 
-                    {/* Hapus chat */}
+                    {/* Clear chat */}
                     <button className="ib" type="button" onClick={handleClick('clearChat')} title="Hapus chat">
                       {Icon.trash}
                     </button>
 
-                    {/* Pilih model */}
-                    <div
-                      className="inp-model" id="inpModelBtn"
+                    {/* Model selector */}
+                    <div className="inp-model" id="inpModelBtn"
                       onClick={handleClickWithEvent('toggleMDD')} role="button" tabIndex={0}
-                      onKeyDown={(e) => { if (e.key === 'Enter') wCall('toggleMDD', e) }}
-                    >
+                      onKeyDown={(e) => { if (e.key === 'Enter') wCall('toggleMDD', e) }}>
                       <img id="inpMIcon" src="" alt="" onError={handleImgErr}
                         style={{ width:13, height:13, borderRadius:2, objectFit:'contain', flexShrink:0 }}/>
                       <span className="inp-model-name"  id="inpMName">Gemini 3.5 Flash</span>
@@ -1216,13 +1060,11 @@ export default function ChatsPage() {
                       {Icon.chevronDown}
                     </div>
 
-                    {/* Tema */}
-                    <button
-                      className="theme-picker-btn" id="themePickerBtn" type="button"
-                      onClick={handleClickWithEvent('toggleThemeDD')}
-                    >
+                    {/* Theme picker button */}
+                    <button className="theme-picker-btn" id="themePickerBtn" type="button"
+                      onClick={handleClickWithEvent('toggleThemeDD')}>
                       <div className="theme-swatch" id="themeSwatchBtn" style={{ background:'#00e5ff' }}/>
-                      <span id="themePickerLabel">nexus_ai</span>
+                      <span className="theme-picker-label" id="themePickerLabel">nexus_ai</span>
                       {Icon.chevronDown}
                     </button>
                   </div>
@@ -1234,28 +1076,12 @@ export default function ChatsPage() {
                 </div>
               </div>
 
-              {/* Dropdown model */}
+              {/* Model dropdown — filled by chats.ts */}
               <div className="model-dd" id="mDD"/>
 
-              {/* Dropdown tema */}
-              <div className="theme-dd" id="themeDD">
-                <div className="theme-dd-title">Tema GUI</div>
-                <div className="theme-dd-hint">Custom = AI buat UI tanpa tema preset</div>
-                {themeOptions.map(({ value, label, colors }) => (
-                  <div
-                    key={value} className="theme-opt" data-theme={value}
-                    onClick={handleClick('selectTheme', value)}
-                    role="option" tabIndex={0} aria-selected={false}
-                    onKeyDown={(e) => { if (e.key === 'Enter') wCall('selectTheme', value) }}
-                  >
-                    <div className="theme-preview">
-                      {colors.map((c, i) => <span key={i} style={{ background:c }}/>)}
-                    </div>
-                    <span className="theme-opt-name">{label}</span>
-                    <span className="theme-opt-tick" style={{ color:'var(--cyan)' }}>{Icon.check}</span>
-                  </div>
-                ))}
-              </div>
+              {/* Theme dropdown — FULLY rendered by chats.ts via toggleThemeDD()
+                  DO NOT put static children here — it causes duplicate check icons */}
+              <div className="theme-dd" id="themeDD"/>
             </div>
           </div>
 
@@ -1271,12 +1097,10 @@ export default function ChatsPage() {
               ))}
 
               <div className="gui-right">
-                <div
-                  className="inp-model" id="guiModelBtn"
+                <div className="inp-model" id="guiModelBtn"
                   onClick={handleClickWithEvent('toggleGuiMDD')} role="button" tabIndex={0}
                   onKeyDown={(e) => { if (e.key === 'Enter') wCall('toggleGuiMDD', e) }}
-                  style={{ maxWidth:150 }}
-                >
+                  style={{ maxWidth:150 }}>
                   <img id="guiMIcon" src="" alt="" onError={handleImgErr}
                     style={{ width:13, height:13, borderRadius:2, flexShrink:0 }}/>
                   <span className="inp-model-name"  id="guiMName">Gemini 3.5 Flash</span>
@@ -1335,8 +1159,8 @@ export default function ChatsPage() {
             </div>
           </div>
 
-        </div>
-      </div>
+        </div>{/* end #chat */}
+      </div>{/* end #app */}
 
       {/* ══════════════════════════════════════════
           MODALS
@@ -1380,7 +1204,6 @@ export default function ChatsPage() {
         <div className="modal" style={{ width:520 }}>
           <div className="modal-t">{Icon.settings}<span id="settingsTitle">Pengaturan</span></div>
 
-          {/* Akun */}
           <div className="settings-section">
             <div className="settings-title" id="settingsAccountTitle">Akun</div>
             <div className="settings-row">
@@ -1401,7 +1224,6 @@ export default function ChatsPage() {
             </div>
           </div>
 
-          {/* Daily */}
           <div className="settings-section">
             <div className="settings-title" id="dailyCreditsTitle">Daily Credits</div>
             <div className="settings-row"><span id="freePlanLabel">Free Plan</span><span style={{ color:'var(--green)' }}>+2 CR / hari</span></div>
@@ -1412,7 +1234,6 @@ export default function ChatsPage() {
             </div>
           </div>
 
-          {/* Play Test */}
           <div className="settings-section">
             <div className="settings-title" id="playTestTitle">Auto Play Test</div>
             <div className="settings-row">
@@ -1428,7 +1249,6 @@ export default function ChatsPage() {
             </div>
           </div>
 
-          {/* Bahasa */}
           <div className="settings-section">
             <div className="settings-title" id="langTitle">Bahasa</div>
             <div className="settings-row">
@@ -1440,7 +1260,6 @@ export default function ChatsPage() {
             </div>
           </div>
 
-          {/* Report */}
           <div className="settings-section">
             <div className="settings-title" id="reportTitle">Laporkan Masalah</div>
             <textarea className="report-ta" id="reportTa" placeholder="Deskripsikan masalahnya..."/>
@@ -1454,7 +1273,6 @@ export default function ChatsPage() {
             </div>
           </div>
 
-          {/* Admin */}
           <div className="settings-section" id="adminSection" style={{ display:'none' }}>
             <div className="settings-title">Panel Admin</div>
             <div style={{ marginTop:6 }}>
@@ -1462,7 +1280,6 @@ export default function ChatsPage() {
             </div>
           </div>
 
-          {/* Redeem */}
           <div className="settings-section">
             <div className="settings-title" id="redeemTitle">Redeem Code</div>
             <div className="settings-row" style={{ flexDirection:'column', alignItems:'flex-start', gap:6 }}>
@@ -1475,7 +1292,6 @@ export default function ChatsPage() {
             </div>
           </div>
 
-          {/* Download Plugin */}
           <div className="settings-section">
             <div className="settings-title" id="downloadTitle">Download Plugin</div>
             <div className="settings-row" style={{ flexDirection:'column', gap:5, alignItems:'flex-start' }}>
@@ -1487,7 +1303,6 @@ export default function ChatsPage() {
             </div>
           </div>
 
-          {/* Logout */}
           <div className="settings-section">
             <div className="settings-title" id="accountTitle">Akun</div>
             <div className="settings-row">
@@ -1510,9 +1325,9 @@ export default function ChatsPage() {
             <pre id="guiCodeOutput" style={{ maxHeight:380, overflowY:'auto', whiteSpace:'pre-wrap', wordBreak:'break-all', fontSize:10.5, color:'var(--text)', background:'rgba(0,0,0,.4)', padding:12, borderRadius:6, border:'1px solid var(--b)' }}/>
           </div>
           <div className="modal-footer">
-            <button className="btn-modal primary"    type="button" onClick={handleClick('copyGuiCode')}                 id="guiCodeCopyBtn">Salin</button>
-            <button className="btn-modal secondary"  type="button" onClick={handleClick('downloadGuiCode')}             id="guiCodeDlBtn">Download .lua</button>
-            <button className="btn-modal secondary"  type="button" onClick={handleClick('closeModal','guiCodeModal')}   id="guiCodeCloseBtn">Tutup</button>
+            <button className="btn-modal primary"   type="button" onClick={handleClick('copyGuiCode')}               id="guiCodeCopyBtn">Salin</button>
+            <button className="btn-modal secondary" type="button" onClick={handleClick('downloadGuiCode')}           id="guiCodeDlBtn">Download .lua</button>
+            <button className="btn-modal secondary" type="button" onClick={handleClick('closeModal','guiCodeModal')} id="guiCodeCloseBtn">Tutup</button>
           </div>
         </div>
       </div>
@@ -1526,7 +1341,8 @@ export default function ChatsPage() {
             <select id="guiAiThemeSelect" className="settings-select" style={{ width:'100%', marginBottom:8, height:'var(--h-sm)' }} defaultValue="nexus_ai">
               {themeOptions.map(({ value, label }) => <option key={value} value={value}>{label}</option>)}
             </select>
-            <textarea id="guiAIPrompt" style={{ width:'100%', background:'var(--bg3)', border:'1px solid var(--b)', borderRadius:6, padding:10, color:'white', fontFamily:"'JetBrains Mono',monospace", fontSize:12, outline:'none', resize:'vertical', minHeight:90 }}
+            <textarea id="guiAIPrompt"
+              style={{ width:'100%', background:'var(--bg3)', border:'1px solid var(--b)', borderRadius:6, padding:10, color:'white', fontFamily:"'JetBrains Mono',monospace", fontSize:12, outline:'none', resize:'vertical', minHeight:90 }}
               placeholder="contoh: Shop GUI 3 item, scroll list, tombol beli, animasi smooth..."/>
           </div>
           <div className="modal-footer">
@@ -1536,7 +1352,7 @@ export default function ChatsPage() {
         </div>
       </div>
 
-      {/* Preview Kode */}
+      {/* Code Preview */}
       <div className="ov" id="codePreviewModal">
         <div className="modal" style={{ width:700 }}>
           <div className="modal-t">

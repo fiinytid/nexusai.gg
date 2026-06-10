@@ -474,7 +474,7 @@ export default function NotFound() {
         <div className="nf-topbar">
           <div className="topbar-logo">
             <img
-              src="/nexusai.png" alt="N" width={28} height={28}
+              src="images/nexusai.png" alt="N" width={28} height={28}
               onError={(e) => ((e.currentTarget as HTMLImageElement).style.display = "none")}
             />
           </div>

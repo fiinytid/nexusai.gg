@@ -607,33 +607,32 @@ const FEATURES = [
   },
 ];
 
-/* ─── Updated AI Models (removed: Mistral, Gemini 2.5 Flash/Lite, Gemini 3 Flash, GROQ/Meta) ─── */
 const AI_MODELS = [
   {
     label: 'Google Gemini',
     models: [
-      { name: 'Gemini 3.5 Flash', badge: 'new' as const, cls: 'is-new', icon: 'gemini.png' },
-      { name: 'Gemini 3.1 Pro',   badge: 'cr'  as const, badgeTxt: '2 CR', icon: 'gemini.png' },
+      { name: 'Gemini 3.5 Flash', badge: 'new' as const, cls: 'is-new', icon: '/images/gemini.png' },
+      { name: 'Gemini 3.1 Pro',   badge: 'cr'  as const, badgeTxt: '2 CR', icon: '/images/gemini.png' },
     ],
   },
   {
     label: 'DeepSeek',
     models: [
-      { name: 'DeepSeek V4 Pro', badge: 'new' as const, cls: 'is-new', icon: 'deepseek.svg' },
-      { name: 'DeepSeek V4',     badge: 'cr'  as const, badgeTxt: '1 CR', icon: 'deepseek.svg' },
+      { name: 'DeepSeek V4 Pro', badge: 'new' as const, cls: 'is-new', icon: '/images/deepseek.svg' },
+      { name: 'DeepSeek V4',     badge: 'cr'  as const, badgeTxt: '1 CR', icon: '/images/deepseek.svg' },
     ],
   },
   {
     label: 'Step Fun',
     models: [
-      { name: 'Step 3.5 Flash', badge: 'new' as const, cls: 'is-new', icon: 'stepfun.png' },
+      { name: 'Step 3.5 Flash', badge: 'new' as const, cls: 'is-new', icon: '/images/stepfun.png' },
     ],
   },
   {
     label: 'Coming Soon',
     models: [
-      { name: 'Claude Sonnet', badge: 'soon' as const, cls: 'is-soon', icon: 'claude.png' },
-      { name: 'GPT-5.5',       badge: 'soon' as const, cls: 'is-soon', icon: 'chatgpt.png' },
+      { name: 'Claude Sonnet', badge: 'soon' as const, cls: 'is-soon', icon: '/images/claude.png' },
+      { name: 'GPT-5.5',       badge: 'soon' as const, cls: 'is-soon', icon: '/images/chatgpt.png' },
     ],
   },
 ];
@@ -756,7 +755,7 @@ export default function HomePage() {
       {/* ── NAVBAR ── */}
       <nav className="nav" id="navbar">
         <a href="/" className="nav-logo-wrap">
-          <img src="/nexusai.png" alt="NEXUS AI" className="nav-logo-img" onError={imgFail} />
+          <img src="images/nexusai.png" alt="NEXUS AI" className="nav-logo-img" onError={imgFail} />
           <span className="nav-logo">NEXUS AI</span>
         </a>
         <div className="nav-divider" />

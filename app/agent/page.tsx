@@ -456,7 +456,7 @@ function TypingIndicator() {
     <div className="msg-row ai">
       <div className="avatar ai-avatar">
         <img
-          src="/nexusai.png"
+          src="/images/nexusai.png"
           alt="NEXUS"
           onError={(e) => {
             (e.target as HTMLImageElement).style.display = "none";
@@ -497,7 +497,7 @@ function MessageBubble({ msg, displayName, avatarUrl, onFeedback }: BubbleProps)
       {!isUser && (
         <div className="avatar ai-avatar">
           <img
-            src="/nexusai.png"
+            src="/images/nexusai.png"
             alt="NEXUS"
             onError={(e) => {
               (e.target as HTMLImageElement).style.display = "none";
@@ -604,7 +604,7 @@ function WelcomeScreen({ displayName, avatarUrl, plan, credits, onFeedback: _onF
               src={avatarUrl}
               alt="avatar"
               onError={(e) => {
-                (e.target as HTMLImageElement).src = "/nexusai.png";
+                (e.target as HTMLImageElement).src = "/images/nexusai.png";
               }}
             />
           </div>
@@ -682,7 +682,7 @@ export default function AgentPage() {
 
   const [displayName, setDisplayName] = useState("User");
   const [username, setUsername] = useState("user");
-  const [avatarUrl, setAvatarUrl] = useState("/nexusai.png");
+  const [avatarUrl, setAvatarUrl] = useState("/images/nexusai.png");
   const [plan, setPlan] = useState("free");
   const [credits, setCredits] = useState("30");
 
@@ -1483,7 +1483,7 @@ export default function AgentPage() {
         <header className="header">
           <div className="header-logo">
             <img
-              src="/nexusai.png"
+              src="/images/nexusai.png"
               alt="NEXUS"
               onError={(e) => {
                 (e.target as HTMLImageElement).style.display = "none";
@@ -1510,7 +1510,7 @@ export default function AgentPage() {
               src={avatarUrl}
               alt="avatar"
               onError={(e) => {
-                (e.target as HTMLImageElement).src = "/nexusai.png";
+                (e.target as HTMLImageElement).src = "/images/nexusai.png";
               }}
             />
             <span className="header-name">@{username}</span>

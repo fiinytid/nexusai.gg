@@ -892,7 +892,7 @@ export default function LoginPage() {
       <div className="lx-topbar">
         <div className="tb-logo">
           <img
-            src="/nexusai.png" alt="N" width={26} height={26}
+            src="images/nexusai.png" alt="N" width={26} height={26}
             onError={(e) => ((e.currentTarget as HTMLImageElement).style.display = 'none')}
           />
         </div>
@@ -919,7 +919,7 @@ export default function LoginPage() {
             <div className="lx-hex" />
             <div className="lx-brand">
               <div className="lx-logo-wrap">
-                <img src="/nexusai.png" alt="NEXUS"
+                <img src="images/nexusai.png" alt="NEXUS"
                   onError={(e) => { (e.target as HTMLImageElement).style.opacity = '.15'; }} />
               </div>
               <div className="lx-brand-name">NEXUS AI</div>
@@ -1070,7 +1070,7 @@ export default function LoginPage() {
                 </div>
 
                 <button className="btn-roblox" id="robloxLoginBtn" onClick={startRobloxOAuth}>
-                  <img src="/roblox.png" alt=""
+                  <img src="images/roblox.png" alt=""
                     onError={(e) => { (e.target as HTMLImageElement).style.display = 'none'; }} />
                   Connect Roblox Account
                 </button>
