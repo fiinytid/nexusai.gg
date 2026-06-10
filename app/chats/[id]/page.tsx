@@ -392,7 +392,7 @@ body::before {
 .msg-imgs { display:flex; flex-wrap:wrap; gap:5px; margin-bottom:7px }
 .msg-img {
   max-width:160px; max-height:130px; border-radius:6px;
-  object-fit:cover; border:1px solid var(--b); cursor:pointer; transition:.15s;
+  object-fit:cover; border:1px solid var(--b); cursor:pointer; transition:.15px;
 }
 .msg-img:hover { border-color:var(--cyan); transform:scale(1.02) }
 
@@ -596,7 +596,7 @@ body::before {
   align-items:center;
   gap:8px;
   padding:0 8px;
-  height:30px;          /* fixed height — no more jumpy hover */
+  height:30px;
   border-radius:5px;
   cursor:pointer;
   transition:background .1s;
@@ -614,7 +614,7 @@ body::before {
 }
 .theme-preview span {
   width:6px;
-  height:18px;   /* fixed height for preview bars */
+  height:18px;
   border-radius:3px;
   display:block;
   flex-shrink:0;
@@ -987,7 +987,7 @@ interface GuiTypeConfig {
 interface ThemeOption {
   value:  string
   label:  string
-  colors: string[]  // preview bar colors
+  colors: string[]
 }
 
 /* ─────────────────────────────────────────────────
@@ -1137,12 +1137,15 @@ export default function ChatsPage() {
     document.body.style.height = '100%'
     document.body.style.overflow = 'hidden'
 
-    import("@/lib/app/chats")
-      .then(() => console.log("Chats library loaded successfully on client-side."))
-      .catch((err) => console.error("Failed to load chats library:", err));
-      
-    import("@/lib/app/system_prompt")
-      .catch((err) => console.error("Failed to load system prompt library:", err));
+    // ── Dynamic import: file tidak lagi di /public sehingga
+    //    tidak bisa diakses langsung via URL oleh siapapun.
+    //    Next.js akan bundle + minify keduanya ke dalam chunk JS-nya.
+    if (!scriptsLoadedRef.current) {
+      scriptsLoadedRef.current = true
+      import('./system_prompt').then(() => {
+        import('./chats').catch(console.error)
+      }).catch(console.error)
+    }
 
     return () => {
       document.documentElement.style.height  = ''
@@ -1267,7 +1270,7 @@ export default function ChatsPage() {
         href="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/styles/atom-one-dark.min.css"
       />
 
-      {/* ── Scripts ── */}
+      {/* ── External CDN Scripts (library pihak ketiga, aman di public) ── */}
       <Script
         src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"
         strategy="afterInteractive"
@@ -1284,16 +1287,6 @@ export default function ChatsPage() {
         src="https://challenges.cloudflare.com/turnstile/v0/api.js?render=explicit"
         strategy="afterInteractive"
       />
-      {/* Single app script — all logic lives here */}
-      <Script
-        src="/_next/static/chunks/lib/app/chats.js"
-        strategy="afterInteractive"
-      />
-            <Script
-        src="/_next/static/chunks/lib/app/chats.js"
-        strategy="afterInteractive"
-      />
-
 
       {/* ══ PAGE LOADER ══ */}
       <div id="pageLoader">
@@ -1678,7 +1671,7 @@ export default function ChatsPage() {
               {/* Model dropdown */}
               <div className="model-dd" id="mDD"/>
 
-              {/* ── THEME DROPDOWN — fixed layout, consistent heights ── */}
+              {/* ── THEME DROPDOWN ── */}
               <div className="theme-dd" id="themeDD">
                 <div className="theme-dd-title">GUI Theme</div>
                 <div className="theme-dd-hint">Custom = AI builds UI without a preset theme</div>
