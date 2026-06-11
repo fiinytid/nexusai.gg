@@ -193,56 +193,25 @@ body::before {
 .collapse-sb:hover { color:var(--cyan) }
 .collapse-sb svg { width:10px; height:10px; stroke:currentColor; fill:none; stroke-width:2 }
 
-/* ── CHAT PANEL ── */
+/* CHAT PANEL */
 #chat { display:flex; flex-direction:column; overflow:hidden; position:relative; min-height:0; min-width:0 }
-
-/* ── PLUGIN BANNER ── */
 .plug-banner {
-  padding:0 14px; flex-shrink:0;
+  padding:5px 14px; flex-shrink:0;
   background:rgba(255,45,107,.08); border-bottom:1px solid rgba(255,45,107,.2);
   font-size:var(--fs-xs); color:var(--pink);
-  display:flex; align-items:center; gap:0; height:30px; min-width:0; overflow:hidden;
+  display:flex; align-items:center; gap:7px; height:30px;
 }
 .plug-banner svg { width:11px; height:11px; stroke:currentColor; fill:none; stroke-width:2; flex-shrink:0 }
-/* left side: icon + text + links */
-.plug-left {
-  display:flex; align-items:center; gap:6px;
-  flex:1; min-width:0; overflow:hidden;
-}
-.plug-left svg { flex-shrink:0 }
-.plug-left span { white-space:nowrap; overflow:hidden; text-overflow:ellipsis }
-.plug-left a { color:var(--cyan); cursor:pointer; text-decoration:none; flex-shrink:0; white-space:nowrap }
-.plug-left a.reconnect { color:var(--green) }
-/* right side: project name + studio badge */
-.plug-right {
-  display:flex; align-items:center; gap:6px;
-  flex-shrink:0; margin-left:8px;
-}
-.plug-proj {
-  font-size:var(--fs-2xs); color:rgba(255,170,50,.85);
-  background:rgba(255,170,50,.07); border:1px solid rgba(255,170,50,.2);
-  border-radius:10px; padding:0 7px; height:18px; line-height:18px;
-  white-space:nowrap; overflow:hidden; text-overflow:ellipsis; max-width:100px;
-  display:none; align-items:center;
-}
-.plug-proj.show { display:flex }
-.plug-studio {
-  display:flex; align-items:center; gap:3px; padding:0 7px;
-  border-radius:10px; border:1px solid; height:18px;
-  font-size:var(--fs-2xs); cursor:pointer; flex-shrink:0; transition:.2s;
-  white-space:nowrap;
-}
-.plug-studio.off { border-color:rgba(255,45,107,.3); color:var(--pink); background:rgba(255,45,107,.06) }
-.plug-studio.on  { border-color:rgba(0,255,170,.3);  color:var(--green); background:rgba(0,255,170,.06) }
+.plug-banner a   { color:var(--cyan); cursor:pointer; text-decoration:none }
 .plug-banner.connected { background:rgba(0,255,170,.05); border-color:rgba(0,255,170,.2); color:var(--green) }
-.plug-banner.connected .plug-left a { color:var(--cyan) }
 
 /* ── HEADER ── */
 .chat-hdr {
-  padding:0 14px 0 16px; border-bottom:1px solid var(--b); background:var(--bg2);
+  padding:0 12px 0 16px; border-bottom:1px solid var(--b); background:var(--bg2);
   display:flex; align-items:center; gap:8px; flex-shrink:0; height:48px; min-width:0;
 }
-/* left: title + BETA badge, truncate together */
+
+/* ── Title + BETA badge group (tight, left-aligned) ── */
 .chat-title-group {
   display:flex; align-items:center; gap:6px;
   flex:1 1 0; min-width:0; overflow:hidden;
@@ -252,14 +221,25 @@ body::before {
   color:white; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;
   flex-shrink:1; min-width:0;
 }
-/* project badge in header — visible when studio connected */
 .proj-badge-hdr {
-  font-size:var(--fs-2xs); padding:0 8px; border-radius:10px; height:20px; line-height:20px;
+  font-size:var(--fs-2xs); padding:2px 8px; border-radius:10px; height:20px; line-height:16px;
   background:rgba(255,170,50,.07); border:1px solid rgba(255,170,50,.2);
   color:rgba(255,170,50,.85); white-space:nowrap; overflow:hidden; text-overflow:ellipsis;
-  max-width:130px; flex-shrink:0; display:none; align-items:center;
+  max-width:120px; flex-shrink:0; display:flex; align-items:center;
 }
-.proj-badge-hdr.show { display:flex }
+
+/* Studio badge */
+.status-badge {
+  display:flex; align-items:center; gap:4px; padding:0 8px;
+  border-radius:20px; border:1px solid; height:22px;
+  font-size:var(--fs-2xs); cursor:pointer; flex-shrink:0; transition:.2s;
+  white-space:nowrap; max-width:110px; overflow:hidden;
+}
+.status-badge.off { border-color:rgba(255,45,107,.3); color:var(--pink); background:rgba(255,45,107,.06) }
+.status-badge.on  { border-color:rgba(0,255,170,.3);  color:var(--green); background:rgba(0,255,170,.06) }
+.sdot { width:5px; height:5px; border-radius:50%; background:currentColor; flex-shrink:0 }
+.sdot.pulse { animation:pd 1.8s infinite }
+@keyframes pd { 0%,100%{opacity:1} 50%{opacity:.25} }
 
 /* ── VERSION BADGE ── */
 .ver-badge {
@@ -273,20 +253,6 @@ body::before {
 .ver-badge.beta    { color:var(--yellow); border-color:rgba(255,214,0,.35); background:rgba(255,214,0,.06) }
 .ver-badge.release { color:var(--green);  border-color:rgba(0,255,170,.35); background:rgba(0,255,170,.06) }
 
-/* Studio badge — RIGHT side of header */
-.status-badge {
-  display:flex; align-items:center; gap:4px; padding:0 9px;
-  border-radius:20px; border:1px solid; height:22px;
-  font-size:var(--fs-2xs); cursor:pointer; flex-shrink:0; transition:.2s;
-  white-space:nowrap; overflow:hidden;
-}
-.status-badge.off { border-color:rgba(255,45,107,.3); color:var(--pink); background:rgba(255,45,107,.06) }
-.status-badge.on  { border-color:rgba(0,255,170,.3);  color:var(--green); background:rgba(0,255,170,.06) }
-.sdot { width:5px; height:5px; border-radius:50%; background:currentColor; flex-shrink:0 }
-.sdot.pulse { animation:pd 1.8s infinite }
-@keyframes pd { 0%,100%{opacity:1} 50%{opacity:.25} }
-
-/* TABS */
 .chat-tabs {
   display:flex; gap:4px; padding:5px 14px; border-bottom:1px solid var(--b); background:var(--bg2);
   flex-shrink:0; align-items:center; overflow-x:auto; overflow-y:hidden; scrollbar-width:none; height:42px;
@@ -402,18 +368,21 @@ body::before {
 }
 #inp::placeholder { color:var(--dim) }
 
-/* ── INPUT BAR ── */
+/* ── INPUT BAR: tidy button row ── */
 .inp-bar {
   display:flex; align-items:center; height:var(--h-inp);
   padding:0 10px; border-top:1px solid var(--b); gap:5px;
 }
+/* left cluster: icon buttons + model selector */
 .inp-l {
   display:flex; align-items:center; gap:5px; flex:1; min-width:0; overflow:hidden;
 }
+/* file-attach wrapper — keeps hidden input from affecting layout */
 .inp-attach-wrap {
   display:flex; align-items:center; justify-content:center;
   flex-shrink:0; position:relative; width:var(--h-sm); height:var(--h-sm);
 }
+/* icon-only action buttons */
 .ib {
   width:var(--h-sm); height:var(--h-sm); border-radius:var(--r-s); border:1px solid var(--b);
   background:transparent; color:var(--dim); cursor:pointer;
@@ -423,7 +392,13 @@ body::before {
 }
 .ib:hover { color:var(--cyan); border-color:var(--cyan2) }
 .ib svg   { width:14px; height:14px; stroke:currentColor; fill:none; stroke-width:1.5; flex-shrink:0; pointer-events:none }
-.inp-divider { width:1px; height:18px; background:var(--b); flex-shrink:0; border-radius:1px; }
+
+/* divider between icon group and model pill */
+.inp-divider {
+  width:1px; height:18px; background:var(--b); flex-shrink:0; border-radius:1px;
+}
+
+/* model selector pill */
 .inp-model {
   display:flex; align-items:center; gap:5px; height:var(--h-sm); padding:0 9px;
   border-radius:var(--r-s); background:var(--card); border:1px solid var(--b);
@@ -438,9 +413,11 @@ body::before {
   font-size:var(--fs-2xs); font-weight:700; flex-shrink:0;
   padding:1px 5px; border-radius:4px; border:1px solid;
 }
-.inp-model-badge[data-tier="fast"]  { color:var(--cyan);   border-color:rgba(0,229,255,.3);   background:rgba(0,229,255,.07) }
-.inp-model-badge[data-tier="pro"]   { color:#cc55ff;       border-color:rgba(136,0,255,.35);  background:rgba(136,0,255,.07) }
-.inp-model-badge[data-tier="think"] { color:var(--yellow); border-color:rgba(255,214,0,.3);   background:rgba(255,214,0,.06) }
+.inp-model-badge[data-tier="fast"]    { color:var(--cyan);   border-color:rgba(0,229,255,.3);   background:rgba(0,229,255,.07) }
+.inp-model-badge[data-tier="pro"]     { color:#cc55ff;       border-color:rgba(136,0,255,.35);  background:rgba(136,0,255,.07) }
+.inp-model-badge[data-tier="think"]   { color:var(--yellow); border-color:rgba(255,214,0,.3);   background:rgba(255,214,0,.06) }
+
+/* send / cancel */
 .btn-send, .btn-cancel {
   border:none; border-radius:var(--r); width:var(--h-md); height:var(--h-md);
   display:flex; align-items:center; justify-content:center; cursor:pointer; transition:.18s; flex-shrink:0;
@@ -460,6 +437,7 @@ body::before {
 .model-dd::-webkit-scrollbar { width:3px }
 .model-dd::-webkit-scrollbar-thumb { background:var(--b) }
 .model-dd.open { display:block }
+
 .mg { padding:6px 11px 3px; font-size:var(--fs-2xs); color:var(--dim); text-transform:uppercase; letter-spacing:2px; border-top:1px solid var(--b) }
 .mg:first-child { border-top:none }
 .mo { padding:7px 11px; display:flex; align-items:center; gap:7px; cursor:pointer; transition:.1s }
@@ -676,7 +654,6 @@ body::before {
   :root{ --sb-w:210px }
   .inp-model{ max-width:140px }
   .proj-badge-hdr{ max-width:90px }
-  .plug-proj{ max-width:70px }
 }
 @media(max-width:768px){
   #app{ display:flex!important; flex-direction:column; height:100vh; height:100dvh; grid-template-columns:none!important; overflow:hidden }
@@ -695,7 +672,7 @@ body::before {
   .inp-model{ max-width:130px }
   .chat-hdr{ padding:0 10px; gap:6px; height:44px }
   .chat-title{ font-size:var(--fs-xs) }
-  .proj-badge-hdr{ display:none!important }
+  .proj-badge-hdr{ display:none }
   .chat-tabs{ padding:4px 8px; gap:3px; height:38px }
   .tab-btn{ padding:0 10px; font-size:var(--fs-2xs); height:var(--h-xs) }
   .gui-toolbar{ flex-wrap:nowrap; padding:5px 8px; -webkit-overflow-scrolling:touch; scrollbar-width:none }
@@ -707,8 +684,6 @@ body::before {
   .suggs{ grid-template-columns:1fr }
   .wt{ font-size:18px }
   .ver-badge{ font-size:6px; height:15px; padding:0 5px }
-  .plug-proj{ display:none!important }
-  .plug-studio{ font-size:var(--fs-2xs) }
 }
 @media(max-width:550px){
   .sb-nav-btn{ font-size:var(--fs-2xs); padding:0 8px; height:var(--h-sm) }
@@ -868,7 +843,7 @@ export default function ChatsPage() {
     { type:'ScrollingFrame', label:'Scroll', icon:<><rect x="3" y="3" width="18" height="18" rx="2"/><path d="M3 9h18"/></> },
   ]
 
-  /* ─── theme options ─── */
+  /* ─── theme options — used in AI GUI Builder modal only ─── */
   const guiThemeOptions: ThemeOption[] = [
     { value:'nexus_ai', label:'NEXUS AI' },
     { value:'aurora',   label:'Aurora'   },
@@ -891,10 +866,10 @@ export default function ChatsPage() {
       <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Orbitron:wght@400;600;700;900&family=JetBrains+Mono:wght@300;400;500&display=swap"/>
       <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/styles/atom-one-dark.min.css"/>
 
-      <Script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"                                           strategy="beforeInteractive"/>
-      <Script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/highlight.min.js"                 strategy="beforeInteractive"/>
-      <Script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/languages/lua.min.js"             strategy="beforeInteractive"/>
-      <Script src="https://challenges.cloudflare.com/turnstile/v0/api.js?render=explicit"                       strategy="afterInteractive"/>
+      <Script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"                                              strategy="beforeInteractive"/>
+      <Script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/highlight.min.js"                    strategy="beforeInteractive"/>
+      <Script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/languages/lua.min.js"                strategy="beforeInteractive"/>
+      <Script src="https://challenges.cloudflare.com/turnstile/v0/api.js?render=explicit"                          strategy="afterInteractive"/>
 
       {/* ── PAGE LOADER ── */}
       <div id="pageLoader">
@@ -998,69 +973,45 @@ export default function ChatsPage() {
         {/* ════ PANEL CHAT ════ */}
         <div id="chat">
 
-          {/* ── PLUGIN BANNER ──
-              Layout: [icon · status text · cara connect · reconnect] ··· [project pill · studio pill]
-              chats.ts should update:
-                #plugBannerTxt  — status text
-                #plugProjPill   — project name (add class "show" to reveal)
-                #plugStudioPill — studio dot + text (toggle class on/off)
-          ── */}
+          {/* Plugin connection banner */}
           <div className="plug-banner" id="plugBanner">
-            {/* LEFT: status info */}
-            <div className="plug-left">
-              {Icon.info}
-              <span id="plugBannerTxt">Plugin belum terhubung —</span>
-              <a
-                onClick={handleClick('showInstall')}
-                id="plugInstallLink"
-                role="button" tabIndex={0}
-                onKeyDown={(e) => { if (e.key === 'Enter') wCall('showInstall') }}
-                style={{ cursor:'pointer' }}>
-                Cara connect
-              </a>
-              <a
-                onClick={handleClick('retryStudio')}
-                id="plugReconnectLink"
-                className="reconnect"
-                role="button" tabIndex={0}
-                onKeyDown={(e) => { if (e.key === 'Enter') wCall('retryStudio') }}
-                style={{ cursor:'pointer' }}>
-                Reconnect
-              </a>
-            </div>
-            {/* RIGHT: project name + studio status */}
-            <div className="plug-right">
-              {/* project pill — chats.ts: el.textContent = name; el.classList.add('show') */}
-              <div className="plug-proj" id="plugProjPill"/>
-              {/* studio status pill — chats.ts: toggle class on/off, update text */}
-              <div
-                className="plug-studio off" id="plugStudioPill"
-                onClick={handleClick('retryStudio')}
-                role="button" tabIndex={0}
-                onKeyDown={(e) => { if (e.key === 'Enter') wCall('retryStudio') }}
-                style={{ cursor:'pointer' }}>
-                <div className="sdot pulse" id="plugStudioDot"/>
-                <span id="plugStudioTxt">Studio: OFF</span>
-              </div>
-            </div>
+            {Icon.info}
+            <span id="plugBannerTxt">Plugin belum terhubung —</span>
+            <a onClick={handleClick('showInstall')} id="plugInstallLink" role="button" tabIndex={0}
+               onKeyDown={(e) => { if (e.key === 'Enter') wCall('showInstall') }} style={{ cursor:'pointer' }}>
+              Cara connect
+            </a>
+            <a onClick={handleClick('retryStudio')} id="plugReconnectLink" role="button" tabIndex={0}
+               onKeyDown={(e) => { if (e.key === 'Enter') wCall('retryStudio') }}
+               style={{ marginLeft:8, color:'var(--green)', cursor:'pointer' }}>
+              Reconnect
+            </a>
           </div>
 
           {/* ── HEADER ──
-              Layout: [NEXUS AI title · BETA badge · project badge (optional)] ··· [studio status badge]
-              The studio status badge in the header is HIDDEN by default.
-              chats.ts can show/hide #studioBadge and #hdrProjBadge as needed.
-              Primary studio status is now shown in the plug-banner (plug-right).
+              Layout: [title + BETA badge · proj badge] ··· [studio badge]
+              BETA sits immediately after the title text, not at the far right.
           ── */}
           <div className="chat-hdr">
-            {/* Left group: title + BETA badge + optional project badge */}
+
+            {/* Left group: title text + BETA badge inline, then proj badge */}
             <div className="chat-title-group">
+              {/* title text — chats.ts updates this via #chatTitle */}
               <div className="chat-title" id="chatTitle">NEXUS AI</div>
+
+              {/* BETA badge — immediately after the title, NOT pushed to the right.
+                  chats.ts can update via:
+                    verBadgeEl.textContent = 'BETA'
+                    verBadgeEl.className   = 'ver-badge beta'
+                  Classes: ver-badge alpha | beta | release
+              */}
               <span className="ver-badge beta" id="verBadge">BETA</span>
-              {/* Project badge — show via .show class from chats.ts */}
-              <div className="proj-badge-hdr" id="hdrProjBadge"/>
+
+              {/* Project badge — hidden until a project is active */}
+              <div className="proj-badge-hdr" id="hdrProjBadge" style={{ display:'none' }}/>
             </div>
 
-            {/* Right: studio badge (secondary, optional — chats.ts may hide this) */}
+            {/* Right: studio status badge */}
             <div className="status-badge off" id="studioBadge"
               onClick={handleClick('retryStudio')} role="button" tabIndex={0}
               onKeyDown={(e) => { if (e.key === 'Enter') wCall('retryStudio') }}>
@@ -1104,7 +1055,11 @@ export default function ChatsPage() {
                   {/* Left cluster: attach + clear + divider + model pill */}
                   <div className="inp-l">
 
-                    {/* Attach file */}
+                    {/* ── Attach file button ──
+                        Wrapper uses flex + alignItems center so the label stays
+                        perfectly centred within the inp-bar height. The hidden
+                        <input> is taken out of flow with position:absolute so it
+                        cannot shift the layout. */}
                     <div className="inp-attach-wrap">
                       <label htmlFor="fi" className="ib" title="Lampirkan file" role="button" tabIndex={0}>
                         {Icon.attach}
@@ -1114,9 +1069,12 @@ export default function ChatsPage() {
                         id="fi"
                         accept="image/*,.lua,.txt,.json,.js,.py,.html,.css"
                         style={{
-                          position:'absolute', top:0, left:0,
-                          width:0, height:0, opacity:0,
-                          overflow:'hidden', pointerEvents:'none',
+                          position: 'absolute',
+                          top: 0, left: 0,
+                          width: 0, height: 0,
+                          opacity: 0,
+                          overflow: 'hidden',
+                          pointerEvents: 'none',
                         }}
                         onChange={handleFileChange}
                         multiple
@@ -1152,12 +1110,14 @@ export default function ChatsPage() {
                 </div>
               </div>
 
-              {/* Model dropdown */}
+              {/* Model dropdown — populated by chats.ts */}
               <div className="model-dd" id="mDD"/>
             </div>
           </div>
 
-          {/* ── TAB: GUI EDITOR ── */}
+          {/* ── TAB: GUI EDITOR ──
+              Theme selector removed per request; theme is handled in AI Build modal.
+          ── */}
           <div id="guiTab">
             <div className="gui-toolbar">
               <span className="gui-add-label" id="guiAddLabel">Tambah:</span>
@@ -1169,6 +1129,7 @@ export default function ChatsPage() {
               ))}
 
               <div className="gui-right">
+                {/* Model selector for GUI tab */}
                 <div className="inp-model" id="guiModelBtn"
                   onClick={handleClickWithEvent('toggleGuiMDD')} role="button" tabIndex={0}
                   onKeyDown={(e) => { if (e.key === 'Enter') wCall('toggleGuiMDD', e) }}
@@ -1180,6 +1141,8 @@ export default function ChatsPage() {
                   {Icon.chevronDown}
                 </div>
                 <div className="model-dd" id="guiMDD"/>
+
+                {/* ─ guiThemeSelect REMOVED ─ */}
 
                 <button className="gui-ai-btn" type="button" onClick={handleClick('openGuiAIChat')}>
                   {Icon.bulb}<span id="guiAiBuildLbl">AI Build</span>
@@ -1399,7 +1362,7 @@ export default function ChatsPage() {
         </div>
       </div>
 
-      {/* AI GUI Builder */}
+      {/* AI GUI Builder — theme selector stays here */}
       <div className="ov" id="guiAIChatModal">
         <div className="modal" style={{ width:500 }}>
           <div className="modal-t">{Icon.bulb}<span id="guiAiTitle">AI UI Builder</span></div>
