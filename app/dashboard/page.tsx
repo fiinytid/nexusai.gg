@@ -979,7 +979,7 @@ export default function DashboardPage() {
   const av = session?.user?.avatar
     || (session?.user?.robloxId
       ? `https://www.roblox.com/headshot-thumbnail/image?userId=${session.user.robloxId}&width=150&height=150&format=png`
-      : '/nexusai.png')
+      : '/images/nexusai.png')
 
   const { display: creditsDisplay } = getCredits(userData)
   const { label: planLabel, cls: planCls } = getPlanInfo(userData)
@@ -1092,7 +1092,7 @@ export default function DashboardPage() {
 
       <nav className="dnav">
         <a className="dnav-logo" onClick={() => window.location.href = '/dashboard'}>
-          <div className="dnav-logo-icon"><img src="/nexusai.png" alt="" onError={e => { (e.currentTarget as HTMLImageElement).style.display='none' }} /></div>
+          <div className="dnav-logo-icon"><img src="/images/nexusai.png" alt="" onError={e => { (e.currentTarget as HTMLImageElement).style.display='none' }} /></div>
           NEXUS AI
         </a>
         <div className="dnav-right">
@@ -1102,13 +1102,13 @@ export default function DashboardPage() {
           </a>
           <div className="user-pill-wrap" id="userPillWrap">
             <div className={`user-pill${ddOpen ? ' open' : ''}`} onClick={() => setDdOpen(o => !o)}>
-              <img className="user-av-sm" src={av} alt="" onError={e => { (e.currentTarget as HTMLImageElement).src='/nexusai.png' }} />
+              <img className="user-av-sm" src={av} alt="" onError={e => { (e.currentTarget as HTMLImageElement).src='/images/nexusai.png' }} />
               <span className="user-name-nav">@{session?.user.username || '...'}</span>
               <svg className="user-caret" viewBox="0 0 24 24"><polyline points="6 9 12 15 18 9"/></svg>
             </div>
             <div className={`user-dd${ddOpen ? ' open' : ''}`}>
               <div className="ud-hdr">
-                <img className="ud-av" src={av} alt="" onError={e => { (e.currentTarget as HTMLImageElement).src='/nexusai.png' }} />
+                <img className="ud-av" src={av} alt="" onError={e => { (e.currentTarget as HTMLImageElement).src='/images/nexusai.png' }} />
                 <div>
                   <div className="ud-name">@{session?.user.username}</div>
                   <div className="ud-role">{planLabel} Plan</div>
@@ -1155,7 +1155,7 @@ export default function DashboardPage() {
         <div className="page-header">
           <div className="header-left">
             <div className="header-av-wrap">
-              <img src={av} alt="" onError={e => { (e.currentTarget as HTMLImageElement).src='/nexusai.png' }} />
+              <img src={av} alt="" onError={e => { (e.currentTarget as HTMLImageElement).src='/images/nexusai.png' }} />
             </div>
             <div className="header-info">
               <h1>Welcome, <span>{session?.user.username || 'Dev'}</span>!</h1>
@@ -1397,7 +1397,7 @@ export default function DashboardPage() {
           <div className="settings-sec">
             <div className="settings-sec-title">Roblox Account</div>
             <div className="settings-av-row">
-              <img className="settings-av" src={av} alt="" onError={e => { (e.currentTarget as HTMLImageElement).src='/nexusai.png' }} />
+              <img className="settings-av" src={av} alt="" onError={e => { (e.currentTarget as HTMLImageElement).src='/images/nexusai.png' }} />
               <div>
                 <div className="settings-av-name">@{session?.user.username}</div>
                 <div className="settings-av-id">Roblox ID: {session?.user.robloxId || '–'}</div>

@@ -358,7 +358,7 @@ export default function Inbox() {
         {/* Nav */}
         <nav className="inb-nav">
           <img
-            src="/nexusai.png"
+            src="/images/nexusai.png"
             style={{ width: 22, height: 22, borderRadius: 5 }}
             alt="N"
             onError={(e) => ((e.currentTarget as HTMLImageElement).style.display = "none")}
