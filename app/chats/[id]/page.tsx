@@ -210,9 +210,16 @@ body::before {
   padding:0 12px 0 16px; border-bottom:1px solid var(--b); background:var(--bg2);
   display:flex; align-items:center; gap:8px; flex-shrink:0; height:48px; min-width:0;
 }
+
+/* ── Title + BETA badge group (tight, left-aligned) ── */
+.chat-title-group {
+  display:flex; align-items:center; gap:6px;
+  flex:1 1 0; min-width:0; overflow:hidden;
+}
 .chat-title {
   font-family:'Orbitron',sans-serif; font-size:11px; font-weight:700;
-  color:white; flex:1 1 0; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; min-width:0;
+  color:white; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;
+  flex-shrink:1; min-width:0;
 }
 .proj-badge-hdr {
   font-size:var(--fs-2xs); padding:2px 8px; border-radius:10px; height:20px; line-height:16px;
@@ -236,11 +243,11 @@ body::before {
 
 /* ── VERSION BADGE ── */
 .ver-badge {
-  display:inline-flex; align-items:center; gap:4px;
-  padding:0 7px; height:20px; border-radius:10px;
-  font-family:'Orbitron',sans-serif; font-size:var(--fs-2xs); font-weight:700;
-  border:1px solid; flex-shrink:0; white-space:nowrap; letter-spacing:.5px; cursor:default;
-  user-select:none;
+  display:inline-flex; align-items:center;
+  padding:0 6px; height:18px; border-radius:9px;
+  font-family:'Orbitron',sans-serif; font-size:7px; font-weight:700;
+  border:1px solid; flex-shrink:0; white-space:nowrap; letter-spacing:.6px;
+  cursor:default; user-select:none; line-height:1;
 }
 .ver-badge.alpha   { color:#ff4444; border-color:rgba(255,68,68,.35);   background:rgba(255,68,68,.08) }
 .ver-badge.beta    { color:var(--yellow); border-color:rgba(255,214,0,.35); background:rgba(255,214,0,.06) }
@@ -370,6 +377,11 @@ body::before {
 .inp-l {
   display:flex; align-items:center; gap:5px; flex:1; min-width:0; overflow:hidden;
 }
+/* file-attach wrapper — keeps hidden input from affecting layout */
+.inp-attach-wrap {
+  display:flex; align-items:center; justify-content:center;
+  flex-shrink:0; position:relative; width:var(--h-sm); height:var(--h-sm);
+}
 /* icon-only action buttons */
 .ib {
   width:var(--h-sm); height:var(--h-sm); border-radius:var(--r-s); border:1px solid var(--b);
@@ -401,7 +413,6 @@ body::before {
   font-size:var(--fs-2xs); font-weight:700; flex-shrink:0;
   padding:1px 5px; border-radius:4px; border:1px solid;
 }
-/* badge color variants – driven by data-tier attr on the badge span */
 .inp-model-badge[data-tier="fast"]    { color:var(--cyan);   border-color:rgba(0,229,255,.3);   background:rgba(0,229,255,.07) }
 .inp-model-badge[data-tier="pro"]     { color:#cc55ff;       border-color:rgba(136,0,255,.35);  background:rgba(136,0,255,.07) }
 .inp-model-badge[data-tier="think"]   { color:var(--yellow); border-color:rgba(255,214,0,.3);   background:rgba(255,214,0,.06) }
@@ -529,10 +540,6 @@ body::before {
 .gui-empty-hint    { position:absolute; inset:0; display:flex; align-items:center; justify-content:center; flex-direction:column; gap:8px; color:rgba(0,229,255,.12); font-size:var(--fs-md); pointer-events:none }
 .gui-empty-hint svg{ width:30px; height:30px; stroke:currentColor; fill:none; stroke-width:1.5 }
 .gui-right { margin-left:auto; display:flex; align-items:center; gap:5px; flex-shrink:0; flex-wrap:nowrap }
-.gui-theme-select {
-  height:var(--h-sm); padding:0 8px; background:var(--card); border:1px solid var(--b); border-radius:var(--r-s);
-  color:var(--text); font-family:'JetBrains Mono',monospace; font-size:var(--fs-2xs); outline:none; cursor:pointer; max-width:110px; flex-shrink:0;
-}
 
 /* MODAL */
 .ov {
@@ -664,7 +671,7 @@ body::before {
   .inp-bar{ gap:4px; padding:0 8px; height:var(--h-inp) }
   .inp-model{ max-width:130px }
   .chat-hdr{ padding:0 10px; gap:6px; height:44px }
-  .chat-title{ font-size:var(--fs-sm) }
+  .chat-title{ font-size:var(--fs-xs) }
   .proj-badge-hdr{ display:none }
   .chat-tabs{ padding:4px 8px; gap:3px; height:38px }
   .tab-btn{ padding:0 10px; font-size:var(--fs-2xs); height:var(--h-xs) }
@@ -676,7 +683,7 @@ body::before {
   .modal-t{ font-size:12px }
   .suggs{ grid-template-columns:1fr }
   .wt{ font-size:18px }
-  .ver-badge{ display:none }
+  .ver-badge{ font-size:6px; height:15px; padding:0 5px }
 }
 @media(max-width:550px){
   .sb-nav-btn{ font-size:var(--fs-2xs); padding:0 8px; height:var(--h-sm) }
@@ -836,7 +843,7 @@ export default function ChatsPage() {
     { type:'ScrollingFrame', label:'Scroll', icon:<><rect x="3" y="3" width="18" height="18" rx="2"/><path d="M3 9h18"/></> },
   ]
 
-  /* ─── theme options for GUI canvas ─── */
+  /* ─── theme options — used in AI GUI Builder modal only ─── */
   const guiThemeOptions: ThemeOption[] = [
     { value:'nexus_ai', label:'NEXUS AI' },
     { value:'aurora',   label:'Aurora'   },
@@ -981,23 +988,30 @@ export default function ChatsPage() {
             </a>
           </div>
 
-          {/* ── HEADER: title | project badge | version badge | studio badge ── */}
+          {/* ── HEADER ──
+              Layout: [title + BETA badge · proj badge] ··· [studio badge]
+              BETA sits immediately after the title text, not at the far right.
+          ── */}
           <div className="chat-hdr">
-            {/* Chat title */}
-            <div className="chat-title" id="chatTitle">NEXUS AI</div>
 
-            {/* Project badge — hidden until a project is active */}
-            <div className="proj-badge-hdr" id="hdrProjBadge" style={{ display:'none' }}/>
+            {/* Left group: title text + BETA badge inline, then proj badge */}
+            <div className="chat-title-group">
+              {/* title text — chats.ts updates this via #chatTitle */}
+              <div className="chat-title" id="chatTitle">NEXUS AI</div>
 
-            {/*
-              Version badge — chats.ts sets both the text and the tier class
-              via:  verBadgeEl.textContent = 'BETA'
+              {/* BETA badge — immediately after the title, NOT pushed to the right.
+                  chats.ts can update via:
+                    verBadgeEl.textContent = 'BETA'
                     verBadgeEl.className   = 'ver-badge beta'
-              Classes: ver-badge alpha | beta | release
-            */}
-            <span className="ver-badge beta" id="verBadge">BETA</span>
+                  Classes: ver-badge alpha | beta | release
+              */}
+              <span className="ver-badge beta" id="verBadge">BETA</span>
 
-            {/* Studio status */}
+              {/* Project badge — hidden until a project is active */}
+              <div className="proj-badge-hdr" id="hdrProjBadge" style={{ display:'none' }}/>
+            </div>
+
+            {/* Right: studio status badge */}
             <div className="status-badge off" id="studioBadge"
               onClick={handleClick('retryStudio')} role="button" tabIndex={0}
               onKeyDown={(e) => { if (e.key === 'Enter') wCall('retryStudio') }}>
@@ -1040,15 +1054,32 @@ export default function ChatsPage() {
                 <div className="inp-bar">
                   {/* Left cluster: attach + clear + divider + model pill */}
                   <div className="inp-l">
-                    {/* Attach file */}
-                    <div style={{ position:'relative', flexShrink:0, display:'inline-flex' }}>
+
+                    {/* ── Attach file button ──
+                        Wrapper uses flex + alignItems center so the label stays
+                        perfectly centred within the inp-bar height. The hidden
+                        <input> is taken out of flow with position:absolute so it
+                        cannot shift the layout. */}
+                    <div className="inp-attach-wrap">
                       <label htmlFor="fi" className="ib" title="Lampirkan file" role="button" tabIndex={0}>
                         {Icon.attach}
                       </label>
-                      <input type="file" id="fi"
+                      <input
+                        type="file"
+                        id="fi"
                         accept="image/*,.lua,.txt,.json,.js,.py,.html,.css"
-                        style={{ position:'absolute', width:0, height:0, opacity:0, overflow:'hidden', pointerEvents:'none' }}
-                        onChange={handleFileChange} multiple tabIndex={-1}/>
+                        style={{
+                          position: 'absolute',
+                          top: 0, left: 0,
+                          width: 0, height: 0,
+                          opacity: 0,
+                          overflow: 'hidden',
+                          pointerEvents: 'none',
+                        }}
+                        onChange={handleFileChange}
+                        multiple
+                        tabIndex={-1}
+                      />
                     </div>
 
                     {/* Clear chat */}
@@ -1084,7 +1115,9 @@ export default function ChatsPage() {
             </div>
           </div>
 
-          {/* ── TAB: GUI EDITOR ── */}
+          {/* ── TAB: GUI EDITOR ──
+              Theme selector removed per request; theme is handled in AI Build modal.
+          ── */}
           <div id="guiTab">
             <div className="gui-toolbar">
               <span className="gui-add-label" id="guiAddLabel">Tambah:</span>
@@ -1096,6 +1129,7 @@ export default function ChatsPage() {
               ))}
 
               <div className="gui-right">
+                {/* Model selector for GUI tab */}
                 <div className="inp-model" id="guiModelBtn"
                   onClick={handleClickWithEvent('toggleGuiMDD')} role="button" tabIndex={0}
                   onKeyDown={(e) => { if (e.key === 'Enter') wCall('toggleGuiMDD', e) }}
@@ -1108,10 +1142,7 @@ export default function ChatsPage() {
                 </div>
                 <div className="model-dd" id="guiMDD"/>
 
-                <select id="guiThemeSelect" className="gui-theme-select" onChange={handleGuiThemeChange} defaultValue="">
-                  <option value="">Tema...</option>
-                  {guiThemeOptions.map(({ value, label }) => <option key={value} value={value}>{label}</option>)}
-                </select>
+                {/* ─ guiThemeSelect REMOVED ─ */}
 
                 <button className="gui-ai-btn" type="button" onClick={handleClick('openGuiAIChat')}>
                   {Icon.bulb}<span id="guiAiBuildLbl">AI Build</span>
@@ -1331,13 +1362,13 @@ export default function ChatsPage() {
         </div>
       </div>
 
-      {/* AI GUI Builder */}
+      {/* AI GUI Builder — theme selector stays here */}
       <div className="ov" id="guiAIChatModal">
         <div className="modal" style={{ width:500 }}>
           <div className="modal-t">{Icon.bulb}<span id="guiAiTitle">AI UI Builder</span></div>
           <div className="modal-b" style={{ marginBottom:8 }}>
             <p style={{ marginBottom:8, fontSize:'var(--fs-md)' }} id="guiAiDesc">Deskripsikan UI yang kamu inginkan:</p>
-            <select id="guiAiThemeSelect" className="settings-select" style={{ width:'100%', marginBottom:8, height:'var(--h-sm)' }} defaultValue="nexus_ai">
+            <select id="guiAiThemeSelect" className="settings-select" style={{ width:'100%', marginBottom:8, height:'var(--h-sm)' }} defaultValue="nexus_ai" onChange={handleGuiThemeChange}>
               {guiThemeOptions.map(({ value, label }) => <option key={value} value={value}>{label}</option>)}
             </select>
             <textarea id="guiAIPrompt"
