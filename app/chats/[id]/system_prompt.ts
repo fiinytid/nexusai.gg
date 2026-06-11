@@ -15,46 +15,15 @@ export interface NexusSettings {
   currentProjectName?: string | null;
   playTestEnabled?: boolean;
   playTestDuration?: number;
-  selectedTheme?: string;
-}
-
-export interface ThemeColors {
-  accent: string;
-  accent2: string;
-  bg: string;
-  text: string;
-  corner: number;
 }
 
 export interface SysPromptContext {
   session?: NexusSession | null;
   settings?: NexusSettings | null;
-  pluginVersion?: string;
   studioConnected?: boolean;
   isOwnerFn?: () => boolean;
   isAdminFn?: () => boolean;
 }
-
-// ── Theme Palette ────────────────────────────────────────────────────────────
-
-export const THEME_COLORS: Record<string, ThemeColors> = {
-  nexus_ai:  { accent: '0,210,255',   accent2: '130,20,255',  bg: '8,8,20',      text: '185,200,255', corner: 10 },
-  cyberpunk: { accent: '255,30,120',  accent2: '0,240,210',   bg: '5,5,15',      text: '255,200,230', corner: 4  },
-  aurora:    { accent: '0,255,180',   accent2: '180,0,255',   bg: '5,10,18',     text: '200,255,240', corner: 12 },
-  nature:    { accent: '80,210,100',  accent2: '160,240,80',  bg: '8,18,8',      text: '200,240,200', corner: 12 },
-  fire:      { accent: '255,100,0',   accent2: '255,200,0',   bg: '15,5,0',      text: '255,220,180', corner: 8  },
-  ice:       { accent: '150,230,255', accent2: '200,245,255', bg: '5,15,30',     text: '220,240,255', corner: 12 },
-  royal:     { accent: '255,200,0',   accent2: '200,150,255', bg: '8,5,18',      text: '255,235,180', corner: 8  },
-  minimal:   { accent: '220,220,220', accent2: '255,255,255', bg: '12,12,12',    text: '230,230,230', corner: 6  },
-  neon:      { accent: '0,255,150',   accent2: '255,0,200',   bg: '5,5,8',       text: '200,255,200', corner: 8  },
-  ocean:     { accent: '0,200,220',   accent2: '0,100,255',   bg: '5,15,30',     text: '180,220,255', corner: 10 },
-  retro:     { accent: '255,140,0',   accent2: '200,80,255',  bg: '18,10,5',     text: '255,220,180', corner: 6  },
-  light:     { accent: '0,120,215',   accent2: '100,0,200',   bg: '240,242,255', text: '20,20,40',    corner: 8  },
-  dark:      { accent: '180,160,255', accent2: '255,160,220', bg: '8,8,10',      text: '220,220,230', corner: 8  },
-  midnight:  { accent: '120,100,255', accent2: '200,80,255',  bg: '6,6,22',      text: '200,195,255', corner: 10 },
-  candy:     { accent: '255,150,200', accent2: '130,255,200', bg: '28,12,28',    text: '255,220,240', corner: 14 },
-  studs:     { accent: '255,60,60',   accent2: '255,180,0',   bg: '20,8,8',      text: '255,225,210', corner: 4  },
-};
 
 // ── Main Export ──────────────────────────────────────────────────────────────
 
@@ -74,39 +43,21 @@ export function buildSysPrompt(ctx: SysPromptContext = {}): string {
     ? 'Unlimited'
     : parseFloat(String(S.credits ?? 0)).toFixed(0);
 
-  const now          = new Date();
-  const connected    = ctx.studioConnected ?? false;
-  const projName     = S.currentProjectName ?? null;
-  const ptEnabled    = S.playTestEnabled !== false;
-  const ptDur        = S.playTestDuration ?? 15;
-  const PLUGIN_VER_L = ctx.pluginVersion ?? 'V1.3.29';
-  const selectedTheme: string = S.selectedTheme ?? 'nexus_ai';
-  const isCustomTheme: boolean = selectedTheme === 'custom';
-
-  // ── Resolve Active Theme Colors ──────────────────────────────────────────
-  const TC: ThemeColors = isCustomTheme
-    ? { accent: '150,150,150', accent2: '100,100,100', bg: '15,15,15', text: '220,220,220', corner: 8 }
-    : (THEME_COLORS[selectedTheme] ?? THEME_COLORS['nexus_ai']!);
-
-  const themeDesc: string = isCustomTheme
-    ? 'CUSTOM — colors are defined at runtime by the user. ' +
-      'MANDATORY: declare a local THEME table at the top of every Lua script (see CUSTOM THEME RULE).'
-    : `PRESET: ${selectedTheme.toUpperCase()}` +
-      ` | bg=Color3.fromRGB(${TC.bg})` +
-      ` | accent=Color3.fromRGB(${TC.accent})` +
-      ` | accent2=Color3.fromRGB(${TC.accent2})` +
-      ` | text=Color3.fromRGB(${TC.text})` +
-      ` | corner=${TC.corner}px`;
+  const now       = new Date();
+  const connected = ctx.studioConnected ?? false;
+  const projName  = S.currentProjectName ?? null;
+  const ptEnabled = S.playTestEnabled !== false;
+  const ptDur     = S.playTestDuration ?? 15;
 
   // ════════════════════════════════════════════════════════════════════════
   // 1. SESSION HEADER
   // ════════════════════════════════════════════════════════════════════════
   const header: string =
-    `NEXUS AI | ${PLUGIN_VER_L}\n` +
+    `NEXUS AI\n` +
     `User: @${un} (${dn}) | Plan: ${(S.plan ?? 'free').toUpperCase()} | Credits: ${cr}\n` +
     `Studio: ${connected ? 'CONNECTED' : 'OFFLINE'} | PlayTest: ${ptEnabled ? `ENABLED (${ptDur}s)` : 'DISABLED'}\n` +
     (projName ? `Project: ${projName}\n` : '') +
-    `Time: ${now.toLocaleString('en-US')} | Theme: ${selectedTheme}\n` +
+    `Time: ${now.toLocaleString('en-US')}\n` +
     'Language: English';
 
   // ════════════════════════════════════════════════════════════════════════
@@ -133,47 +84,7 @@ export function buildSysPrompt(ctx: SysPromptContext = {}): string {
     'Studio OFFLINE   → output full Lua code block, zero truncation, zero placeholders.';
 
   // ════════════════════════════════════════════════════════════════════════
-  // 3. CUSTOM THEME RULE (only when theme = "custom")
-  // ════════════════════════════════════════════════════════════════════════
-  const customThemeRule: string = isCustomTheme
-    ? '## CUSTOM THEME RULE — MANDATORY WHEN THEME = "custom"\n\n' +
-      'The user has selected a CUSTOM theme. Their exact colors are not known at generation time.\n' +
-      'Every Lua script that builds or styles UI MUST declare a local THEME table at the very top\n' +
-      '(inside the Constants block, Block 2), using values fetched from the plugin\'s shared config.\n\n' +
-      'REQUIRED PATTERN — paste this verbatim at the top of every UI script:\n' +
-      '```lua\n' +
-      '-- ── THEME (custom — fetched from plugin config) ──────────────────────────\n' +
-      'local THEME = {\n' +
-      '    bg      = Color3.fromRGB(15, 15, 15),   -- fallback; replaced at runtime if config exists\n' +
-      '    accent  = Color3.fromRGB(150,150,150),\n' +
-      '    accent2 = Color3.fromRGB(100,100,100),\n' +
-      '    text    = Color3.fromRGB(220,220,220),\n' +
-      '    corner  = 8,\n' +
-      '}\n' +
-      'do\n' +
-      '    local ok, cfg = pcall(function()\n' +
-      '        return game:GetService("ReplicatedStorage"):WaitForChild("NexusConfig", 3)\n' +
-      '    end)\n' +
-      '    if ok and cfg then\n' +
-      '        local function getRGB(name)\n' +
-      '            local v = cfg:FindFirstChild(name)\n' +
-      '            return v and v.Value or nil\n' +
-      '        end\n' +
-      '        THEME.bg      = getRGB("ThemeBg")      or THEME.bg\n' +
-      '        THEME.accent  = getRGB("ThemeAccent")  or THEME.accent\n' +
-      '        THEME.accent2 = getRGB("ThemeAccent2") or THEME.accent2\n' +
-      '        THEME.text    = getRGB("ThemeText")    or THEME.text\n' +
-      '        local cv = cfg:FindFirstChild("ThemeCorner")\n' +
-      '        THEME.corner  = cv and cv.Value or THEME.corner\n' +
-      '    end\n' +
-      'end\n' +
-      '```\n\n' +
-      'After declaring THEME, use THEME.bg / THEME.accent / THEME.accent2 / THEME.text / THEME.corner\n' +
-      'for EVERY Color3 and corner radius value in that script. NEVER hardcode colors when theme=custom.\n'
-    : '';
-
-  // ════════════════════════════════════════════════════════════════════════
-  // 4. CODE RULES
+  // 3. CODE RULES
   // ════════════════════════════════════════════════════════════════════════
   const codeRules: string =
     '## CODE RULES\n\n' +
@@ -182,7 +93,6 @@ export function buildSysPrompt(ctx: SysPromptContext = {}): string {
     'Every Script and LocalScript must be written in this exact order:\n' +
     '  Block 1 — Services         : all game:GetService() calls, never inside loops or functions\n' +
     '  Block 2 — Constants        : fixed values, colors, sizes, durations — no function calls\n' +
-    (isCustomTheme ? '                             [CUSTOM THEME: declare local THEME table here — see CUSTOM THEME RULE]\n' : '') +
     '  Block 3 — Remote/Module    : WaitForChild for remotes and modules\n' +
     '  Block 4 — Object refs      : all WaitForChild calls — nil-check every result\n' +
     '  Block 5 — State variables  : mutable variables and forward declarations\n' +
@@ -226,7 +136,7 @@ export function buildSysPrompt(ctx: SysPromptContext = {}): string {
     '• Validate every remote argument: type check + range check + rate limit per player';
 
   // ════════════════════════════════════════════════════════════════════════
-  // 5. GUI RULES — ELITE UI/UX STANDARDS
+  // 4. GUI RULES — ELITE UI/UX STANDARDS
   // ════════════════════════════════════════════════════════════════════════
   const guiRules: string =
     '## GUI RULES — ELITE UI/UX STANDARDS\n\n' +
@@ -267,16 +177,7 @@ export function buildSysPrompt(ctx: SysPromptContext = {}): string {
     '• RichText=true on labels that need colored spans or bold inline text\n' +
     '• Never mix more than 2 font weights in the same panel section\n\n' +
 
-    '# COLOR APPLICATION\n' +
-    (isCustomTheme
-      ? 'Active theme is CUSTOM — always use THEME.bg / THEME.accent / THEME.accent2 / THEME.text / THEME.corner\n' +
-        'Declare the THEME table at the top of every UI script (see CUSTOM THEME RULE).\n'
-      : `Background panels : Color3.fromRGB(${TC.bg}) — active theme bg\n` +
-        `Primary accent    : Color3.fromRGB(${TC.accent}) — headers, icons, active states\n` +
-        `Secondary accent  : Color3.fromRGB(${TC.accent2}) — gradients, highlights, badges\n` +
-        `Text primary      : Color3.fromRGB(${TC.text}) — main readable text\n` +
-        `Text muted        : Color3.fromRGB(${TC.text}) at 0.45 transparency — secondary info\n`
-    ) +
+    '# COLOR SYSTEM\n' +
     'Danger / Error    : Color3.fromRGB(255,60,60)\n' +
     'Success / Confirm : Color3.fromRGB(60,220,120)\n' +
     'Warning           : Color3.fromRGB(255,180,0)\n' +
@@ -303,11 +204,11 @@ export function buildSysPrompt(ctx: SysPromptContext = {}): string {
     'Secondary : outline-only style, no fill, accent-colored text + icon\n\n' +
 
     '# PANEL & CARD STANDARDS\n' +
-    `Main Panel  : theme bg, UICorner radius=${isCustomTheme ? 'THEME.corner+2' : TC.corner + 2}, UIStroke accent 0.5, vertical UIGradient\n` +
+    'Main Panel  : UICorner, UIStroke accent 0.5, vertical UIGradient\n' +
     '              Shadow illusion: duplicate frame behind at +2,+4 offset, transparency=0.85\n' +
     'Header Bar  : full-width, 0.10 scale height, UIGradient accent→accent2 at 135°\n' +
     '              Left: icon (24×24) + title (GothamBold 18pt white) | Right: Close button\n' +
-    'Content Card: theme bg+12, UICorner=8, UIPadding all=10, UIStroke accent 0.75\n' +
+    'Content Card: UICorner=8, UIPadding all=10, UIStroke accent 0.75\n' +
     '              Hover: UIStroke transparency tween to 0.4\n' +
     'Separator   : Frame 0.9 width, 1px height, accent color at 0.82 transparency, centered\n\n' +
 
@@ -318,7 +219,7 @@ export function buildSysPrompt(ctx: SysPromptContext = {}): string {
     'ElasticBehavior="WhenScrollable"\n\n' +
 
     '# INPUT / TEXTBOX\n' +
-    'bg=theme bg+8, UICorner=6, UIPadding left+right=10\n' +
+    'UICorner=6, UIPadding left+right=10\n' +
     'UIStroke: Thickness=1, Color=accent, Transparency=0.6\n' +
     'Focused state: UIStroke transparency tween to 0.1, subtle glow\n' +
     'Always include a left-side icon (magnifier for search, pencil for edit)\n\n' +
@@ -359,129 +260,10 @@ export function buildSysPrompt(ctx: SysPromptContext = {}): string {
     '• UIGradient on all headers and primary buttons: accent→accent2, Rotation=90 or 135\n' +
     '• UIListLayout + UIPadding inside EVERY list, grid, or container\n' +
     '• TweenService hover feedback on ALL clickable elements — no exceptions\n' +
-    '• Minimum spacing between elements: 8px via UIListLayout Padding\n\n' +
-
-    '# ACTIVE THEME\n' +
-    themeDesc;
+    '• Minimum spacing between elements: 8px via UIListLayout Padding';
 
   // ════════════════════════════════════════════════════════════════════════
-  // 6. UI COMPONENT PATTERNS
-  // ════════════════════════════════════════════════════════════════════════
-  const uiPatterns: string =
-    '## UI COMPONENT PATTERNS\n\n' +
-
-    '# STANDARD PANEL STRUCTURE\n' +
-    'ScreenGui [Enabled=false, IgnoreGuiInset=true, DisplayOrder=100]\n' +
-    '  BackdropFrame   [full-screen, bg=black, transparency=0.6, ZIndex=0]\n' +
-    '  MainFrame       [0.5×0.6 scale, centered, bg=theme bg, UICorner, UIStroke accent]\n' +
-    '    ShadowFrame   [same size, offset +2,+4 behind, transparency=0.85]\n' +
-    '    HeaderBar     [full-width, 0.10 height, UIGradient accent→accent2]\n' +
-    '      HeaderIcon  [ImageLabel, 24×24]\n' +
-    '      HeaderTitle [GothamBold, 18pt, white]\n' +
-    '      CloseButton [ImageButton, 24×24, Close icon, top-right]\n' +
-    '    ContentArea   [remaining height, UIListLayout Vertical, UIPadding=12]\n' +
-    '    FooterBar     [full-width, 0.08 height, right-aligned action buttons]\n\n' +
-
-    '# ICON + TEXT ROW (list item)\n' +
-    'ItemFrame   [full-width, 44px height, bg=card, UICorner=6, UIPadding]\n' +
-    '  UIListLayout [Horizontal, Center, Padding=8]\n' +
-    '  IconFrame   [32×32, bg=accent 0.15, UICorner=6]\n' +
-    '    IconImage [20×20 centered, ImageColor=accent]\n' +
-    '  LabelColumn [fill remaining width, UIListLayout Vertical]\n' +
-    '    TitleLabel [GothamMedium, 13pt]\n' +
-    '    SubLabel   [Gotham, 11pt, muted]\n' +
-    '  ValueLabel  [right-aligned, GothamBold, 14pt, accent color]\n\n' +
-
-    '# STAT DISPLAY CARD\n' +
-    'StatCard    [48% width, 80px height, bg=card, UICorner, UIPadding=10, UIStroke]\n' +
-    '  UIListLayout [Vertical, Center]\n' +
-    '  IconCircle  [40×40, UICorner=20, bg=accent 0.15]\n' +
-    '    StatIcon  [24×24 centered, ImageColor=accent]\n' +
-    '  StatValue   [GothamBold, 24pt, accent, count-up on open]\n' +
-    '  StatLabel   [Gotham, 11pt, muted — e.g. "COINS" / "LEVEL"]\n\n' +
-
-    '# ACTION BUTTON (primary CTA)\n' +
-    'ButtonFrame [full-width, 40px height, UIGradient accent→accent2, UICorner, UIStroke]\n' +
-    '  UIListLayout [Horizontal, Center, Padding=8]\n' +
-    '  BtnIcon   [ImageLabel, 20×20, white]\n' +
-    '  BtnLabel  [GothamBold, 13pt, white]\n' +
-    '  Hover: UIStroke glow tween | Press: scale ×0.96 tween\n\n' +
-
-    '# TOGGLE SWITCH\n' +
-    'TrackFrame  [44×24px, bg=muted, UICorner=12]\n' +
-    '  ThumbCircle [20×20, bg=white, UICorner=10, AnchorPoint=0.5,0.5]\n' +
-    '  OFF state: thumb Position.X=0.25, track bg=muted\n' +
-    '  ON  state: thumb Position.X=0.75 (tween 0.15s), track bg=accent\n\n' +
-
-    '# DROPDOWN MENU\n' +
-    'DropdownButton [styled as input, shows selected value + chevron icon right]\n' +
-    'DropdownList   [same width, absolute position below button, ZIndex=8]\n' +
-    '  ScrollingFrame [max 200px height, auto-canvas]\n' +
-    '    Each option: ItemFrame with icon + label + checkmark if selected\n' +
-    '  Open : scale Y 0→1, tween 0.15s | Close: scale Y 1→0, tween 0.12s\n\n' +
-
-    '# LEADERBOARD ROW\n' +
-    'RowFrame    [full-width, 48px height, alternating bg for even/odd]\n' +
-    '  UIListLayout [Horizontal, Center, Padding=8]\n' +
-    '  RankBadge  [32×32, top-3=accent gradient else muted, UICorner=6]\n' +
-    '  AvatarCircle [32×32, UICorner=16]\n' +
-    '  NameLabel  [GothamMedium, 13pt, fill width]\n' +
-    '  ScoreFrame [right-aligned, accent-tinted]\n' +
-    '    TrophyIcon [16×16, rbxassetid://77830885604568] + ScoreLabel [GothamBold, 14pt, accent]\n\n' +
-
-    '# SHOP ITEM CARD\n' +
-    'ItemCard    [30% width, 160px height, bg=card, UICorner=10, UIStroke, UIPadding=10]\n' +
-    '  ItemPreview [full-width, 90px height, bg=dark, UICorner=8]\n' +
-    '    PreviewImage [full size, ScaleType=Fit]\n' +
-    '    RarityBadge  [top-right, pill shape, color by rarity]\n' +
-    '  ItemName  [GothamBold, 13pt, 2 lines max]\n' +
-    '  PriceRow  [full-width, 28px height, Horizontal layout]\n' +
-    '    CoinIcon [rbxassetid://84697600263846] + PriceLabel [GothamBold, 14pt, accent] + BuyButton [primary style]\n\n' +
-
-    '# HUD HEALTH / ENERGY BAR\n' +
-    'HUDBar      [30% width, 20px height, bg=dark semi-transparent, UICorner=10]\n' +
-    '  UIListLayout [Horizontal, Center, Padding=6]\n' +
-    '  BarIcon     [16×16, Heart or Fire icon]\n' +
-    '  TrackFrame  [fill width, 10px height, bg=muted, UICorner=5]\n' +
-    '    FillBar   [UIGradient accent→accent2, UICorner=5, animate on value change]\n' +
-    '  ValueLabel  [GothamBold, 11pt, accent, format "80/100"]\n\n' +
-
-    '# MODAL / DIALOG\n' +
-    'Dimmed overlay: full-screen Frame, bg=black, transparency=0.5\n' +
-    'Modal box:      centered, width=0.45, UICorner, UIStroke, shadow behind\n' +
-    '  Header: icon + title left, close button right\n' +
-    '  Body:   padded content, GothamMedium 13pt\n' +
-    '  Footer: right-aligned — Cancel (secondary) then Confirm (primary)\n' +
-    'Open : scale 0.8→1.0, transparency 1→0, 0.25s Quad Out\n' +
-    'Close: scale 1.0→0.9, transparency 0→1, 0.2s Quad In → Destroy()\n\n' +
-
-    '# BADGE / STATUS INDICATOR\n' +
-    'Pill shape: auto-width, 20px height, UICorner=10, UIPadding left+right=8\n' +
-    'Active=accent bg | Inactive=muted bg | Danger=red bg\n' +
-    'Always include small dot (4×4 circle) or icon before label\n' +
-    'Text: Gotham 10pt, bold, white\n\n' +
-
-    '# TAB BAR\n' +
-    'Horizontal UIListLayout — each tab: icon (20×20) + label (GothamMedium 12pt)\n' +
-    'Active tab  : accent-colored underline bar (2px height) + text color=accent\n' +
-    'Inactive tab: muted text, no underline\n' +
-    'Switching   : tween underline Position.X to active tab, 0.2s Quad\n\n' +
-
-    '# PROGRESS BAR\n' +
-    'Track    : theme bg+15, UICorner=4, 8–12px height\n' +
-    'Fill bar : UIGradient accent→accent2, UICorner=4\n' +
-    'Label    : icon + stat name left, current/max right\n' +
-    'Animate  : tween Size.X from 0 to target in 0.5s Elastic Out on open\n' +
-    'Glow     : UIStroke Thickness=1, Color=accent, Transparency=0.4\n\n' +
-
-    '# CURRENCY DISPLAY (HUD)\n' +
-    'Frame       [120×32px, bg=dark semi-transparent, UICorner=16, UIPadding left+right=8]\n' +
-    '  UIListLayout [Horizontal, Center, Padding=6]\n' +
-    '  CoinIcon    [20×20, rbxassetid://84697600263846]\n' +
-    '  AmountLabel [GothamBold, 14pt, accent, count-up on value change]';
-
-  // ════════════════════════════════════════════════════════════════════════
-  // 7. REMOTE ORDER
+  // 5. REMOTE ORDER
   // ════════════════════════════════════════════════════════════════════════
   const remoteOrder: string =
     '## REMOTE ORDER — MANDATORY SEQUENCE\n' +
@@ -492,7 +274,7 @@ export function buildSysPrompt(ctx: SysPromptContext = {}): string {
     'Client access: RS:WaitForChild("RemoteName", 10)';
 
   // ════════════════════════════════════════════════════════════════════════
-  // 8. ICON LIBRARY
+  // 6. ICON LIBRARY
   // ════════════════════════════════════════════════════════════════════════
   const iconLibrary: string =
     '## ICON LIBRARY — Image = "rbxassetid://ID"\n' +
@@ -563,7 +345,7 @@ export function buildSysPrompt(ctx: SysPromptContext = {}): string {
     'UI Controls      → Plus, Minus, Close Button, Checkmark, Info';
 
   // ════════════════════════════════════════════════════════════════════════
-  // 9. SOUND LIBRARY
+  // 7. SOUND LIBRARY
   // ════════════════════════════════════════════════════════════════════════
   const soundLibrary: string =
     '## SOUND LIBRARY — SoundId = "rbxassetid://ID"\n' +
@@ -595,10 +377,10 @@ export function buildSysPrompt(ctx: SysPromptContext = {}): string {
     'Ambience: Volume=0.3, Looped=true,  parent=Part or SoundService';
 
   // ════════════════════════════════════════════════════════════════════════
-  // 10. ACTIONS REFERENCE
+  // 8. ACTIONS REFERENCE
   // ════════════════════════════════════════════════════════════════════════
   const actionsRef: string =
-    `## NEXUS ACTIONS — ActionsManager (${PLUGIN_VER_L})\n` +
+    '## NEXUS ACTIONS — ActionsManager\n' +
     'Total registered: 22 actions\n\n' +
 
     '# HOW ACTIONS WORK\n' +
@@ -874,21 +656,16 @@ export function buildSysPrompt(ctx: SysPromptContext = {}): string {
   // ════════════════════════════════════════════════════════════════════════
   // ASSEMBLE ALL SECTIONS
   // ════════════════════════════════════════════════════════════════════════
-  const sections: string[] = [header, identity];
-
-  if (isCustomTheme && customThemeRule !== '') {
-    sections.push(customThemeRule);
-  }
-
-  sections.push(
+  const sections: string[] = [
+    header,
+    identity,
     codeRules,
     guiRules,
-    uiPatterns,
     remoteOrder,
     iconLibrary,
     soundLibrary,
     actionsRef,
-  );
+  ];
 
   return sections.join('\n\n');
 }

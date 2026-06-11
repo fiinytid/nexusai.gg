@@ -63,7 +63,6 @@ interface AppState {
   curConv: string | null
   gen: boolean
   cancelCtrl: AbortController | null
-  selectedTheme: string
   model: ModelEntry
   guiModel: ModelEntry
   plan: string
@@ -524,8 +523,8 @@ const LANGS: Record<string, LangStrings> = {
     retrying: 'Mencoba ulang...', noScriptWarning: 'Tidak ada script yang terdeteksi untuk diinjeksi.',
     injecting: 'Menginjeksi ke Studio...', injectDone: 'Inject selesai!',
     suggs: [
-      { title: 'Loading Screen', body: 'Loading screen animasi profesional', q: 'Buat loading screen profesional dengan animasi progress bar, tips random, dan transisi halus. Gunakan tema nexus_ai', icon: '<polyline points="1 6 1 22 23 22 23 6"/><path d="M1 6l11 7 11-7"/>' },
-      { title: 'Shop GUI', body: 'Toko dengan animasi dan coins', q: 'Buat shop GUI lengkap dengan tombol buka tutup, item list, tombol beli, harga, coins display, dan animasi smooth. Gunakan tema nexus_ai', icon: '<circle cx="9" cy="21" r="1"/><circle cx="20" cy="21" r="1"/><path d="M1 1h4l2.68 13.39a2 2 0 0 0 2 1.61h9.72a2 2 0 0 0 2-1.61L23 6H6"/>' },
+      { title: 'Loading Screen', body: 'Loading screen animasi profesional', q: 'Buat loading screen profesional dengan animasi progress bar, tips random, dan transisi halus', icon: '<polyline points="1 6 1 22 23 22 23 6"/><path d="M1 6l11 7 11-7"/>' },
+      { title: 'Shop GUI', body: 'Toko dengan animasi dan coins', q: 'Buat shop GUI lengkap dengan tombol buka tutup, item list, tombol beli, harga, coins display, dan animasi smooth', icon: '<circle cx="9" cy="21" r="1"/><circle cx="20" cy="21" r="1"/><path d="M1 1h4l2.68 13.39a2 2 0 0 0 2 1.61h9.72a2 2 0 0 0 2-1.61L23 6H6"/>' },
       { title: 'Leaderboard', body: 'DataStore Coins + Level + Win', q: 'Buat sistem DataStore leaderboard untuk game Roblox dengan Coins, Level, dan Win', icon: '<polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/>' },
       { title: 'Admin System', body: 'Admin commands dan UI panel', q: 'Buat sistem admin commands lengkap dengan kick, ban, give, speed, fly, dan UI panel rapi', icon: '<polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"/>' },
     ],
@@ -587,8 +586,8 @@ const LANGS: Record<string, LangStrings> = {
     retrying: 'Retrying...', noScriptWarning: 'No scripts detected to inject.',
     injecting: 'Injecting to Studio...', injectDone: 'Inject complete!',
     suggs: [
-      { title: 'Loading Screen', body: 'Professional animated loading screen', q: 'Create a professional loading screen with animated progress bar, random tips, and smooth transitions. Use nexus_ai theme', icon: '<polyline points="1 6 1 22 23 22 23 6"/><path d="M1 6l11 7 11-7"/>' },
-      { title: 'Shop GUI', body: 'Shop with animations and coins', q: 'Create a complete shop GUI with open/close button, item list, buy button, prices, coins display, and smooth animations. Use nexus_ai theme', icon: '<circle cx="9" cy="21" r="1"/><circle cx="20" cy="21" r="1"/><path d="M1 1h4l2.68 13.39a2 2 0 0 0 2 1.61h9.72a2 2 0 0 0 2-1.61L23 6H6"/>' },
+      { title: 'Loading Screen', body: 'Professional animated loading screen', q: 'Create a professional loading screen with animated progress bar, random tips, and smooth transitions', icon: '<polyline points="1 6 1 22 23 22 23 6"/><path d="M1 6l11 7 11-7"/>' },
+      { title: 'Shop GUI', body: 'Shop with animations and coins', q: 'Create a complete shop GUI with open/close button, item list, buy button, prices, coins display, and smooth animations', icon: '<circle cx="9" cy="21" r="1"/><circle cx="20" cy="21" r="1"/><path d="M1 1h4l2.68 13.39a2 2 0 0 0 2 1.61h9.72a2 2 0 0 0 2-1.61L23 6H6"/>' },
       { title: 'Leaderboard', body: 'DataStore Coins + Level + Win', q: 'Create a DataStore leaderboard system for Roblox with Coins, Level, and Win stats', icon: '<polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/>' },
       { title: 'Admin System', body: 'Admin commands and UI panel', q: 'Create a complete admin commands system with kick, ban, give, speed, fly, and a clean UI panel', icon: '<polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"/>' },
     ],
@@ -612,7 +611,6 @@ const MODEL_LIST: ModelEntry[] = [
 const S: AppState = {
   credits: 30, allConvs: [], convs: [], curConv: null,
   gen: false, cancelCtrl: null,
-  selectedTheme: 'nexus_ai',
   model: { id: 'gemini-3.5-flash', prov: 'gemini', cost: 3, label: 'Gemini 3.5 Flash' },
   guiModel: { id: 'gemini-3.5-flash', prov: 'gemini', cost: 3, label: 'Gemini 3.5 Flash' },
   plan: 'free', draftText: {}, attachments: [], lastClaim: null, unreadInbox: 0,
@@ -620,21 +618,6 @@ const S: AppState = {
   playTestEnabled: typeof window !== 'undefined' ? localStorage.getItem('nexus_play_test') !== 'false' : false,
   playTestDuration: typeof window !== 'undefined' ? Math.max(5, Math.min(120, parseInt(localStorage.getItem('nexus_play_test_dur') || '15'))) : 15,
 }
-
-interface GuiThemeConfig {
-  bg: string; panel: string; card: string; accent: string; accent2: string; text: string; corner: number
-}
-const GUI_THEMES: Record<string, GuiThemeConfig> = {
-  nexus_ai: { bg: '#030312', panel: '#06071a', card: '#0a0b22', accent: '#00e5ff', accent2: '#8800ff', text: '#b8cfff', corner: 10 },
-  aurora: { bg: '#030f0a', panel: '#061510', card: '#0a1f17', accent: '#00ffb4', accent2: '#00a8ff', text: '#c0f5e8', corner: 12 },
-  candy: { bg: '#0f0508', panel: '#180a10', card: '#220d16', accent: '#ff4fa0', accent2: '#ff80cc', text: '#ffcce6', corner: 14 },
-  dark: { bg: '#080808', panel: '#101010', card: '#181818', accent: '#aaaaaa', accent2: '#666666', text: '#cccccc', corner: 6 },
-  default: { bg: '#0a0c12', panel: '#10141e', card: '#161c28', accent: '#0062d0', accent2: '#00b4ff', text: '#c4cfdf', corner: 8 },
-  midnight: { bg: '#06050f', panel: '#0d0b1a', card: '#130f24', accent: '#6644ff', accent2: '#aa44ff', text: '#c4b8f0', corner: 10 },
-  studs: { bg: '#0f0800', panel: '#180d00', card: '#221400', accent: '#ff7700', accent2: '#ffaa00', text: '#ffe4cc', corner: 4 },
-  custom: { bg: '#0d0d0d', panel: '#141414', card: '#1a1a1a', accent: '#888888', accent2: '#555555', text: '#cccccc', corner: 8 },
-}
-let _curGuiTheme = 'nexus_ai'
 
 const _MODEL_ID_MIGRATION: Record<string, string> = {
   'gemini-2.5-flash-lite': 'gemini-3.1-flash-lite',
@@ -713,7 +696,6 @@ function saveS(): void {
   SESSION.data.credits = S.credits
   SESSION.data.plan = S.plan
   SESSION.data.model = S.model
-  SESSION.data.selectedTheme = S.selectedTheme || 'nexus_ai'
   SESSION.data.lastClaim = S.lastClaim
   SESSION.data.projects = S.projects || SESSION.data.projects
   SESSION.data.convs = getStoreConvs()
@@ -768,7 +750,7 @@ async function syncToServer(): Promise<void> {
       robloxId: SESSION.user.robloxId,
       data: {
         credits: S.credits, plan: S.plan, model: S.model,
-        lastClaim: S.lastClaim, selectedTheme: S.selectedTheme || 'nexus_ai',
+        lastClaim: S.lastClaim,
         convs: convsTrimmed, projects: S.projects || [], lastSync: Date.now(),
       },
     }
@@ -814,7 +796,6 @@ async function loadS(): Promise<void> {
     }
     S.model = found || sm
   }
-  if (SESSION.data && SESSION.data.selectedTheme) S.selectedTheme = (SESSION.data.selectedTheme as string) || 'nexus_ai'
   S.allConvs = (SESSION.data && SESSION.data.convs as Conv[]) || []
   S.convs = S.currentProjectId
     ? S.allConvs.filter((c) => c.projectId === S.currentProjectId)
@@ -1101,7 +1082,7 @@ function _stripLuaExpressions(str: string): string {
 function _normalizeCmd(obj: unknown): Cmd | null {
   if (!obj || typeof obj !== 'object' || Array.isArray(obj)) return null
   const o = obj as Record<string, unknown>
-  let actionName = String(o.action || o.command || o.type || '').trim()
+  const actionName = String(o.action || o.command || o.type || '').trim()
   if (!actionName || actionName.length === 0 || actionName.length > 80) return null
   if (!/^[a-z_][a-z0-9_]*$/.test(actionName)) return null
   const result: Cmd = { action: actionName }
@@ -1347,7 +1328,7 @@ const _NEXUS_ACTION_FNS = [
   'ping','get_info','request_scan','clear_workspace','undo','redo',
   'save_waypoint','get_all_actions','set_project','run_lua','none',
   'create_billboard_gui','create_scroll_frame','create_viewport_frame',
-  'delete_object','apply_theme','get_theme','inject_quick_script',
+  'delete_object','get_theme','inject_quick_script',
 ]
 const _NEXUS_ACTION_FNS_SET = new Set(_NEXUS_ACTION_FNS)
 
@@ -1829,7 +1810,7 @@ function buildApiMsgs(): { role: string; content: string | unknown[] }[] {
 
 function detectType(txt: string): string {
   if (/error|fix|bug|debug|broken|crash|not work|tidak bisa|gagal/i.test(txt)) return 'debug'
-  if (/gui|hud|menu|shop|loading|inventory|screen|frame|button|tema|theme/i.test(txt)) return 'gui'
+  if (/gui|hud|menu|shop|loading|inventory|screen|frame|button/i.test(txt)) return 'gui'
   if (/read|baca|lihat|cek|check script/i.test(txt)) return 'read'
   if (/edit|ubah|ganti|update|tambah ke/i.test(txt) && /script/i.test(txt)) return 'edit'
   if (/test|play|jalankan|run/i.test(txt)) return 'test'
@@ -1994,26 +1975,24 @@ async function send(): Promise<void> {
 
   let msgs = buildApiMsgs()
   if (!_sysPromptReady) await _loadSysPromptScript()
-  const w = window as unknown as { buildSysPrompt?: () => string }
   let sysPrompt = buildSysPrompt({
-  session: SESSION ? {
-    user: {
-      username: SESSION.user.username,
-      displayName: SESSION.user.username,
-    }
-  } : null,
-  settings: {
-    credits: S.credits,
-    plan: S.plan,
-    currentProjectName: S.currentProjectName,
-    playTestEnabled: S.playTestEnabled,
-    playTestDuration: S.playTestDuration,
-    selectedTheme: S.selectedTheme,
-  },
-  studioConnected: studioConnected,
-  isOwnerFn: isOwner,
-  isAdminFn: isAdmin,
-})
+    session: SESSION ? {
+      user: {
+        username: SESSION.user.username,
+        displayName: SESSION.user.username,
+      }
+    } : null,
+    settings: {
+      credits: S.credits,
+      plan: S.plan,
+      currentProjectName: S.currentProjectName,
+      playTestEnabled: S.playTestEnabled,
+      playTestDuration: S.playTestDuration,
+    },
+    studioConnected: studioConnected,
+    isOwnerFn: isOwner,
+    isAdminFn: isAdmin,
+  })
 
   if (_shouldSearchDocs(txt) && sysPrompt) {
     try {
@@ -2814,7 +2793,7 @@ function selectCurrentMention(): boolean {
 }
 
 // ══════════════════════════════════════════════════════════════════════════════
-// PART 8 — FILE HANDLING, UI ACTIONS, GUI EDITOR, THEME PICKER, INIT, EVENTS
+// PART 8 — FILE HANDLING, UI ACTIONS, GUI EDITOR, INIT, EVENTS
 // ══════════════════════════════════════════════════════════════════════════════
 
 function handleFile(e: Event): void {
@@ -2879,11 +2858,10 @@ function logout(): void { localStorage.removeItem('nexus_session'); location.rep
 function useSugg(q: string): void {
   const inp = document.getElementById('inp') as HTMLTextAreaElement | null
   if (inp) {
-    const theme = S.selectedTheme || 'nexus_ai'
-    const qWithTheme = theme === 'custom'
-      ? q.replace(/ Gunakan tema nexus_ai/gi, '').replace(/ Use nexus_ai theme/gi, '')
-      : q.replace(/Gunakan tema nexus_ai/gi, 'Gunakan tema ' + theme).replace(/Use nexus_ai theme/gi, 'Use ' + theme + ' theme')
-    inp.value = qWithTheme; inp.style.height = 'auto'; inp.style.height = Math.min(inp.scrollHeight, 130) + 'px'; inp.focus()
+    inp.value = q
+    inp.style.height = 'auto'
+    inp.style.height = Math.min(inp.scrollHeight, 130) + 'px'
+    inp.focus()
   }
   send()
 }
@@ -2990,19 +2968,15 @@ interface GuiEl {
   bgColor: string; textColor: string; text: string; fontSize: number; cornerRadius: number
 }
 
-function applyGuiTheme(themeName: string): void {
-  if (!themeName || !GUI_THEMES[themeName]) return
-  _curGuiTheme = themeName
-  const th = GUI_THEMES[themeName]
-  Object.keys(guiElements).forEach((id) => { guiElements[id].bgColor = th.panel; guiElements[id].textColor = th.text; renderGuiEl(id) })
-  const gts = document.getElementById('guiThemeSelect') as HTMLSelectElement | null; if (gts) gts.value = themeName
-  toast(curLang === 'id' ? 'Tema ' + themeName + ' diterapkan!' : 'Theme ' + themeName + ' applied!', 'var(--cyan)', 1500)
+// Default palette used by the GUI editor (no user-selectable themes)
+const GUI_DEFAULT: { bg: string; panel: string; card: string; accent: string; text: string; corner: number } = {
+  bg: '#030312', panel: '#06071a', card: '#0a0b22', accent: '#00e5ff', text: '#b8cfff', corner: 10,
 }
 
 function addEl(type: string): void {
   guiElCounter++
   const id = 'el' + guiElCounter
-  const th = GUI_THEMES[_curGuiTheme] || GUI_THEMES.nexus_ai
+  const th = GUI_DEFAULT
   const defs: Record<string, Partial<GuiEl>> = {
     Frame: { w: 200, h: 120, bgColor: th.panel, text: '', textColor: th.text, cornerRadius: th.corner },
     TextLabel: { w: 160, h: 40, bgColor: 'transparent', text: 'Label', textColor: th.text, fontSize: 16, cornerRadius: 0 },
@@ -3118,7 +3092,7 @@ function generateGuiCode(): void {
     return parseInt(r.substr(0, 2), 16) + ',' + parseInt(r.substr(2, 2), 16) + ',' + parseInt(r.substr(4, 2), 16)
   }
   const isID = curLang === 'id'
-  const lines = ['-- Generated by NEXUS AI UI Editor', '-- Theme: ' + _curGuiTheme, '-- name: NexusGUI_Client', '-- parent: StarterGui', '-- script_type: LocalScript', '', "local Players = game:GetService('Players')", 'local player = Players.LocalPlayer', "local playerGui = player:WaitForChild('PlayerGui')", '', 'local screenGui = Instance.new("ScreenGui")', 'screenGui.Name = "NexusGUI"', 'screenGui.DisplayOrder = 999', 'screenGui.ResetOnSpawn = false', 'screenGui.IgnoreGuiInset = true', 'screenGui.Parent = playerGui', '']
+  const lines = ['-- Generated by NEXUS AI UI Editor', '-- name: NexusGUI_Client', '-- parent: StarterGui', '-- script_type: LocalScript', '', "local Players = game:GetService('Players')", 'local player = Players.LocalPlayer', "local playerGui = player:WaitForChild('PlayerGui')", '', 'local screenGui = Instance.new("ScreenGui")', 'screenGui.Name = "NexusGUI"', 'screenGui.DisplayOrder = 999', 'screenGui.ResetOnSpawn = false', 'screenGui.IgnoreGuiInset = true', 'screenGui.Parent = playerGui', '']
   els.forEach((el) => {
     const v = el.name.replace(/[^a-zA-Z0-9_]/g, '_')
     lines.push(''); lines.push(`local ${v} = Instance.new("${el.type}")`); lines.push(`${v}.Name = "${el.name}"`); lines.push(`${v}.Size = UDim2.new(0, ${el.w}, 0, ${el.h})`); lines.push(`${v}.Position = UDim2.new(0, ${el.x}, 0, ${el.y})`)
@@ -3148,13 +3122,11 @@ async function generateGuiFromAI(): Promise<void> {
   const t = T()
   const prompt = document.getElementById('guiAIPrompt') as HTMLTextAreaElement | null
   if (!prompt || !prompt.value.trim()) return
-  const themeSel = document.getElementById('guiAiThemeSelect') as HTMLSelectElement | null
-  const theme = themeSel ? themeSel.value : 'nexus_ai'
   closeModal('guiAIChatModal')
   const loading = document.getElementById('guiLoading'); if (loading) loading.classList.add('show')
-  const th = GUI_THEMES[theme] || GUI_THEMES.nexus_ai
+  const th = GUI_DEFAULT
   try {
-    const sysMsg = `You are a Roblox GUI JSON generator. Output ONLY a valid JSON array. No markdown, no extra text.\n\nFormat: [{"type":"Frame|TextLabel|TextButton|TextBox|ImageLabel|ScrollingFrame","name":"ElementName","x":0,"y":0,"w":200,"h":100,"bgColor":"#hexcolor or transparent","textColor":"#hexcolor","text":"label text","fontSize":14,"cornerRadius":8}]\n\nCanvas: 800x600px. Theme: ${theme}\nBackground: ${th.bg} Panel: ${th.panel} Accent: ${th.accent} Text: ${th.text}\nIMPORTANT: Return ONLY the JSON array, nothing else.`
+    const sysMsg = `You are a Roblox GUI JSON generator. Output ONLY a valid JSON array. No markdown, no extra text.\n\nFormat: [{"type":"Frame|TextLabel|TextButton|TextBox|ImageLabel|ScrollingFrame","name":"ElementName","x":0,"y":0,"w":200,"h":100,"bgColor":"#hexcolor or transparent","textColor":"#hexcolor","text":"label text","fontSize":14,"cornerRadius":8}]\n\nCanvas: 800x600px.\nBackground: ${th.bg} Panel: ${th.panel} Accent: ${th.accent} Text: ${th.text}\nIMPORTANT: Return ONLY the JSON array, nothing else.`
     const body = { provider: S.guiModel.prov || 'gemini', model: S.guiModel.id, system: sysMsg, messages: [{ role: 'user', content: 'Create: ' + prompt.value }], max_tokens: 3000 }
     const r = await fetch('/api/ai', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) })
     if (r.ok) {
@@ -3164,8 +3136,7 @@ async function generateGuiFromAI(): Promise<void> {
       if (jm) {
         try {
           const parsed = JSON.parse(jm[0]) as Partial<GuiEl>[]
-          clearCanvas(); _curGuiTheme = theme
-          const gts = document.getElementById('guiThemeSelect') as HTMLSelectElement | null; if (gts) gts.value = theme
+          clearCanvas()
           parsed.forEach((el) => {
             if (!el.type) return; guiElCounter++; const id = 'el' + guiElCounter
             guiElements[id] = { id, type: el.type, name: el.name || el.type + '_' + guiElCounter, w: Math.max(el.w || 200, 40), h: Math.max(el.h || 40, 20), x: Math.max(el.x || 0, 0), y: Math.max(el.y || 0, 0), bgColor: el.bgColor || th.panel, textColor: el.textColor || th.text, text: el.text || '', fontSize: el.fontSize || 14, cornerRadius: el.cornerRadius || 0 }
@@ -3187,7 +3158,7 @@ async function sendGuiToPlace(): Promise<void> {
   const els = Object.values(guiElements)
   if (!els.length) { toast(t.addElementFirst, 'var(--yellow)'); return }
   const hRgb = (h: string) => { if (!h || h === 'transparent') return [30, 32, 64]; const r = h.replace('#', ''); if (r.length < 6) return [30, 32, 64]; return [parseInt(r.substr(0, 2), 16), parseInt(r.substr(2, 2), 16), parseInt(r.substr(4, 2), 16)] }
-  const cmd = { action: 'create_gui', name: 'NexusGUI', parent: 'StarterGui', display_order: 999, ignore_inset: true, reset_on_spawn: false, theme: _curGuiTheme, elements: els.map((el) => ({ class: el.type, name: el.name, size: [0, el.w, 0, el.h], position: [0, el.x, 0, el.y], background_color: el.bgColor && el.bgColor !== 'transparent' ? hRgb(el.bgColor) : [30, 32, 64], background_transparency: el.bgColor === 'transparent' ? 1 : 0, text_color: hRgb(el.textColor || '#ffffff'), text: el.text || '', text_size: el.fontSize || 14, corner_radius: el.cornerRadius || 0, z_index: 1 })) }
+  const cmd = { action: 'create_gui', name: 'NexusGUI', parent: 'StarterGui', display_order: 999, ignore_inset: true, reset_on_spawn: false, elements: els.map((el) => ({ class: el.type, name: el.name, size: [0, el.w, 0, el.h], position: [0, el.x, 0, el.y], background_color: el.bgColor && el.bgColor !== 'transparent' ? hRgb(el.bgColor) : [30, 32, 64], background_transparency: el.bgColor === 'transparent' ? 1 : 0, text_color: hRgb(el.textColor || '#ffffff'), text: el.text || '', text_size: el.fontSize || 14, corner_radius: el.cornerRadius || 0, z_index: 1 })) }
   try {
     const r = await fetchRetry(API_URL, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ type: 'batch_commands', commands: [cmd], _user: SESSION ? SESSION.user.username : 'web', target: (SESSION ? SESSION.user.username : '').toLowerCase() }) }, 3)
     if (r) { const d = await r.json() as { pushed?: number; status?: string }; if ((d.pushed || 0) > 0 || d.status === 'ok') toast(t.guiSentToast, 'var(--green)'); else toast(curLang === 'id' ? 'Diantri ke Studio' : 'Queued to Studio', 'var(--yellow)') }
@@ -3210,59 +3181,6 @@ function startResize(e: MouseEvent, elId: string): void {
   const onMove = (ev: MouseEvent) => { const nw = Math.max(40, sw + ev.clientX - sx), nh = Math.max(20, sh + ev.clientY - sy); el.style.width = nw + 'px'; el.style.height = nh + 'px'; if (guiElements[elId]) { guiElements[elId].w = nw; guiElements[elId].h = nh } }
   const onUp = () => { document.removeEventListener('mousemove', onMove); document.removeEventListener('mouseup', onUp); updatePropsPanel() }
   document.addEventListener('mousemove', onMove); document.addEventListener('mouseup', onUp)
-}
-
-// ── THEME PICKER ──────────────────────────────────────────────────────────────
-const THEME_ACCENTS: Record<string, { color: string; color2: string; label: string }> = {
-  nexus_ai: { color: '#00e5ff', color2: '#8800ff', label: 'NEXUS AI' },
-  aurora: { color: '#00ffb4', color2: '#00a8ff', label: 'Aurora' },
-  candy: { color: '#ff4fa0', color2: '#ff80cc', label: 'Candy' },
-  dark: { color: '#aaaaaa', color2: '#444444', label: 'Dark' },
-  default: { color: '#0062d0', color2: '#00b4ff', label: 'Default' },
-  midnight: { color: '#6644ff', color2: '#aa44ff', label: 'Midnight' },
-  studs: { color: '#ff7700', color2: '#ffaa00', label: 'Studs' },
-  custom: { color: '#888888', color2: '#555555', label: 'Custom (No Theme)' },
-}
-
-function toggleThemeDD(e: Event): void {
-  e.stopPropagation()
-  const dd = document.getElementById('themeDD'); if (!dd) return
-  if (dd.classList.contains('open')) { dd.classList.remove('open'); return }
-  const cur = S.selectedTheme || 'nexus_ai', isID = curLang === 'id'
-  let html = `<div class="theme-dd-title">${isID ? 'Tema GUI' : 'GUI Theme'}</div><div style="font-size:8px;color:var(--dim);padding:0 8px 6px;line-height:1.5;">${isID ? 'Custom = AI buat UI tanpa tema tertentu' : 'Custom = AI builds UI without a preset theme'}</div>`
-  Object.keys(THEME_ACCENTS).forEach((key) => {
-    const th = THEME_ACCENTS[key], act = key === cur, guith = GUI_THEMES[key] || GUI_THEMES.nexus_ai
-    const previewHtml = key === 'custom'
-      ? `<div class="theme-preview" style="align-items:center;justify-content:center;width:32px;"><svg width="16" height="16" viewBox="0 0 24 24" stroke="var(--dim)" fill="none" stroke-width="2"><circle cx="12" cy="12" r="10"/><line x1="8" y1="12" x2="16" y2="12"/><line x1="12" y1="8" x2="12" y2="16"/></svg></div>`
-      : `<div class="theme-preview"><span style="background:${guith.bg};"></span><span style="background:${guith.panel};"></span><span style="background:${guith.accent};"></span><span style="background:${guith.accent2};"></span></div>`
-    const nameStyle = key === 'custom' ? 'style="color:var(--dim);font-style:italic;"' : ''
-    html += `<div class="theme-opt${act ? ' act' : ''}" data-k="${key}" onclick="window.selectTheme(this.dataset.k)">${previewHtml}<span class="theme-opt-name" ${nameStyle}>${th.label}</span>${act ? '<svg class="theme-opt-check" viewBox="0 0 24 24"><polyline points="20 6 9 17 4 12"/></svg>' : ''}</div>`
-  })
-  dd.innerHTML = html
-  const btn = document.getElementById('themePickerBtn')
-  if (btn) { const r = btn.getBoundingClientRect(); dd.style.bottom = (window.innerHeight - r.top + 4) + 'px'; dd.style.left = r.left + 'px' }
-  dd.classList.add('open')
-}
-
-function selectTheme(themeName: string): void {
-  if (!THEME_ACCENTS[themeName]) return
-  S.selectedTheme = themeName; const isCustom = themeName === 'custom'
-  const swatch = document.getElementById('themeSwatchBtn'), label = document.getElementById('themePickerLabel'), acc = THEME_ACCENTS[themeName]
-  if (swatch) { if (isCustom) { swatch.style.background = 'transparent'; swatch.style.border = '1.5px dashed var(--dim)' } else { swatch.style.background = acc.color; swatch.style.border = '1px solid rgba(255,255,255,.2)' } }
-  if (label) label.textContent = isCustom ? 'custom' : themeName
-  const dd = document.getElementById('themeDD'); if (dd) dd.classList.remove('open')
-  if (Object.keys(guiElements).length > 0) applyGuiTheme(themeName)
-  const gts = document.getElementById('guiThemeSelect') as HTMLSelectElement | null; if (gts) gts.value = themeName
-  const gats = document.getElementById('guiAiThemeSelect') as HTMLSelectElement | null; if (gats) gats.value = themeName
-  toast(isCustom ? (curLang === 'id' ? 'Mode Custom — AI buat UI tanpa tema preset' : 'Custom mode — AI builds UI freely') : (curLang === 'id' ? 'Tema ' : 'Theme ') + acc.label + (curLang === 'id' ? ' dipilih!' : ' selected!'), 'var(--cyan)', 2000)
-  saveS()
-}
-
-function initThemePicker(): void {
-  const t = S.selectedTheme || 'nexus_ai', acc = THEME_ACCENTS[t] || THEME_ACCENTS.nexus_ai
-  const swatch = document.getElementById('themeSwatchBtn'), label = document.getElementById('themePickerLabel')
-  if (swatch) { if (t === 'custom') { swatch.style.background = 'transparent'; swatch.style.border = '1.5px dashed var(--dim)' } else { swatch.style.background = acc.color; swatch.style.border = '1px solid rgba(255,255,255,.2)' } }
-  if (label) label.textContent = t
 }
 
 // ══════════════════════════════════════════════════════════════════════════════
@@ -3305,7 +3223,7 @@ async function initApp(): Promise<void> {
     const latest = S.convs.reduce((a, b) => (b.time || 0) > (a.time || 0) ? b : a)
     S.curConv = latest.id; loadConv(S.curConv)
   } else { newChat() }
-  checkDailyCredits(); checkDailyOnLoad(); initThemePicker()
+  checkDailyCredits(); checkDailyOnLoad()
   updateLoader(100, t.loaderReady)
   setTimeout(hideLoader, 500)
   const urlp = new URLSearchParams(window.location.search)
@@ -3357,12 +3275,6 @@ document.addEventListener('click', (e) => {
   if (guiMDD && guiMDD.classList.contains('open') && !guiMDD.contains(target)) {
     const btn = document.getElementById('guiModelBtn')
     if (!btn || !btn.contains(target)) guiMDD.classList.remove('open')
-  }
-
-  const themeDD = document.getElementById('themeDD')
-  if (themeDD && themeDD.classList.contains('open') && !themeDD.contains(target)) {
-    const btn = document.getElementById('themePickerBtn')
-    if (!btn || !btn.contains(target)) themeDD.classList.remove('open')
   }
 
   const mentionDD = document.getElementById('mentionDD')
@@ -3436,11 +3348,6 @@ document.addEventListener('visibilitychange', () => {
   w.toggleGuiMDD    = toggleGuiMDD
   w.selModel        = selModel
 
-  // Theme picker
-  w.toggleThemeDD   = toggleThemeDD
-  w.selectTheme     = selectTheme
-  w.applyGuiTheme   = applyGuiTheme
-
   // Settings / modals
   w.openSettings    = openSettings
   w.openAvatarModal = openAvatarModal
@@ -3487,7 +3394,7 @@ document.addEventListener('visibilitychange', () => {
   w.generateGuiFromAI = generateGuiFromAI
   w.sendGuiToPlace  = sendGuiToPlace
 
-  // Expose buildSysPrompt fallback agar tidak undefined
+  // Expose buildSysPrompt fallback
   if (!w.buildSysPrompt) w.buildSysPrompt = _fallbackBuildSysPrompt
 })()
 

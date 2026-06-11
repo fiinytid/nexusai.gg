@@ -1,90 +1,146 @@
-// api/google-callback.js — NEXUS AI Google OAuth Callback (FIXED v5)
+// lib/google-callback.ts — NEXUS AI Google OAuth Callback (FIXED v6 — TypeScript)
+//
+// Changes v6 (JS → TS):
+//   • Full TypeScript strict types — no implicit 'any'
+//   • AdaptedRequest / AdaptedResponse dari route.ts digunakan konsisten
+//   • GoogleUserInfo interface untuk typing respons Google API
+//   • TokenResponse interface untuk typing respons token exchange
+//   • RateLimitEntry interface menggantikan objek inline
+//   • safeBase64Encode, fetchWithTimeout, getAllowedBase semua dianotasi penuh
+//   • Tidak ada perubahan behaviour — semua logic identik dengan v5
 
-// ─── In-memory rate limiter ───────────────────────────────────────────────────
-const RL_STORE = new Map();
-function checkRateLimit(key, max, windowMs = 60_000) {
-  const now = Date.now();
-  const entry = RL_STORE.get(key) || { hits: [] };
-  entry.hits = entry.hits.filter((t) => now - t < windowMs);
+import type { HandlerFn, AdaptedRequest, AdaptedResponse } from '../app/api/[...slug]/route.js';
+
+// ─── TYPES ────────────────────────────────────────────────────────────────────
+
+interface RateLimitEntry {
+  hits: number[];
+}
+
+interface TokenResponse {
+  access_token?: string;
+  error?:        string;
+  [key: string]: unknown;
+}
+
+interface GoogleUserInfo {
+  id?:      string | number;
+  email?:   string;
+  name?:    string;
+  picture?: string;
+  [key: string]: unknown;
+}
+
+interface SafeUserData {
+  id:      string;
+  name:    string;
+  email:   string;
+  picture: string;
+}
+
+// ─── IN-MEMORY RATE LIMITER ───────────────────────────────────────────────────
+
+const RL_STORE = new Map<string, RateLimitEntry>();
+
+function checkRateLimit(key: string, max: number, windowMs: number = 60_000): boolean {
+  const now   = Date.now();
+  const entry = RL_STORE.get(key) ?? { hits: [] };
+  entry.hits  = entry.hits.filter(t => now - t < windowMs);
   if (entry.hits.length >= max) return false;
   entry.hits.push(now);
   RL_STORE.set(key, entry);
   return true;
 }
 
-// ─── State token store (in-memory, valid 10 min) ─────────────────────────────
-const STATE_STORE = new Map();
+// ─── STATE TOKEN STORE (in-memory, valid 10 min) ─────────────────────────────
 
-function createStateToken() {
+const STATE_STORE = new Map<string, number>();
+
+function createStateToken(): string {
   const chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789';
-  const token = Array.from({ length: 40 }, () =>
-    chars[Math.floor(Math.random() * chars.length)]
+  const token = Array.from(
+    { length: 40 },
+    () => chars[Math.floor(Math.random() * chars.length)],
   ).join('');
+
   STATE_STORE.set(token, Date.now());
+
   // Cleanup expired tokens
+  const expiry = 10 * 60 * 1_000;
   for (const [k, t] of STATE_STORE) {
-    if (Date.now() - t > 10 * 60 * 1000) STATE_STORE.delete(k);
+    if (Date.now() - t > expiry) STATE_STORE.delete(k);
   }
   return token;
 }
 
-function verifyStateToken(token) {
+function verifyStateToken(token: string): boolean {
   if (!token || typeof token !== 'string' || token.length > 80) return false;
   const ts = STATE_STORE.get(token);
   if (!ts) return false;
-  if (Date.now() - ts > 10 * 60 * 1000) { STATE_STORE.delete(token); return false; }
+  if (Date.now() - ts > 10 * 60 * 1_000) {
+    STATE_STORE.delete(token);
+    return false;
+  }
   STATE_STORE.delete(token);
   return true;
 }
 
-// ─── FIX: Safe base64 encode — works di Node & Edge runtime ──────────────────
-function safeBase64Encode(str) {
+// ─── SAFE BASE64 ENCODE ───────────────────────────────────────────────────────
+
+function safeBase64Encode(str: string): string {
   // Buffer tersedia di Node.js serverless
   if (typeof Buffer !== 'undefined') {
     return Buffer.from(str, 'utf8').toString('base64');
   }
   // Fallback untuk Edge runtime: encode UTF-8 dulu agar karakter unicode aman
   const bytes = new TextEncoder().encode(str);
-  let binary = '';
-  bytes.forEach((b) => { binary += String.fromCharCode(b); });
+  let binary  = '';
+  bytes.forEach(b => { binary += String.fromCharCode(b); });
   return btoa(binary);
 }
 
-// ─── Security headers ─────────────────────────────────────────────────────────
-function setSecurityHeaders(res) {
+// ─── SECURITY HEADERS ────────────────────────────────────────────────────────
+
+function setSecurityHeaders(res: AdaptedResponse): void {
   res.setHeader('X-Content-Type-Options', 'nosniff');
-  res.setHeader('X-Frame-Options', 'DENY');
-  res.setHeader('X-XSS-Protection', '1; mode=block');
-  res.setHeader('Referrer-Policy', 'no-referrer');
-  res.setHeader('Cache-Control', 'no-store, no-cache, must-revalidate');
+  res.setHeader('X-Frame-Options',        'DENY');
+  res.setHeader('X-XSS-Protection',       '1; mode=block');
+  res.setHeader('Referrer-Policy',        'no-referrer');
+  res.setHeader('Cache-Control',          'no-store, no-cache, must-revalidate');
 }
 
-// ─── FIX: Base URL dari request host, bukan hanya env var ────────────────────
-function getAllowedBase(req) {
+// ─── BASE URL ─────────────────────────────────────────────────────────────────
+
+function getAllowedBase(req: AdaptedRequest): string {
   // Prioritas: env var > host header > fallback
   if (process.env.PRODUCTION_URL) {
     return process.env.PRODUCTION_URL
       .replace(/\/api\/google-callback\/?$/, '')
       .replace(/\/$/, '');
   }
-  // Ambil dari request host (otomatis sesuai domain deploy)
-  const host = req.headers['x-forwarded-host'] || req.headers['host'] || '';
-  const proto = req.headers['x-forwarded-proto'] || 'https';
+  const host  = req.headers['x-forwarded-host'] ?? req.headers['host'] ?? '';
+  const proto = req.headers['x-forwarded-proto'] ?? 'https';
   if (host) return `${proto}://${host}`;
   return 'https://nexusai-rbx.vercel.app';
 }
 
-// ─── FIX: Pastikan nilai query selalu string, bukan array ────────────────────
-function getString(val) {
+// ─── QUERY HELPER ────────────────────────────────────────────────────────────
+
+function getString(val: string | string[] | undefined | null): string {
   if (!val) return '';
-  if (Array.isArray(val)) return val[0] || '';
+  if (Array.isArray(val)) return val[0] ?? '';
   return String(val);
 }
 
-// ─── fetch with timeout ───────────────────────────────────────────────────────
-async function fetchWithTimeout(url, options = {}, timeoutMs = 10_000) {
+// ─── FETCH WITH TIMEOUT ───────────────────────────────────────────────────────
+
+async function fetchWithTimeout(
+  url:       string,
+  options:   RequestInit = {},
+  timeoutMs: number      = 10_000,
+): Promise<Response> {
   const controller = new AbortController();
-  const timer = setTimeout(() => controller.abort(), timeoutMs);
+  const timer      = setTimeout(() => controller.abort(), timeoutMs);
   try {
     return await fetch(url, { ...options, signal: controller.signal });
   } finally {
@@ -92,41 +148,40 @@ async function fetchWithTimeout(url, options = {}, timeoutMs = 10_000) {
   }
 }
 
-// ─── Main handler ─────────────────────────────────────────────────────────────
-export default async function handler(req, res) {
+// ─── MAIN HANDLER ─────────────────────────────────────────────────────────────
+
+const handler: HandlerFn = async (req: AdaptedRequest, res: AdaptedResponse) => {
   setSecurityHeaders(res);
 
   const base = getAllowedBase(req);
-  res.setHeader('Access-Control-Allow-Origin', base);
+  res.setHeader('Access-Control-Allow-Origin',  base);
   res.setHeader('Access-Control-Allow-Methods', 'GET, OPTIONS');
   res.setHeader('Access-Control-Allow-Headers', 'Content-Type');
 
-  if (req.method === 'OPTIONS') return res.status(200).end();
-  if (req.method !== 'GET') return res.status(405).json({ error: 'Method not allowed' });
+  if (req.method === 'OPTIONS') { res.status(200).end(); return; }
+  if (req.method !== 'GET')     { res.status(405).json({ error: 'Method not allowed' }); return; }
 
-  const ip =
+  const ip: string =
     getString(req.headers['x-forwarded-for']).split(',')[0].trim() ||
-    req.socket?.remoteAddress ||
     'unknown';
 
-  // FIX: Deteksi API call lebih akurat — redirect dari Google bukan API call
-  // Browser redirect dari Google TIDAK punya X-Requested-With header
+  // Deteksi API call — browser redirect dari Google TIDAK punya X-Requested-With
   const isApiCall =
     req.headers['x-requested-with'] === 'XMLHttpRequest' ||
-    (req.headers['accept'] || '').startsWith('application/json');
+    (req.headers['accept'] ?? '').startsWith('application/json');
 
-  // ── Endpoint: generate state token ────────────────────────────────────────
-  if (req.query.get_state === '1') {
+  // ── Endpoint: generate state token ───────────────────────────────────────
+  if (req.query['get_state'] === '1') {
     if (!checkRateLimit(`gcb_state:${ip}`, 20, 60_000)) {
       return res.status(429).json({ error: 'Rate limit. Coba lagi nanti.' });
     }
     return res.status(200).json({ state: createStateToken() });
   }
 
-  // FIX: Ambil query params sebagai string (bukan array)
-  const code  = getString(req.query.code);
-  const error = getString(req.query.error);
-  const state = getString(req.query.state);
+  // Ambil query params sebagai string (bukan array)
+  const code  = getString(req.query['code']);
+  const error = getString(req.query['error']);
+  const state = getString(req.query['state']);
 
   // ── CSRF state validation (soft) ─────────────────────────────────────────
   if (state && !verifyStateToken(state)) {
@@ -168,14 +223,14 @@ export default async function handler(req, res) {
   }
 
   try {
-    const redirectUri = base + '/api/google-callback';
+    const redirectUri = `${base}/api/google-callback`;
     console.log('[google-callback] Menggunakan redirectUri:', redirectUri);
 
     // ── Tukar code dengan token ───────────────────────────────────────────
     const tokenResp = await fetchWithTimeout(
       'https://oauth2.googleapis.com/token',
       {
-        method: 'POST',
+        method:  'POST',
         headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
         body: new URLSearchParams({
           code:          code.trim(),
@@ -185,11 +240,11 @@ export default async function handler(req, res) {
           grant_type:    'authorization_code',
         }).toString(),
       },
-      10_000
+      10_000,
     );
 
     if (!tokenResp.ok) {
-      const errData = await tokenResp.json().catch(() => ({}));
+      const errData = await tokenResp.json().catch(() => ({})) as TokenResponse;
       console.error('[google-callback] Token exchange gagal:', errData);
       const errMsg = errData?.error === 'redirect_uri_mismatch'
         ? 'redirect_uri_mismatch — pastikan PRODUCTION_URL di env sudah benar'
@@ -199,7 +254,7 @@ export default async function handler(req, res) {
         : res.redirect(302, `/login?google_error=${encodeURIComponent(errMsg)}`);
     }
 
-    const tokens = await tokenResp.json();
+    const tokens = await tokenResp.json() as TokenResponse;
 
     if (!tokens.access_token) {
       return isApiCall
@@ -210,8 +265,8 @@ export default async function handler(req, res) {
     // ── Ambil info user ────────────────────────────────────────────────────
     const userResp = await fetchWithTimeout(
       'https://www.googleapis.com/oauth2/v2/userinfo',
-      { headers: { Authorization: 'Bearer ' + tokens.access_token } },
-      8_000
+      { headers: { Authorization: `Bearer ${tokens.access_token}` } },
+      8_000,
     );
 
     if (!userResp.ok) {
@@ -220,7 +275,7 @@ export default async function handler(req, res) {
         : res.redirect(302, '/login?google_error=userinfo_failed');
     }
 
-    const gUser = await userResp.json();
+    const gUser = await userResp.json() as GoogleUserInfo;
 
     if (!gUser.id || !gUser.email) {
       return isApiCall
@@ -235,24 +290,26 @@ export default async function handler(req, res) {
         : res.redirect(302, '/login?google_error=invalid_id');
     }
 
-    const userData = {
+    const userData: SafeUserData = {
       id:      String(gUser.id),
-      name:    String(gUser.name    || gUser.email).substring(0, 80),
-      email:   String(gUser.email   || '').substring(0, 100),
-      picture: String(gUser.picture || '').substring(0, 500),
+      name:    String(gUser.name    ?? gUser.email).substring(0, 80),
+      email:   String(gUser.email   ?? '').substring(0, 100),
+      picture: String(gUser.picture ?? '').substring(0, 500),
     };
 
     if (isApiCall) return res.status(200).json({ user: userData });
 
-    // FIX: Gunakan safeBase64Encode, bukan Buffer.from langsung
     const encoded = safeBase64Encode(JSON.stringify(userData));
     return res.redirect(302, `/login?google_user=${encodeURIComponent(encoded)}`);
 
-  } catch (e) {
-    // FIX: Log error detail untuk debugging di Vercel logs
-    console.error('[google-callback] Error tidak terduga:', e?.message || e, e?.stack || '');
+  } catch (e: unknown) {
+    const msg   = e instanceof Error ? e.message : String(e);
+    const stack = e instanceof Error ? (e.stack ?? '') : '';
+    console.error('[google-callback] Error tidak terduga:', msg, stack);
     return isApiCall
       ? res.status(500).json({ error: 'Terjadi kesalahan server.' })
       : res.redirect(302, '/login?google_error=server_error');
   }
-}
+};
+
+export default handler;

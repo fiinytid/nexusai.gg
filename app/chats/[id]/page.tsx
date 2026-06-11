@@ -210,19 +210,18 @@ body::before {
   padding:0 12px 0 16px; border-bottom:1px solid var(--b); background:var(--bg2);
   display:flex; align-items:center; gap:8px; flex-shrink:0; height:48px; min-width:0;
 }
-/* Title: takes leftover space, truncates */
 .chat-title {
   font-family:'Orbitron',sans-serif; font-size:11px; font-weight:700;
   color:white; flex:1 1 0; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; min-width:0;
 }
-/* Project badge: fixed size, only shows when set */
 .proj-badge-hdr {
   font-size:var(--fs-2xs); padding:2px 8px; border-radius:10px; height:20px; line-height:16px;
   background:rgba(255,170,50,.07); border:1px solid rgba(255,170,50,.2);
   color:rgba(255,170,50,.85); white-space:nowrap; overflow:hidden; text-overflow:ellipsis;
   max-width:120px; flex-shrink:0; display:flex; align-items:center;
 }
-/* Studio badge: compact, never grows */
+
+/* Studio badge */
 .status-badge {
   display:flex; align-items:center; gap:4px; padding:0 8px;
   border-radius:20px; border:1px solid; height:22px;
@@ -234,6 +233,18 @@ body::before {
 .sdot { width:5px; height:5px; border-radius:50%; background:currentColor; flex-shrink:0 }
 .sdot.pulse { animation:pd 1.8s infinite }
 @keyframes pd { 0%,100%{opacity:1} 50%{opacity:.25} }
+
+/* ── VERSION BADGE ── */
+.ver-badge {
+  display:inline-flex; align-items:center; gap:4px;
+  padding:0 7px; height:20px; border-radius:10px;
+  font-family:'Orbitron',sans-serif; font-size:var(--fs-2xs); font-weight:700;
+  border:1px solid; flex-shrink:0; white-space:nowrap; letter-spacing:.5px; cursor:default;
+  user-select:none;
+}
+.ver-badge.alpha   { color:#ff4444; border-color:rgba(255,68,68,.35);   background:rgba(255,68,68,.08) }
+.ver-badge.beta    { color:var(--yellow); border-color:rgba(255,214,0,.35); background:rgba(255,214,0,.06) }
+.ver-badge.release { color:var(--green);  border-color:rgba(0,255,170,.35); background:rgba(0,255,170,.06) }
 
 .chat-tabs {
   display:flex; gap:4px; padding:5px 14px; border-bottom:1px solid var(--b); background:var(--bg2);
@@ -338,7 +349,7 @@ body::before {
   display:flex; align-items:center; justify-content:center; z-index:2;
 }
 
-/* INPUT AREA */
+/* ── INPUT AREA ── */
 .inp-area { padding:8px 14px 10px; border-top:1px solid var(--b); background:var(--bg2); flex-shrink:0; position:relative; z-index:2 }
 .inp-box { background:var(--bg3); border:1px solid var(--b); border-radius:12px; transition:border-color .2s; overflow:hidden }
 .inp-box.drag-over    { border-color:var(--cyan); box-shadow:0 0 0 2px rgba(0,229,255,.1) }
@@ -349,36 +360,53 @@ body::before {
   padding:11px 14px; resize:none; min-height:44px; max-height:130px; line-height:1.55; display:block;
 }
 #inp::placeholder { color:var(--dim) }
-.inp-bar { display:flex; align-items:center; height:var(--h-inp); padding:0 10px; border-top:1px solid var(--b); gap:6px }
-.inp-l { display:flex; align-items:center; gap:5px; flex:1; min-width:0; overflow:hidden }
+
+/* ── INPUT BAR: tidy button row ── */
+.inp-bar {
+  display:flex; align-items:center; height:var(--h-inp);
+  padding:0 10px; border-top:1px solid var(--b); gap:5px;
+}
+/* left cluster: icon buttons + model selector */
+.inp-l {
+  display:flex; align-items:center; gap:5px; flex:1; min-width:0; overflow:hidden;
+}
+/* icon-only action buttons */
 .ib {
   width:var(--h-sm); height:var(--h-sm); border-radius:var(--r-s); border:1px solid var(--b);
   background:transparent; color:var(--dim); cursor:pointer;
   display:inline-flex; align-items:center; justify-content:center;
-  transition:.12s; flex-shrink:0; padding:0; user-select:none; outline:none; box-sizing:border-box;
-  font-family:'JetBrains Mono',monospace;
+  transition:.12s; flex-shrink:0; padding:0; user-select:none; outline:none;
+  box-sizing:border-box; font-family:'JetBrains Mono',monospace;
 }
 .ib:hover { color:var(--cyan); border-color:var(--cyan2) }
 .ib svg   { width:14px; height:14px; stroke:currentColor; fill:none; stroke-width:1.5; flex-shrink:0; pointer-events:none }
+
+/* divider between icon group and model pill */
+.inp-divider {
+  width:1px; height:18px; background:var(--b); flex-shrink:0; border-radius:1px;
+}
+
+/* model selector pill */
 .inp-model {
-  display:flex; align-items:center; gap:5px; height:var(--h-sm); padding:0 8px;
+  display:flex; align-items:center; gap:5px; height:var(--h-sm); padding:0 9px;
   border-radius:var(--r-s); background:var(--card); border:1px solid var(--b);
-  cursor:pointer; transition:.12s; font-family:'JetBrains Mono',monospace; font-size:var(--fs-2xs); color:var(--dim);
-  max-width:clamp(100px,170px,30vw); min-width:0; overflow:hidden; flex-shrink:1;
+  cursor:pointer; transition:.12s; font-family:'JetBrains Mono',monospace;
+  font-size:var(--fs-2xs); color:var(--dim);
+  max-width:clamp(110px,180px,32vw); min-width:0; overflow:hidden; flex-shrink:1;
 }
 .inp-model:hover { border-color:var(--cyan2); color:var(--cyan) }
 .inp-model img   { width:13px; height:13px; border-radius:2px; object-fit:contain; flex-shrink:0 }
 .inp-model-name  { white-space:nowrap; overflow:hidden; text-overflow:ellipsis; flex:1; font-size:var(--fs-2xs); min-width:0 }
-.inp-model-badge { font-size:var(--fs-2xs); font-weight:700; flex-shrink:0 }
-.theme-picker-btn {
-  display:flex; align-items:center; gap:5px; height:var(--h-sm); padding:0 8px;
-  border-radius:var(--r-s); background:var(--card); border:1px solid var(--b);
-  cursor:pointer; transition:.12s; font-family:'JetBrains Mono',monospace; font-size:var(--fs-2xs); color:var(--dim);
-  flex-shrink:0; white-space:nowrap; max-width:100px; overflow:hidden;
+.inp-model-badge {
+  font-size:var(--fs-2xs); font-weight:700; flex-shrink:0;
+  padding:1px 5px; border-radius:4px; border:1px solid;
 }
-.theme-picker-btn:hover { border-color:var(--cyan2); color:var(--cyan) }
-.theme-picker-label { overflow:hidden; text-overflow:ellipsis; white-space:nowrap; flex:1; min-width:0 }
-.theme-swatch { width:10px; height:10px; border-radius:50%; flex-shrink:0; border:1px solid rgba(255,255,255,.2) }
+/* badge color variants – driven by data-tier attr on the badge span */
+.inp-model-badge[data-tier="fast"]    { color:var(--cyan);   border-color:rgba(0,229,255,.3);   background:rgba(0,229,255,.07) }
+.inp-model-badge[data-tier="pro"]     { color:#cc55ff;       border-color:rgba(136,0,255,.35);  background:rgba(136,0,255,.07) }
+.inp-model-badge[data-tier="think"]   { color:var(--yellow); border-color:rgba(255,214,0,.3);   background:rgba(255,214,0,.06) }
+
+/* send / cancel */
 .btn-send, .btn-cancel {
   border:none; border-radius:var(--r); width:var(--h-md); height:var(--h-md);
   display:flex; align-items:center; justify-content:center; cursor:pointer; transition:.18s; flex-shrink:0;
@@ -398,39 +426,6 @@ body::before {
 .model-dd::-webkit-scrollbar { width:3px }
 .model-dd::-webkit-scrollbar-thumb { background:var(--b) }
 .model-dd.open { display:block }
-
-/* ── THEME DROPDOWN — fully rendered by chats.ts ── */
-.theme-dd {
-  position:fixed; background:var(--bg3); border:1px solid var(--b); border-radius:var(--r);
-  z-index:9000; display:none; box-shadow:0 8px 32px rgba(0,0,0,.95);
-  width:215px; padding:4px; overflow-y:auto; max-height:min(400px,75vh);
-}
-.theme-dd::-webkit-scrollbar { width:3px }
-.theme-dd::-webkit-scrollbar-thumb { background:var(--b) }
-.theme-dd.open { display:block }
-.theme-dd-title {
-  font-size:var(--fs-2xs); color:var(--dim); text-transform:uppercase; letter-spacing:2px;
-  padding:5px 8px 6px; border-bottom:1px solid var(--b); margin-bottom:3px; line-height:1;
-}
-.theme-dd-hint {
-  font-size:var(--fs-2xs); color:rgba(0,229,255,.35); padding:3px 8px 5px;
-  border-bottom:1px solid var(--b); margin-bottom:3px; line-height:1.4;
-}
-.theme-opt {
-  display:flex; align-items:center; gap:8px; padding:0 8px; height:30px;
-  border-radius:5px; cursor:pointer; transition:background .1s; width:100%; box-sizing:border-box;
-}
-.theme-opt:hover { background:var(--hover) }
-.theme-opt.act   { background:rgba(0,229,255,.07); outline:1px solid rgba(0,229,255,.2) }
-.theme-preview { display:flex; gap:2px; flex-shrink:0; align-items:center }
-.theme-preview span { width:6px; height:18px; border-radius:3px; display:block; flex-shrink:0 }
-.theme-opt-name { font-size:var(--fs-sm); color:var(--text); flex:1; font-family:'JetBrains Mono',monospace; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; line-height:1 }
-.theme-opt.act .theme-opt-name { color:var(--cyan) }
-/* check icon — hidden by default, visible on active via chats.ts inline SVG */
-.theme-opt-check {
-  width:10px; height:10px; flex-shrink:0;
-  color:var(--cyan); stroke:currentColor; fill:none; stroke-width:2.5;
-}
 
 .mg { padding:6px 11px 3px; font-size:var(--fs-2xs); color:var(--dim); text-transform:uppercase; letter-spacing:2px; border-top:1px solid var(--b) }
 .mg:first-child { border-top:none }
@@ -650,8 +645,7 @@ body::before {
 @media(max-width:1100px){ :root{ --sb-w:230px } }
 @media(max-width:900px){
   :root{ --sb-w:210px }
-  .inp-model{ max-width:135px }
-  .theme-picker-btn{ display:none }
+  .inp-model{ max-width:140px }
   .proj-badge-hdr{ max-width:90px }
 }
 @media(max-width:768px){
@@ -669,7 +663,6 @@ body::before {
   #inp{ font-size:12px; padding:8px 10px; min-height:38px }
   .inp-bar{ gap:4px; padding:0 8px; height:var(--h-inp) }
   .inp-model{ max-width:130px }
-  .theme-picker-btn{ display:none }
   .chat-hdr{ padding:0 10px; gap:6px; height:44px }
   .chat-title{ font-size:var(--fs-sm) }
   .proj-badge-hdr{ display:none }
@@ -683,6 +676,7 @@ body::before {
   .modal-t{ font-size:12px }
   .suggs{ grid-template-columns:1fr }
   .wt{ font-size:18px }
+  .ver-badge{ display:none }
 }
 @media(max-width:550px){
   .sb-nav-btn{ font-size:var(--fs-2xs); padding:0 8px; height:var(--h-sm) }
@@ -697,7 +691,7 @@ body::before {
 }
 `
 
-/* ─────────────────────────────────────────────────
+/* ─────────────────────────────────────────────────────────────────────────────
    QUEUE-BASED wCall
 ───────────────────────────────────────────────── */
 type AnyFn = (...args: unknown[]) => void
@@ -732,16 +726,16 @@ function _flushPendingCalls(): void {
   })
 }
 
-/* ─────────────────────────────────────────────────
+/* ─────────────────────────────────────────────────────────────────────────────
    TYPES
 ───────────────────────────────────────────────── */
 type GuiType = 'Frame' | 'TextLabel' | 'TextButton' | 'TextBox' | 'ImageLabel' | 'ScrollingFrame'
 
 interface GuiTypeConfig { type: GuiType; label: string; icon: React.ReactNode }
-interface ThemeOption   { value: string; label: string; colors: string[] }
+interface ThemeOption   { value: string; label: string }
 
-/* ─────────────────────────────────────────────────
-   ICONS
+/* ─────────────────────────────────────────────────────────────────────────────
+   ICONS — SVG only, no emoji
 ───────────────────────────────────────────────── */
 const Icon: Record<string, React.ReactElement> = {
   settings: (
@@ -767,9 +761,10 @@ const Icon: Record<string, React.ReactElement> = {
   plus: (<svg viewBox="0 0 24 24" width={13} height={13} stroke="currentColor" fill="none" strokeWidth={2}><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>),
   help: (<svg viewBox="0 0 24 24" width={13} height={13} stroke="currentColor" fill="none" strokeWidth={2}><circle cx="12" cy="12" r="10"/><path d="M9.09 9a3 3 0 015.83 1c0 2-3 3-3 3"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>),
   inbox: (<svg viewBox="0 0 24 24" width={13} height={13} stroke="currentColor" fill="none" strokeWidth={2}><polyline points="22 12 16 12 14 15 10 15 8 12 2 12"/><path d="M5.45 5.11L2 12v6a2 2 0 002 2h16a2 2 0 002-2v-6l-3.45-6.89A2 2 0 0016.76 4H7.24a2 2 0 00-1.79 1.11z"/></svg>),
+  tag: (<svg viewBox="0 0 24 24" width={11} height={11} stroke="currentColor" fill="none" strokeWidth={2}><path d="M20.59 13.41l-7.17 7.17a2 2 0 01-2.83 0L2 12V2h10l8.59 8.59a2 2 0 010 2.82z"/><line x1="7" y1="7" x2="7.01" y2="7"/></svg>),
 }
 
-/* ─────────────────────────────────────────────────
+/* ─────────────────────────────────────────────────────────────────────────────
    PAGE COMPONENT
 ───────────────────────────────────────────────── */
 export default function ChatsPage() {
@@ -826,10 +821,10 @@ export default function ChatsPage() {
     if (p) p.style.background = 'linear-gradient(135deg,#00e5ff,#8800ff)'
     e.currentTarget.style.display = 'none'
   }
-  const handleFileChange          = (e: React.ChangeEvent<HTMLInputElement>): void => wCall('handleFile', e)
-  const handlePlayTestDurChange   = (e: React.ChangeEvent<HTMLInputElement>): void => wCall('setPlayTestDur', e.target.value)
-  const handleLangChange          = (e: React.ChangeEvent<HTMLSelectElement>): void => wCall('changeLang', e.target.value)
-  const handleGuiThemeChange      = (e: React.ChangeEvent<HTMLSelectElement>): void => wCall('applyGuiTheme', e.target.value)
+  const handleFileChange        = (e: React.ChangeEvent<HTMLInputElement>): void  => wCall('handleFile', e)
+  const handlePlayTestDurChange = (e: React.ChangeEvent<HTMLInputElement>): void  => wCall('setPlayTestDur', e.target.value)
+  const handleLangChange        = (e: React.ChangeEvent<HTMLSelectElement>): void => wCall('changeLang', e.target.value)
+  const handleGuiThemeChange    = (e: React.ChangeEvent<HTMLSelectElement>): void => wCall('applyGuiTheme', e.target.value)
 
   /* ─── GUI element types ─── */
   const guiTypes: GuiTypeConfig[] = [
@@ -841,21 +836,21 @@ export default function ChatsPage() {
     { type:'ScrollingFrame', label:'Scroll', icon:<><rect x="3" y="3" width="18" height="18" rx="2"/><path d="M3 9h18"/></> },
   ]
 
-  /* ─── theme options (for select dropdowns only, NOT for theme-dd) ─── */
-  const themeOptions: ThemeOption[] = [
-    { value:'nexus_ai', label:'NEXUS AI', colors:['#030312','#06071a','#00e5ff','#8800ff'] },
-    { value:'aurora',   label:'Aurora',   colors:['#030f0a','#061510','#00ffb4','#00a8ff'] },
-    { value:'candy',    label:'Candy',    colors:['#0f0508','#180a10','#ff4fa0','#ff80cc'] },
-    { value:'dark',     label:'Dark',     colors:['#080808','#101010','#aaaaaa','#666666'] },
-    { value:'default',  label:'Default',  colors:['#0a0c12','#10141e','#0062d0','#00b4ff'] },
-    { value:'midnight', label:'Midnight', colors:['#06050f','#0d0b1a','#6644ff','#aa44ff'] },
-    { value:'studs',    label:'Studs',    colors:['#0f0800','#180d00','#ff7700','#ffaa00'] },
-    { value:'custom',   label:'Custom',   colors:['#0d0d0d','#141414','#888888','#555555'] },
+  /* ─── theme options for GUI canvas ─── */
+  const guiThemeOptions: ThemeOption[] = [
+    { value:'nexus_ai', label:'NEXUS AI' },
+    { value:'aurora',   label:'Aurora'   },
+    { value:'candy',    label:'Candy'    },
+    { value:'dark',     label:'Dark'     },
+    { value:'default',  label:'Default'  },
+    { value:'midnight', label:'Midnight' },
+    { value:'studs',    label:'Studs'    },
+    { value:'custom',   label:'Custom'   },
   ]
 
-  /* ════════════════════════════════════════════
+  /* ════════════════════════════════════════════════════════════════════════════
      RENDER
-  ════════════════════════════════════════════ */
+  ════════════════════════════════════════════════════════════════════════════ */
   return (
     <>
       <style dangerouslySetInnerHTML={{ __html: PAGE_CSS }} />
@@ -864,12 +859,12 @@ export default function ChatsPage() {
       <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Orbitron:wght@400;600;700;900&family=JetBrains+Mono:wght@300;400;500&display=swap"/>
       <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/styles/atom-one-dark.min.css"/>
 
-      <Script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"                                               strategy="beforeInteractive"/>
-      <Script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/highlight.min.js"                     strategy="beforeInteractive"/>
-      <Script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/languages/lua.min.js"                 strategy="beforeInteractive"/>
-      <Script src="https://challenges.cloudflare.com/turnstile/v0/api.js?render=explicit"                           strategy="afterInteractive"/>
+      <Script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"                                              strategy="beforeInteractive"/>
+      <Script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/highlight.min.js"                    strategy="beforeInteractive"/>
+      <Script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/languages/lua.min.js"                strategy="beforeInteractive"/>
+      <Script src="https://challenges.cloudflare.com/turnstile/v0/api.js?render=explicit"                          strategy="afterInteractive"/>
 
-      {/* PAGE LOADER */}
+      {/* ── PAGE LOADER ── */}
       <div id="pageLoader">
         <div className="pl-logo"><img src="/images/nexusai.png" alt="N" onError={handleLogoErr}/></div>
         <div className="pl-title">NEXUS AI</div>
@@ -877,7 +872,7 @@ export default function ChatsPage() {
         <div className="pl-txt" id="plTxt">Menginisialisasi...</div>
       </div>
 
-      {/* MENTION DROPDOWN */}
+      {/* ── MENTION DROPDOWN ── */}
       <div className="mention-dd" id="mentionDD">
         <div className="mention-hdr">
           <svg viewBox="0 0 24 24" width={10} height={10} stroke="currentColor" fill="none" strokeWidth={2}>
@@ -888,7 +883,9 @@ export default function ChatsPage() {
         <div id="mentionList"/>
       </div>
 
-      {/* ══════════════ APP SHELL ══════════════ */}
+      {/* ══════════════════════════════════════════════════════════════════════
+          APP SHELL
+      ══════════════════════════════════════════════════════════════════════ */}
       <div id="app" className="hidden">
 
         {/* ════ SIDEBAR ════ */}
@@ -969,7 +966,7 @@ export default function ChatsPage() {
         {/* ════ PANEL CHAT ════ */}
         <div id="chat">
 
-          {/* Banner plugin */}
+          {/* Plugin connection banner */}
           <div className="plug-banner" id="plugBanner">
             {Icon.info}
             <span id="plugBannerTxt">Plugin belum terhubung —</span>
@@ -984,15 +981,23 @@ export default function ChatsPage() {
             </a>
           </div>
 
-          {/* ── HEADER: title | project badge | studio badge ── */}
+          {/* ── HEADER: title | project badge | version badge | studio badge ── */}
           <div className="chat-hdr">
-            {/* Chat title — takes all leftover space */}
+            {/* Chat title */}
             <div className="chat-title" id="chatTitle">NEXUS AI</div>
 
-            {/* Project badge — compact, hidden until set */}
+            {/* Project badge — hidden until a project is active */}
             <div className="proj-badge-hdr" id="hdrProjBadge" style={{ display:'none' }}/>
 
-            {/* Studio status — always compact, never overshadows title */}
+            {/*
+              Version badge — chats.ts sets both the text and the tier class
+              via:  verBadgeEl.textContent = 'BETA'
+                    verBadgeEl.className   = 'ver-badge beta'
+              Classes: ver-badge alpha | beta | release
+            */}
+            <span className="ver-badge beta" id="verBadge">BETA</span>
+
+            {/* Studio status */}
             <div className="status-badge off" id="studioBadge"
               onClick={handleClick('retryStudio')} role="button" tabIndex={0}
               onKeyDown={(e) => { if (e.key === 'Enter') wCall('retryStudio') }}>
@@ -1011,7 +1016,7 @@ export default function ChatsPage() {
             </button>
           </div>
 
-          {/* ── TAB CHAT ── */}
+          {/* ── TAB: CHAT ── */}
           <div id="chatTab" style={{ flex:1, overflow:'hidden', display:'flex', flexDirection:'column', minHeight:0 }}>
             <div id="msgs">
               <div className="welcome" id="welcome">
@@ -1026,12 +1031,14 @@ export default function ChatsPage() {
               </div>
             </div>
 
+            {/* ── INPUT AREA ── */}
             <div className="inp-area">
               <div className="attach-row" id="attachRow"/>
               <div className="inp-box" id="inpBox">
                 <textarea id="inp" placeholder="Tanya NEXUS AI tentang Roblox... (ketik @ untuk mention)" rows={1}/>
 
                 <div className="inp-bar">
+                  {/* Left cluster: attach + clear + divider + model pill */}
                   <div className="inp-l">
                     {/* Attach file */}
                     <div style={{ position:'relative', flexShrink:0, display:'inline-flex' }}>
@@ -1049,6 +1056,9 @@ export default function ChatsPage() {
                       {Icon.trash}
                     </button>
 
+                    {/* Separator */}
+                    <div className="inp-divider"/>
+
                     {/* Model selector */}
                     <div className="inp-model" id="inpModelBtn"
                       onClick={handleClickWithEvent('toggleMDD')} role="button" tabIndex={0}
@@ -1056,19 +1066,12 @@ export default function ChatsPage() {
                       <img id="inpMIcon" src="" alt="" onError={handleImgErr}
                         style={{ width:13, height:13, borderRadius:2, objectFit:'contain', flexShrink:0 }}/>
                       <span className="inp-model-name"  id="inpMName">Gemini 3.5 Flash</span>
-                      <span className="inp-model-badge" id="inpMBadge" style={{ color:'var(--cyan)' }}>FAST</span>
+                      <span className="inp-model-badge" id="inpMBadge" data-tier="fast">FAST</span>
                       {Icon.chevronDown}
                     </div>
-
-                    {/* Theme picker button */}
-                    <button className="theme-picker-btn" id="themePickerBtn" type="button"
-                      onClick={handleClickWithEvent('toggleThemeDD')}>
-                      <div className="theme-swatch" id="themeSwatchBtn" style={{ background:'#00e5ff' }}/>
-                      <span className="theme-picker-label" id="themePickerLabel">nexus_ai</span>
-                      {Icon.chevronDown}
-                    </button>
                   </div>
 
+                  {/* Right: cancel + send */}
                   <button className="btn-cancel hidden" id="cancelBtn" type="button"
                     onClick={handleClick('cancelGen')}>{Icon.x}</button>
                   <button className="btn-send" id="sendBtn" type="button"
@@ -1076,16 +1079,12 @@ export default function ChatsPage() {
                 </div>
               </div>
 
-              {/* Model dropdown — filled by chats.ts */}
+              {/* Model dropdown — populated by chats.ts */}
               <div className="model-dd" id="mDD"/>
-
-              {/* Theme dropdown — FULLY rendered by chats.ts via toggleThemeDD()
-                  DO NOT put static children here — it causes duplicate check icons */}
-              <div className="theme-dd" id="themeDD"/>
             </div>
           </div>
 
-          {/* ── TAB GUI EDITOR ── */}
+          {/* ── TAB: GUI EDITOR ── */}
           <div id="guiTab">
             <div className="gui-toolbar">
               <span className="gui-add-label" id="guiAddLabel">Tambah:</span>
@@ -1104,14 +1103,14 @@ export default function ChatsPage() {
                   <img id="guiMIcon" src="" alt="" onError={handleImgErr}
                     style={{ width:13, height:13, borderRadius:2, flexShrink:0 }}/>
                   <span className="inp-model-name"  id="guiMName">Gemini 3.5 Flash</span>
-                  <span className="inp-model-badge" id="guiMBadge" style={{ color:'var(--cyan)' }}>FAST</span>
+                  <span className="inp-model-badge" id="guiMBadge" data-tier="fast">FAST</span>
                   {Icon.chevronDown}
                 </div>
                 <div className="model-dd" id="guiMDD"/>
 
                 <select id="guiThemeSelect" className="gui-theme-select" onChange={handleGuiThemeChange} defaultValue="">
                   <option value="">Tema...</option>
-                  {themeOptions.map(({ value, label }) => <option key={value} value={value}>{label}</option>)}
+                  {guiThemeOptions.map(({ value, label }) => <option key={value} value={value}>{label}</option>)}
                 </select>
 
                 <button className="gui-ai-btn" type="button" onClick={handleClick('openGuiAIChat')}>
@@ -1162,9 +1161,9 @@ export default function ChatsPage() {
         </div>{/* end #chat */}
       </div>{/* end #app */}
 
-      {/* ══════════════════════════════════════════
+      {/* ══════════════════════════════════════════════════════════════════════
           MODALS
-      ══════════════════════════════════════════ */}
+      ══════════════════════════════════════════════════════════════════════ */}
 
       {/* Avatar */}
       <div className="ov" id="avatarModal">
@@ -1317,7 +1316,7 @@ export default function ChatsPage() {
         </div>
       </div>
 
-      {/* Export GUI */}
+      {/* Export GUI Code */}
       <div className="ov" id="guiCodeModal">
         <div className="modal" style={{ width:640 }}>
           <div className="modal-t">{Icon.code}<span id="guiCodeTitle">Script GUI yang Dihasilkan</span></div>
@@ -1339,7 +1338,7 @@ export default function ChatsPage() {
           <div className="modal-b" style={{ marginBottom:8 }}>
             <p style={{ marginBottom:8, fontSize:'var(--fs-md)' }} id="guiAiDesc">Deskripsikan UI yang kamu inginkan:</p>
             <select id="guiAiThemeSelect" className="settings-select" style={{ width:'100%', marginBottom:8, height:'var(--h-sm)' }} defaultValue="nexus_ai">
-              {themeOptions.map(({ value, label }) => <option key={value} value={value}>{label}</option>)}
+              {guiThemeOptions.map(({ value, label }) => <option key={value} value={value}>{label}</option>)}
             </select>
             <textarea id="guiAIPrompt"
               style={{ width:'100%', background:'var(--bg3)', border:'1px solid var(--b)', borderRadius:6, padding:10, color:'white', fontFamily:"'JetBrains Mono',monospace", fontSize:12, outline:'none', resize:'vertical', minHeight:90 }}

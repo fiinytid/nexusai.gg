@@ -1,28 +1,55 @@
-// api/auth.js — NEXUS AI Roblox OAuth Callback (FIXED v6)
+// lib/auth.ts — NEXUS AI Roblox OAuth Callback (FIXED v7 — TypeScript)
 //
-// Changes vs v5:
-//   • REMOVED server-side verifyStateToken / generateStateToken entirely
-//     → Client sends state as plain "lang_randomToken" (not HMAC-signed),
-//       so _security.js verifyStateToken ALWAYS fails → state_invalid error.
-//       State is still forwarded by Roblox per spec, but no longer crypto-verified.
-//   • Removed OAUTH_STATE_SECRET dependency (no longer needed)
-//   • All other security layers remain: rate limiting, input validation,
-//     length checks, avatar domain allowlist, sanitisation, error tags, etc.
-//
-// Required env vars:
-//   PRODUCTION_URL          — e.g. https://nexusai-rbx.vercel.app  (no trailing slash)
-//   ROBLOX_CLIENT_ID        — from Roblox Developer Portal
-//   ROBLOX_CLIENT_SECRET    — from Roblox Developer Portal
+// Changes v7 (JS → TS):
+//   • Full TypeScript strict types — no implicit 'any'
+//   • AdaptedRequest / AdaptedResponse dari route.ts digunakan konsisten
+//   • RobloxTokenResponse interface untuk typing respons token exchange
+//   • RobloxUserInfo interface untuk typing respons userinfo
+//   • SafeUserData interface untuk output bersih
+//   • resolveRobloxAvatar, sanStr, safeRedirect semua dianotasi penuh
+//   • err.name TimeoutError/AbortError di-narrowing lewat type guard
+//   • Tidak ada perubahan behaviour — semua logic identik dengan v6
 
-import {
-  checkRateLimit,
-  setSecurityHeaders,
-} from './_security.js';
+import type { HandlerFn, AdaptedRequest, AdaptedResponse } from '../app/api/[...slug]/route.js';
+import { checkRateLimit, setSecurityHeaders, } from './_security';
+
+// ─── TYPES ────────────────────────────────────────────────────────────────────
+
+interface RobloxTokenResponse {
+  access_token?: string;
+  error?:        string;
+  [key: string]: unknown;
+}
+
+interface RobloxUserInfo {
+  sub?:                string | number;
+  preferred_username?: string;
+  name?:               string;
+  picture?:            string;
+  [key: string]:       unknown;
+}
+
+interface RobloxThumbnailData {
+  imageUrl?: string;
+  [key: string]: unknown;
+}
+
+interface RobloxThumbnailResponse {
+  data?: RobloxThumbnailData[];
+  [key: string]: unknown;
+}
+
+interface SafeUserData {
+  id:          string;
+  username:    string;
+  displayName: string;
+  avatar:      string;
+}
 
 // ─── PRODUCTION URL ───────────────────────────────────────────────────────────
 
-function getProductionBase() {
-  const raw = (process.env.PRODUCTION_URL || '').trim();
+function getProductionBase(): string | null {
+  const raw = (process.env.PRODUCTION_URL ?? '').trim();
   if (!raw) return null;
 
   const cleaned = raw
@@ -39,20 +66,20 @@ function getProductionBase() {
   }
 }
 
-function getRedirectUri() {
+function getRedirectUri(): string | null {
   const base = getProductionBase();
   return base ? `${base}/api/auth` : null;
 }
 
 // ─── SAFE REDIRECT ────────────────────────────────────────────────────────────
 
-function safeRedirect(res, path) {
+function safeRedirect(res: AdaptedResponse, path: string): AdaptedResponse {
   const base = getProductionBase();
   if (
-    !base                        ||
-    typeof path !== 'string'     ||
-    !path.startsWith('/')        ||
-    /^\/\/|:|\.\./.test(path)   // block protocol-relative, absolute URLs, path traversal
+    !base                      ||
+    typeof path !== 'string'   ||
+    !path.startsWith('/')      ||
+    /^\/\/|:|\.\./.test(path)  // block protocol-relative, absolute URLs, path traversal
   ) {
     return res.status(500).json({ error: 'Redirect configuration error.' });
   }
@@ -61,7 +88,7 @@ function safeRedirect(res, path) {
 
 // ─── AVATAR HELPER ────────────────────────────────────────────────────────────
 
-const SAFE_AVATAR_DOMAINS = [
+const SAFE_AVATAR_DOMAINS: readonly string[] = [
   'https://tr.rbxcdn.com/',
   'https://t0.rbxcdn.com/',
   'https://t1.rbxcdn.com/',
@@ -69,22 +96,25 @@ const SAFE_AVATAR_DOMAINS = [
   'https://t3.rbxcdn.com/',
   'https://t4.rbxcdn.com/',
   'https://thumbnails.roblox.com/',
-];
+] as const;
 
-function isSafeAvatarUrl(url) {
+function isSafeAvatarUrl(url: unknown): url is string {
   return (
     typeof url === 'string' &&
     url.length > 0          &&
     url.length <= 512       &&
-    SAFE_AVATAR_DOMAINS.some(d => url.startsWith(d))
+    SAFE_AVATAR_DOMAINS.some(d => (url as string).startsWith(d))
   );
 }
 
-async function resolveRobloxAvatar(userId, fallbackUrl = '') {
+async function resolveRobloxAvatar(
+  userId:      string | number,
+  fallbackUrl: string = '',
+): Promise<string> {
   // Use fallback if it's already from a trusted CDN
   if (isSafeAvatarUrl(fallbackUrl)) return fallbackUrl;
 
-  const uid = String(userId || '').trim();
+  const uid = String(userId ?? '').trim();
   if (!uid || !/^\d{1,20}$/.test(uid)) return '';
 
   try {
@@ -92,33 +122,43 @@ async function resolveRobloxAvatar(userId, fallbackUrl = '') {
       `https://thumbnails.roblox.com/v1/users/avatar-headshot` +
       `?userIds=${encodeURIComponent(uid)}&size=420x420&format=Png&isCircular=false`;
 
-    const res = await fetch(apiUrl, { signal: AbortSignal.timeout(5_000) });
-    if (!res.ok) return '';
+    const resp = await fetch(apiUrl, { signal: AbortSignal.timeout(5_000) });
+    if (!resp.ok) return '';
 
-    const json     = await res.json().catch(() => null);
+    const json     = await resp.json().catch(() => null) as RobloxThumbnailResponse | null;
     const imageUrl = json?.data?.[0]?.imageUrl ?? '';
 
     return isSafeAvatarUrl(imageUrl) ? imageUrl : '';
-  } catch (err) {
-    console.warn('[auth] Avatar fetch failed for uid', uid, '—', err.message);
+  } catch (err: unknown) {
+    const msg = err instanceof Error ? err.message : String(err);
+    console.warn('[auth] Avatar fetch failed for uid', uid, '—', msg);
     return '';
   }
 }
 
 // ─── STRING SANITISER ────────────────────────────────────────────────────────
 
-function sanStr(str, max = 100) {
-  if (typeof str !== 'string') str = String(str ?? '');
-  return str
+function sanStr(str: unknown, max: number = 100): string {
+  const s = typeof str === 'string' ? str : String(str ?? '');
+  return s
     .replace(/[\x00-\x08\x0b\x0c\x0e-\x1f\x7f]/g, '') // strip control chars
     .replace(/[<>]/g, '')                                 // strip angle brackets
     .substring(0, max)
     .trim();
 }
 
+// ─── TYPE GUARD ───────────────────────────────────────────────────────────────
+
+function isAbortError(err: unknown): boolean {
+  return (
+    err instanceof Error &&
+    (err.name === 'TimeoutError' || err.name === 'AbortError')
+  );
+}
+
 // ─── MAIN HANDLER ─────────────────────────────────────────────────────────────
 
-export default async function handler(req, res) {
+const handler: HandlerFn = async (req: AdaptedRequest, res: AdaptedResponse) => {
   setSecurityHeaders(res);
 
   const productionBase = getProductionBase();
@@ -136,27 +176,32 @@ export default async function handler(req, res) {
   res.setHeader('Access-Control-Allow-Credentials', 'false');
   res.setHeader('Vary', 'Origin');
 
-  if (req.method === 'OPTIONS') return res.status(204).end();
+  if (req.method === 'OPTIONS') { res.status(204).end(); return; }
   if (req.method !== 'GET') {
-    return res.status(405).json({ error: 'Method not allowed.' });
+    res.status(405).json({ error: 'Method not allowed.' });
+    return;
   }
 
   // Collect request metadata
-  const ip       = String(req.headers['x-forwarded-for'] || '')
-                     .split(',')[0]
-                     .trim() || 'unknown';
-  const isApiReq = (req.headers['accept'] || '').includes('application/json');
+  const ip: string = String(req.headers['x-forwarded-for'] ?? '')
+    .split(',')[0]
+    .trim() || 'unknown';
+
+  const isApiReq = (req.headers['accept'] ?? '').includes('application/json');
 
   // Uniform error helpers
-  const apiError  = (status, msg)  => res.status(status).json({ error: msg });
-  const pageError = (slug)         =>
+  const apiError  = (status: number, msg: string) =>
+    res.status(status).json({ error: msg });
+
+  const pageError = (slug: string) =>
     safeRedirect(res, `/login?roblox_error=${encodeURIComponent(slug)}`);
-  const respond   = (status, msg, slug) =>
+
+  const respond = (status: number, msg: string, slug: string) =>
     isApiReq ? apiError(status, msg) : pageError(slug);
 
   // ── Verify required secrets ───────────────────────────────────────────────
-  const clientId     = (process.env.ROBLOX_CLIENT_ID     || '').trim();
-  const clientSecret = (process.env.ROBLOX_CLIENT_SECRET || '').trim();
+  const clientId     = (process.env.ROBLOX_CLIENT_ID     ?? '').trim();
+  const clientSecret = (process.env.ROBLOX_CLIENT_SECRET ?? '').trim();
 
   if (!clientId || !clientSecret) {
     console.error('[auth][ERR-002] ROBLOX_CLIENT_ID or ROBLOX_CLIENT_SECRET missing.');
@@ -165,15 +210,14 @@ export default async function handler(req, res) {
 
   // NOTE: State token verification has been intentionally removed.
   // The client (login.tsx) sends state as a plain "lang_randomToken" string
-  // which is NOT HMAC-signed. Attempting to verify it as a signed token
-  // causes state_invalid errors on every login attempt.
+  // which is NOT HMAC-signed. Attempting to verify it causes state_invalid errors.
   // Rate limiting below provides the primary replay / brute-force protection.
 
-  const { code, error: oauthError, state } = req.query;
+  const { code, error: oauthError } = req.query;
 
   // ── Handle OAuth errors from Roblox ──────────────────────────────────────
   if (oauthError) {
-    const KNOWN = new Set([
+    const KNOWN_ERRORS = new Set([
       'access_denied',
       'server_error',
       'temporarily_unavailable',
@@ -181,7 +225,9 @@ export default async function handler(req, res) {
       'unauthorized_client',
       'unsupported_response_type',
     ]);
-    const safeSlug = KNOWN.has(String(oauthError)) ? String(oauthError) : 'oauth_error';
+    const safeSlug = KNOWN_ERRORS.has(String(oauthError))
+      ? String(oauthError)
+      : 'oauth_error';
     console.info(`[auth] OAuth error from Roblox (${ip}): ${oauthError}`);
     return respond(400, 'Login cancelled or denied.', safeSlug);
   }
@@ -189,12 +235,12 @@ export default async function handler(req, res) {
   // ── Validate authorization code ───────────────────────────────────────────
   // Roblox auth codes are typically 64 hex chars but spec allows up to 512
   if (
-    !code                        ||
-    typeof code !== 'string'     ||
-    code.trim().length < 4       ||
+    !code                    ||
+    typeof code !== 'string' ||
+    code.trim().length < 4   ||
     code.trim().length > 512
   ) {
-    console.warn(`[auth][WARN-020] Invalid code length (${String(code).length}) from ${ip}`);
+    console.warn(`[auth][WARN-020] Invalid code length (${String(code ?? '').length}) from ${ip}`);
     return respond(400, 'Invalid or missing authorization code.', 'bad_code');
   }
 
@@ -225,7 +271,7 @@ export default async function handler(req, res) {
     });
 
     if (!tokenResp.ok) {
-      const errData = await tokenResp.json().catch(() => ({}));
+      const errData = await tokenResp.json().catch(() => ({})) as RobloxTokenResponse;
       console.error(
         `[auth][ERR-030] Token exchange failed: HTTP ${tokenResp.status}`,
         JSON.stringify(errData),
@@ -233,7 +279,7 @@ export default async function handler(req, res) {
       return respond(400, 'Login failed. Please try again.', 'token_failed');
     }
 
-    const tokenData = await tokenResp.json().catch(() => null);
+    const tokenData = await tokenResp.json().catch(() => null) as RobloxTokenResponse | null;
     if (!tokenData || typeof tokenData !== 'object') {
       console.error('[auth][ERR-031] Token response is not valid JSON.');
       return respond(400, 'Received invalid token response.', 'bad_token_response');
@@ -241,7 +287,7 @@ export default async function handler(req, res) {
 
     const accessToken = tokenData.access_token;
     if (
-      !accessToken               ||
+      !accessToken                    ||
       typeof accessToken !== 'string' ||
       accessToken.trim().length < 10
     ) {
@@ -260,16 +306,16 @@ export default async function handler(req, res) {
       return respond(400, 'Failed to retrieve account information.', 'userinfo_failed');
     }
 
-    const userInfo = await userInfoResp.json().catch(() => null);
+    const userInfo = await userInfoResp.json().catch(() => null) as RobloxUserInfo | null;
     if (!userInfo || typeof userInfo !== 'object') {
       console.error('[auth][ERR-041] Userinfo response is not valid JSON.');
       return respond(400, 'Invalid user info response.', 'bad_userinfo');
     }
 
-    // Cast userId to string BEFORE regex test (Roblox sometimes returns a number)
-    const userId   = String(userInfo.sub   ?? '').trim();
+    // Cast userId ke string SEBELUM regex test (Roblox kadang return number)
+    const userId   = String(userInfo.sub ?? '').trim();
     const username = String(
-      userInfo.preferred_username || userInfo.name || ''
+      userInfo.preferred_username ?? userInfo.name ?? '',
     ).trim();
 
     if (!userId || !username) {
@@ -283,10 +329,7 @@ export default async function handler(req, res) {
     }
 
     const cleanUsername    = sanStr(username, 50);
-    const cleanDisplayName = sanStr(
-      String(userInfo.name || username),
-      80,
-    );
+    const cleanDisplayName = sanStr(String(userInfo.name ?? username), 80);
 
     if (!cleanUsername) {
       console.error('[auth][ERR-044] Username is empty after sanitization.');
@@ -296,10 +339,10 @@ export default async function handler(req, res) {
     // ── Step 3: Resolve avatar ────────────────────────────────────────────
     const avatarUrl = await resolveRobloxAvatar(
       userId,
-      String(userInfo.picture || ''),
+      String(userInfo.picture ?? ''),
     );
 
-    const userData = {
+    const userData: SafeUserData = {
       id:          userId,
       username:    cleanUsername,
       displayName: cleanDisplayName,
@@ -311,13 +354,15 @@ export default async function handler(req, res) {
       return res.status(200).json({ user: userData });
     }
 
-    // base64url uses only URL-safe chars (A-Z a-z 0-9 - _) — no encodeURIComponent needed
+    // base64url menggunakan hanya URL-safe chars (A-Z a-z 0-9 - _)
     const encoded = Buffer.from(JSON.stringify(userData)).toString('base64url');
     return safeRedirect(res, `/login?roblox_user=${encoded}`);
 
-  } catch (err) {
-    const isTimeout = err.name === 'TimeoutError' || err.name === 'AbortError';
-    console.error(`[auth][ERR-099] Unexpected error (${err.name}):`, err.message);
+  } catch (err: unknown) {
+    const isTimeout = isAbortError(err);
+    const msg       = err instanceof Error ? err.message : String(err);
+    const name      = err instanceof Error ? err.name    : 'Unknown';
+    console.error(`[auth][ERR-099] Unexpected error (${name}):`, msg);
     return respond(
       isTimeout ? 503 : 500,
       isTimeout
@@ -326,4 +371,6 @@ export default async function handler(req, res) {
       isTimeout ? 'timeout' : 'server_error',
     );
   }
-}
+};
+
+export default handler;

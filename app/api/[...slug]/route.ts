@@ -1,23 +1,8 @@
 // app/api/[...slug]/route.ts
 // Catch-all router — 1 Vercel function untuk semua endpoint
-// v5: Removed /lib/app JS serving, improved types, request tracing & timing
+// v6: Dynamic import dengan fallback .ts/.js, improved error handling & tracing
 
 import { NextResponse, type NextRequest } from 'next/server';
-
-// ─── API HANDLERS ─────────────────────────────────────────────────────────────
-
-import adminHandler   from '../../../lib/admin.js';
-import aiHandler      from '../../../lib/ai.js';
-import authHandler    from '../../../lib/auth.js';
-import controlHandler from '../../../lib/control.js';
-import discordHandler from '../../../lib/discord.js';
-import gcbHandler     from '../../../lib/google-callback.js';
-import inboxHandler   from '../../../lib/inbox.js';
-import mainHandler    from '../../../lib/main.js';
-import paymentHandler from '../../../lib/payment.js';
-import redeemHandler  from '../../../lib/redeem.js';
-import reportHandler  from '../../../lib/report.js';
-import syncHandler    from '../../../lib/sync.js';
 
 // ─── TYPES ────────────────────────────────────────────────────────────────────
 
@@ -56,23 +41,80 @@ type ResponseState = {
 };
 
 // ─── ROUTE TABLE ──────────────────────────────────────────────────────────────
+// Daftar nama endpoint yang valid.
+// Handler-nya di-resolve secara dinamis saat runtime (mendukung .ts & .js).
 
-const ROUTES: Record<string, HandlerModule | HandlerFn> = {
-  admin:             adminHandler,
-  ai:                aiHandler,
-  auth:              authHandler,
-  control:           controlHandler,
-  discord:           discordHandler,
-  'google-callback': gcbHandler,
-  inbox:             inboxHandler,
-  main:              mainHandler,
-  payment:           paymentHandler,
-  redeem:            redeemHandler,
-  report:            reportHandler,
-  sync:              syncHandler,
-};
+const KNOWN_ENDPOINTS = [
+  'admin',
+  'ai',
+  'auth',
+  'control',
+  'discord',
+  'google-callback',
+  'inbox',
+  'main',
+  'payment',
+  'redeem',
+  'report',
+  'sync',
+] as const;
 
-const AVAILABLE_ROUTES = Object.keys(ROUTES).sort();
+type KnownEndpoint = (typeof KNOWN_ENDPOINTS)[number];
+
+const AVAILABLE_ROUTES: string[] = [...KNOWN_ENDPOINTS].sort();
+
+// ─── DYNAMIC HANDLER RESOLVER ─────────────────────────────────────────────────
+// Mencoba import modul dengan ekstensi .ts terlebih dahulu, lalu .js sebagai
+// fallback. Ini memungkinkan lib/ berisi campuran file .ts dan .js tanpa harus
+// mengubah route ini setiap ada perubahan ekstensi.
+
+const handlerCache = new Map<string, HandlerFn>();
+
+async function loadHandler(endpoint: string): Promise<HandlerFn | null> {
+  // Return dari cache jika sudah pernah di-load
+  const cached = handlerCache.get(endpoint);
+  if (cached) return cached;
+
+  // Urutan ekstensi yang dicoba
+  const extensions = ['.js', '.ts'];
+
+  for (const ext of extensions) {
+    try {
+      // Path relatif dari app/api/[...slug]/route.ts ke lib/
+      const mod = await import(`../../../lib/${endpoint}${ext}`) as HandlerModule;
+      const fn  = resolveHandlerFn(mod);
+
+      if (fn) {
+        handlerCache.set(endpoint, fn);
+        return fn;
+      }
+    } catch (err: unknown) {
+      // MODULE_NOT_FOUND → coba ekstensi berikutnya
+      const code = (err as NodeJS.ErrnoException).code;
+      if (code === 'MODULE_NOT_FOUND' || code === 'ERR_MODULE_NOT_FOUND') {
+        continue;
+      }
+      // Error lain (syntax, runtime) → lempar supaya tidak diam-diam gagal
+      throw err;
+    }
+  }
+
+  return null; // Tidak ditemukan dengan ekstensi apapun
+}
+
+function resolveHandlerFn(mod: HandlerModule): HandlerFn | null {
+  if (typeof mod         === 'function') return mod as unknown as HandlerFn;
+  if (typeof mod.default === 'function') return mod.default;
+
+  // Beberapa modul CommonJS mengexport fungsi langsung tanpa .default
+  for (const key of Object.keys(mod)) {
+    if (typeof mod[key] === 'function' && key !== '__esModule') {
+      return mod[key] as HandlerFn;
+    }
+  }
+
+  return null;
+}
 
 // ─── CORS ─────────────────────────────────────────────────────────────────────
 
@@ -92,12 +134,10 @@ function applyCors(res: NextResponse): NextResponse {
 
 // ─── HELPERS ──────────────────────────────────────────────────────────────────
 
-/** Buat UUID sederhana untuk request tracing */
 function newRequestId(): string {
   return `${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 8)}`;
 }
 
-/** Resolve URL relatif ke absolut berdasarkan origin request */
 function toAbsoluteUrl(redirectUrl: string, requestUrl: string): string {
   if (/^https?:\/\//i.test(redirectUrl)) return redirectUrl;
   try {
@@ -134,8 +174,8 @@ async function parseBody(request: NextRequest): Promise<Record<string, unknown>>
       return result;
     }
 
-    // Fallback: coba parse sebagai JSON jika bentuknya seperti object/array
-    const text = await request.clone().text();
+    // Fallback: coba parse sebagai JSON jika berbentuk object/array
+    const text    = await request.clone().text();
     const trimmed = text.trim();
     if (trimmed.startsWith('{') || trimmed.startsWith('[')) {
       try { return JSON.parse(trimmed) as Record<string, unknown>; } catch { /* bukan JSON */ }
@@ -146,14 +186,6 @@ async function parseBody(request: NextRequest): Promise<Record<string, unknown>>
     console.warn('[route] parseBody failed:', err instanceof Error ? err.message : err);
     return {};
   }
-}
-
-// ─── RESOLVE HANDLER ─────────────────────────────────────────────────────────
-
-function resolveHandlerFn(mod: HandlerModule | HandlerFn): HandlerFn | null {
-  if (typeof mod === 'function') return mod;
-  if (typeof mod.default === 'function') return mod.default;
-  return null;
 }
 
 // ─── REQUEST ADAPTER ─────────────────────────────────────────────────────────
@@ -192,14 +224,14 @@ async function runHandler(
   const res: AdaptedResponse = {
     headersSent: false,
 
-    status(code)     { state.status = code;  return res; },
-    json(data)       { state.body   = data;  return res; },
-    send(data)       { state.body   = data;  return res; },
-    end()            {                       return res; },
+    status(code)    { state.status = code;  return res; },
+    json(data)      { state.body   = data;  return res; },
+    send(data)      { state.body   = data;  return res; },
+    end()           {                       return res; },
 
-    setHeader(k, v)  { state.headers[k] = v;   return res; },
-    getHeader(k)     { return state.headers[k]; },
-    removeHeader(k)  { delete state.headers[k]; return res; },
+    setHeader(k, v) { state.headers[k] = v;    return res; },
+    getHeader(k)    { return state.headers[k]; },
+    removeHeader(k) { delete state.headers[k]; return res; },
 
     redirect(codeOrUrl, url?) {
       if (typeof codeOrUrl === 'string') {
@@ -232,7 +264,6 @@ async function runHandler(
 // ─── BUILD NEXTRESPONSE ───────────────────────────────────────────────────────
 
 function buildResponse(state: ResponseState): NextResponse {
-  /** Tulis header custom (non-CORS) ke response */
   const attachHeaders = (res: NextResponse): NextResponse => {
     for (const [k, v] of Object.entries(state.headers)) {
       if (!Object.hasOwn(CORS_HEADERS, k)) {
@@ -254,10 +285,10 @@ function buildResponse(state: ResponseState): NextResponse {
     return attachHeaders(new NextResponse('', { status: state.status }));
   }
 
-  // String body — auto-detect tipe konten
+  // String body — auto-detect content type
   if (typeof state.body === 'string') {
     const trimmed = state.body.trim();
-    const ct      = trimmed.startsWith('{') || trimmed.startsWith('[')
+    const ct      = (trimmed.startsWith('{') || trimmed.startsWith('['))
       ? 'application/json; charset=utf-8'
       : 'text/plain; charset=utf-8';
 
@@ -284,7 +315,7 @@ async function handle(
   const requestId = newRequestId();
   const startTime = Date.now();
 
-  // CORS preflight — selesaikan lebih awal
+  // CORS preflight
   if (request.method === 'OPTIONS') {
     return applyCors(new NextResponse(null, { status: 204 }));
   }
@@ -306,9 +337,8 @@ async function handle(
       );
     }
 
-    // Endpoint tidak dikenal
-    const handlerModule = ROUTES[endpoint];
-    if (!handlerModule) {
+    // Endpoint tidak ada di daftar
+    if (!(KNOWN_ENDPOINTS as readonly string[]).includes(endpoint)) {
       return applyCors(
         NextResponse.json(
           { error: `Endpoint "${endpoint}" tidak ditemukan.`, available: AVAILABLE_ROUTES, requestId },
@@ -317,8 +347,21 @@ async function handle(
       );
     }
 
-    // Handler tidak valid
-    const fn = resolveHandlerFn(handlerModule as HandlerModule | HandlerFn);
+    // Dynamic import handler (mendukung .ts & .js)
+    let fn: HandlerFn | null;
+    try {
+      fn = await loadHandler(endpoint);
+    } catch (importErr: unknown) {
+      const detail = importErr instanceof Error ? importErr.message : String(importErr);
+      console.error(`[route][${requestId}] import error untuk "${endpoint}":`, detail);
+      return applyCors(
+        NextResponse.json(
+          { error: `Gagal memuat handler "${endpoint}".`, detail, requestId },
+          { status: 500 },
+        )
+      );
+    }
+
     if (!fn) {
       return applyCors(
         NextResponse.json(
