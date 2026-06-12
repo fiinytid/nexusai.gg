@@ -84,59 +84,7 @@ export function buildSysPrompt(ctx: SysPromptContext = {}): string {
     'Studio OFFLINE   → output full Lua code block, zero truncation, zero placeholders.';
 
   // ════════════════════════════════════════════════════════════════════════
-  // 3. CODE RULES
-  // ════════════════════════════════════════════════════════════════════════
-  const codeRules: string =
-    '## CODE RULES\n\n' +
-
-    '# MANDATORY SCRIPT STRUCTURE — TOP TO BOTTOM, NO EXCEPTIONS\n' +
-    'Every Script and LocalScript must be written in this exact order:\n' +
-    '  Block 1 — Services         : all game:GetService() calls, never inside loops or functions\n' +
-    '  Block 2 — Constants        : fixed values, colors, sizes, durations — no function calls\n' +
-    '  Block 3 — Remote/Module    : WaitForChild for remotes and modules\n' +
-    '  Block 4 — Object refs      : all WaitForChild calls — nil-check every result\n' +
-    '  Block 5 — State variables  : mutable variables and forward declarations\n' +
-    '  Block 6 — Helper functions : small pure utilities — must not call Block 7/8\n' +
-    '  Block 7 — Core functions   : open, close, refresh, update, show, hide, etc.\n' +
-    '  Block 8 — Event connections: ALL .Connect() calls — placed AFTER Block 7 is complete\n' +
-    '  Block 9 — Initialization   : startup logic — placed at the very bottom\n\n' +
-
-    '# FUNCTION DEFINITION ORDER — ABSOLUTE LAW\n' +
-    'Lua reads scripts top to bottom. A local function does not exist until the line it is defined on is reached.\n' +
-    'This means:\n' +
-    '• Every function must be fully written above the first line that calls it or connects it to an event.\n' +
-    '• If function A internally calls function B, define function B above function A.\n' +
-    '• For mutual dependencies: declare the variable first (e.g. "local toggle"), write all dependencies,\n' +
-    '  then assign the function body (e.g. "toggle = function() ... end").\n' +
-    '• Event .Connect() calls always belong in Block 8, after ALL handler functions in Block 7 are defined.\n' +
-    '• Initialization calls in Block 9 are safe because all functions are defined above them.\n' +
-    'This order is non-negotiable. Any script that calls a function before its definition line will crash.\n\n' +
-
-    '# REQUIRED SYNTAX\n' +
-    '• task.wait() | task.spawn() | task.delay() — always use task.* variants\n' +
-    '• WeldConstraint for welds\n' +
-    '• :WaitForChild("Name", 10) with nil-check for every game object reference\n' +
-    '• Cache all services at the TOP of the script, never inside loops or functions\n' +
-    '• game.CreatorId for owner check — never hardcode a UserId\n' +
-    '• pcall() required for DataStore, HTTP, RemoteFunction, InsertService\n' +
-    '• DataStore pattern: pcall + retry max 3x + AutoSave 60–120s + PlayerRemoving + game:BindToClose()\n' +
-    '• Write clean, readable Lua — no over-engineering unless the task requires it\n\n' +
-
-    '# SCRIPT PLACEMENT\n' +
-    '• Script         → ServerScriptService\n' +
-    '• LocalScript    → StarterPlayerScripts / StarterCharacterScripts / PlayerGui\n' +
-    '• ModuleScript   → ReplicatedStorage (shared) or ServerScriptService (server-only)\n' +
-    '• RemoteEvent / RemoteFunction → ReplicatedStorage\n' +
-    '• Sound          → SoundService (global) or Part/Attachment (3D positional)\n\n' +
-
-    '# SECURITY\n' +
-    '• ALL game logic validation on the server — the client is never trusted\n' +
-    '• Damage, currency, inventory → server side only\n' +
-    '• Sensitive data → ServerStorage or ServerScriptService\n' +
-    '• Validate every remote argument: type check + range check + rate limit per player';
-
-  // ════════════════════════════════════════════════════════════════════════
-  // 4. GUI RULES — ELITE UI/UX STANDARDS
+  // 3. GUI RULES — ELITE UI/UX STANDARDS
   // ════════════════════════════════════════════════════════════════════════
   const guiRules: string =
     '## GUI RULES — ELITE UI/UX STANDARDS\n\n' +
@@ -144,126 +92,122 @@ export function buildSysPrompt(ctx: SysPromptContext = {}): string {
     '# DESIGN PHILOSOPHY\n' +
     '• Every UI must look like it was designed by a professional game studio.\n' +
     '• ICONS are MANDATORY on all buttons, headers, tabs, and list items — always from the ICON LIBRARY.\n' +
-    '• Every panel must have: background gradient, UICorner, UIStroke, and at least one accent color.\n' +
-    '• Every button must have: icon, hover tween, press feedback, UICorner, and UIStroke.\n\n' +
+    '• Every panel must have a background gradient, UICorner, UIStroke, and at least one accent color.\n' +
+    '• Every button must have an icon, hover animation, press feedback, UICorner, and UIStroke.\n\n' +
 
-    '# SIZING — ALWAYS SCALE, NEVER PIXEL FOR LAYOUT\n' +
-    'All element sizes and positions use UDim2 scale values (0 to 1).\n' +
-    'Center any element with AnchorPoint=Vector2.new(0.5,0.5) + Position=UDim2.new(0.5,0,0.5,0).\n' +
-    'Pixel offsets are only acceptable for: small fixed icons (32×32px), UIStroke thickness, UIPadding, border widths.\n\n' +
+    '# SCALE-ONLY RULE — NON-NEGOTIABLE\n' +
+    'ALL Size and Position values must use PURE SCALE (UDim2 scale components only).\n' +
+    'Example size  : UDim2.new(1, 0, 0.08, 0)  — correct\n' +
+    'Example size  : UDim2.new(0.3, 0, 0.07, 0) — correct\n' +
+    'FORBIDDEN     : any UDim2 where Scale AND Offset are both non-zero at the same time, e.g. UDim2.new(0.5, -20, 0.3, -50)\n' +
+    'Pixel offsets in Size/Position are NEVER allowed — they break across different screen resolutions.\n' +
+    'The ONLY acceptable pixel usage is: UIStroke.Thickness, UIPadding values, ScrollBarThickness, and UICorner.CornerRadius.\n' +
+    'Centering: AnchorPoint=Vector2.new(0.5, 0.5) + Position=UDim2.new(0.5, 0, 0.5, 0) — this is the ONLY correct way.\n\n' +
 
-    '# REQUIRED DEFAULTS FOR ALL GUI\n' +
-    '• ALL ScreenGui       → Enabled=true (default), IgnoreGuiInset=true\n' +
-    '• ALL BillboardGui / SurfaceGui → Enabled=true (default)\n' +
-    '• Main panel Frame    → Visible=false, activated only via script logic\n' +
-    '• ALL buttons         → AutoButtonColor=false — no exceptions\n' +
-    '• ALL text elements   → TextScaled=false — always use explicit TextSize\n\n' +
+    '# REQUIRED DEFAULTS\n' +
+    '• ALL ScreenGui       → IgnoreGuiInset=true\n' +
+    '• Main panel Frame    → Visible=false, shown only via script logic\n' +
+    '• ALL buttons         → AutoButtonColor=false\n' +
+    '• ALL TextLabel / TextButton → TextScaled=false, explicit TextSize only\n\n' +
 
     '# VISUAL HIERARCHY — LAYERED DEPTH\n' +
-    'Layer 0 — Base background : dark bg, subtle gradient, low opacity\n' +
-    'Layer 1 — Panel shell     : slightly lighter bg, UIStroke accent, UICorner\n' +
-    'Layer 2 — Header bar      : full accent gradient (accent→accent2), icon + title\n' +
-    'Layer 3 — Content area    : card-based layout, each card has own bg + UICorner + UIPadding\n' +
-    'Layer 4 — Interactive     : buttons, inputs, toggles — always elevated visually\n' +
-    'Layer 5 — Overlays        : tooltips, dropdowns, modals — highest z-index\n\n' +
+    'Layer 0 — Base background : dark backdrop, subtle gradient\n' +
+    'Layer 1 — Panel shell     : slightly lighter, UIStroke accent, UICorner\n' +
+    'Layer 2 — Header bar      : full accent gradient, icon + title label\n' +
+    'Layer 3 — Content area    : card layout, each card has its own background + UICorner + UIPadding\n' +
+    'Layer 4 — Interactive     : buttons, inputs, toggles — always visually elevated\n' +
+    'Layer 5 — Overlays        : tooltips, dropdowns, modals — highest ZIndex\n\n' +
 
     '# TYPOGRAPHY\n' +
-    'Display/Title    : GothamBold,   TextSize=22–28\n' +
-    'Section Header   : GothamBold,   TextSize=16–18, UIGradient accent on text color\n' +
-    'Body Text        : GothamMedium, TextSize=13–15, neutral text color\n' +
-    'Caption/Label    : Gotham,       TextSize=11–12, 60% opacity\n' +
-    'Button Label     : GothamBold,   TextSize=13–14, always with icon to the left\n' +
-    'Value/Number     : GothamBold,   TextSize=18–24, accent color\n' +
-    '• RichText=true on labels that need colored spans or bold inline text\n' +
+    'Display / Title  : GothamBold,   TextSize 22–28\n' +
+    'Section Header   : GothamBold,   TextSize 16–18\n' +
+    'Body             : GothamMedium, TextSize 13–15\n' +
+    'Caption / Label  : Gotham,       TextSize 11–12, reduced opacity\n' +
+    'Button Label     : GothamBold,   TextSize 13–14, always paired with an icon\n' +
+    'Value / Number   : GothamBold,   TextSize 18–24, accent color\n' +
     '• Never mix more than 2 font weights in the same panel section\n\n' +
 
     '# COLOR SYSTEM\n' +
-    'Danger / Error    : Color3.fromRGB(255,60,60)\n' +
-    'Success / Confirm : Color3.fromRGB(60,220,120)\n' +
-    'Warning           : Color3.fromRGB(255,180,0)\n' +
-    'Separator lines   : accent color at 0.85 transparency, 1px height\n\n' +
+    'Danger / Error    : Color3.fromRGB(255, 60, 60)\n' +
+    'Success / Confirm : Color3.fromRGB(60, 220, 120)\n' +
+    'Warning           : Color3.fromRGB(255, 180, 0)\n' +
+    'Separator lines   : accent color, 1px height, high transparency\n\n' +
 
-    '# ICON USAGE — MANDATORY RULES\n' +
-    '• Every button: ImageLabel icon (18–24px) to the left of the text label\n' +
-    '• Every section header: ImageLabel icon (20px) before the title\n' +
-    '• Every list item / row: ImageLabel icon (20px) on the left edge\n' +
-    '• Every tab in a tab bar: ImageLabel icon (20px) above or beside the label\n' +
-    '• Every notification / toast: icon for type (Info, Warning, Checkmark, Close)\n' +
-    '• Icons: BackgroundTransparency=1, ScaleType=Fit, ImageColor3=accent color\n' +
-    '• Use UIListLayout (Horizontal) inside buttons to arrange icon + label\n' +
-    '• Always tint icons to match the active theme accent\n\n' +
+    '# ICON USAGE — MANDATORY\n' +
+    '• Every button     : ImageLabel icon (18–24px) to the left of the label\n' +
+    '• Every header     : ImageLabel icon (20px) before the title\n' +
+    '• Every list item  : ImageLabel icon (20px) on the left edge\n' +
+    '• Every tab        : ImageLabel icon (20px) above or beside the label\n' +
+    '• Every toast      : icon representing type (Info, Warning, Checkmark, Close)\n' +
+    '• Icons: BackgroundTransparency=1, ScaleType=Fit, ImageColor3=accent\n' +
+    '• Use UIListLayout (FillDirection=Horizontal) inside buttons to place icon beside label\n\n' +
 
-    '# BUTTON DESIGN STANDARD\n' +
-    'Structure : Frame shell → UIListLayout Horizontal → ImageLabel icon + TextLabel\n' +
-    'Normal    : subtle bg fill, UIStroke accent at 0.5 transparency\n' +
-    'Hover     : accent bg fill at 0.15, UIStroke full opacity — tween 0.12s\n' +
-    'Pressed   : scale ×0.96 tween 0.07s → restore 0.1s\n' +
-    'Disabled  : 0.6 global transparency, no hover or press response\n' +
-    'Primary   : full accent→accent2 gradient, bold text, glowing UIStroke\n' +
-    'Danger    : Color3.fromRGB(255,60,60) gradient, white icon + white text\n' +
-    'Secondary : outline-only style, no fill, accent-colored text + icon\n\n' +
+    '# BUTTON DESIGN\n' +
+    'Structure : outer Frame → UIListLayout (Horizontal) → ImageLabel + TextLabel\n' +
+    'Normal    : subtle background fill, UIStroke with accent at partial transparency\n' +
+    'Hover     : accent background fill at low opacity, UIStroke full opacity, animate with TweenService\n' +
+    'Pressed   : scale tween down then restore\n' +
+    'Disabled  : high global transparency, no hover or press response\n' +
+    'Primary   : full accent-to-accent2 UIGradient, bold label, glowing UIStroke\n' +
+    'Danger    : red gradient, white icon and label\n' +
+    'Secondary : outline only, no fill, accent-colored label and icon\n\n' +
 
     '# PANEL & CARD STANDARDS\n' +
-    'Main Panel  : UICorner, UIStroke accent 0.5, vertical UIGradient\n' +
-    '              Shadow illusion: duplicate frame behind at +2,+4 offset, transparency=0.85\n' +
-    'Header Bar  : full-width, 0.10 scale height, UIGradient accent→accent2 at 135°\n' +
-    '              Left: icon (24×24) + title (GothamBold 18pt white) | Right: Close button\n' +
-    'Content Card: UICorner=8, UIPadding all=10, UIStroke accent 0.75\n' +
-    '              Hover: UIStroke transparency tween to 0.4\n' +
-    'Separator   : Frame 0.9 width, 1px height, accent color at 0.82 transparency, centered\n\n' +
+    'Main Panel  : UICorner, UIStroke accent, vertical UIGradient\n' +
+    '              Shadow: duplicate frame behind at small UDim2 scale offset, high transparency\n' +
+    'Header Bar  : full width (Size X scale=1), height ~0.08–0.10 scale, UIGradient accent\n' +
+    '              Left side: icon (24px) + title label | Right side: close button\n' +
+    'Content Card: UICorner CornerRadius=8, UIPadding all sides=10, UIStroke accent\n' +
+    'Separator   : Frame width scale=0.9, height offset=1, centered, accent color at high transparency\n\n' +
 
     '# SCROLLING FRAME\n' +
     'ScrollBarThickness=4, ScrollBarImageColor3=accent\n' +
-    'AutomaticCanvasSize="Y", CanvasSize=UDim2.new(0,0,0,0)\n' +
-    'UIPadding all=8 + UIListLayout inside every ScrollingFrame\n' +
-    'ElasticBehavior="WhenScrollable"\n\n' +
+    'AutomaticCanvasSize=Enum.AutomaticSize.Y, CanvasSize=UDim2.new(0,0,0,0)\n' +
+    'UIPadding on all sides + UIListLayout inside every ScrollingFrame\n' +
+    'ElasticBehavior=Enum.ElasticBehavior.WhenScrollable\n\n' +
 
     '# INPUT / TEXTBOX\n' +
-    'UICorner=6, UIPadding left+right=10\n' +
-    'UIStroke: Thickness=1, Color=accent, Transparency=0.6\n' +
-    'Focused state: UIStroke transparency tween to 0.1, subtle glow\n' +
-    'Always include a left-side icon (magnifier for search, pencil for edit)\n\n' +
+    'UICorner CornerRadius=6, UIPadding left and right\n' +
+    'UIStroke: Thickness=1, Color=accent, partial transparency\n' +
+    'Focused state: UIStroke tweens to full opacity with a subtle glow\n' +
+    'Always pair with a left-side icon (magnifier for search, pencil for edit)\n\n' +
 
-    '# NOTIFICATION / TOAST SYSTEM\n' +
-    'Position: bottom-right, stack upward, auto-dismiss after 3–4s\n' +
-    'Width=0.3 scale, Height=0.07 scale\n' +
-    'Left accent bar: 4px wide, full height, color by type (green success / red error / yellow warning)\n' +
-    'Left icon: 24×24 (Checkmark / Warning / Info / Close) | Title: GothamBold 13pt | Message: Gotham 11pt\n' +
-    'Slide-in: Position X tween from 1.1 to 0.98 in 0.3s\n' +
-    'Fade-out: transparency tween on all descendants in 0.4s then Destroy()\n\n' +
+    '# NOTIFICATION / TOAST\n' +
+    'Position: bottom-right corner, stack upward, auto-dismiss after 3–4 seconds\n' +
+    'Width scale ~0.3, Height scale ~0.07\n' +
+    'Left accent bar: 4px wide, full height, color matches type\n' +
+    'Left icon 24px + bold title + smaller message label\n' +
+    'Slide in from off-screen right (Position X tween from >1 to ~0.98)\n' +
+    'Fade out: tween transparency on all descendants then Destroy()\n\n' +
 
-    '# ANIMATION SYSTEM\n' +
-    'OPEN PANEL  : Set AnchorPoint + final Position first. Start Size=(targetW,0,0,0) Transparency=1.\n' +
-    '              Tween Size to target in 0.3s Back Out + tween Transparency to 0 simultaneously.\n' +
-    '              After open: stagger child elements fade-in with 0.05s delays per index.\n' +
-    'CLOSE PANEL : Tween all descendants Transparency to 1 in 0.15s.\n' +
-    '              Tween Size to 0 in 0.2s Quad In.\n' +
-    '              On Completed: Visible=false, reset Size and Transparency for reuse.\n' +
-    'HOVER       : MouseEnter → tween bg to accent 0.15 fill + UIStroke opacity up in 0.12s.\n' +
-    '              MouseLeave → tween back to normal in 0.12s.\n' +
-    'PRESS       : MouseButton1Down → tween scale ×0.96 in 0.07s Linear.\n' +
-    '              MouseButton1Up → tween scale back in 0.1s Quad Out.\n' +
-    'LIST SPAWN  : Stagger each item 0.04s per index, slide in from left (Position.X –0.05 to 0).\n' +
-    'COUNT-UP    : Use RenderStepped to tween value from 0 to target over 0.6s for stats/currency.\n' +
-    'Never tween Position for open/close — always Size + Transparency.\n' +
-    'Never use wait() inside animation chains — always use Tween.Completed:Connect.\n\n' +
+    '# ANIMATION PRINCIPLES\n' +
+    'Use TweenService for ALL animations — never wait() inside animation chains.\n' +
+    'Use Tween.Completed:Connect to chain follow-up actions after an animation finishes.\n' +
+    'Open panel  : start at zero size and full transparency, tween to target size + zero transparency simultaneously.\n' +
+    'Close panel : tween all descendants to full transparency, then tween size to zero, then set Visible=false and reset.\n' +
+    'Hover       : on MouseEnter tween background and UIStroke; on MouseLeave tween back.\n' +
+    'Press       : on MouseButton1Down tween scale down; on MouseButton1Up tween scale back.\n' +
+    'List spawn  : stagger each item with increasing delay, slide in from a small offset.\n' +
+    'Never tween Position for open/close — always use Size and Transparency.\n' +
+    'Never use wait() or coroutine inside animation chains — always chain via Tween.Completed.\n\n' +
 
     '# ZINDEX SYSTEM\n' +
-    'bg=1 | content=2–3 | buttons=4–5 | dropdowns=6–7 | modals=8 | tooltips=9 | toasts=10\n' +
-    'DisplayOrder: HUD=10 | panels=100 | overlays=500 | modals=900 | notifications=999\n\n' +
+    'Background=1 | Content=2–3 | Buttons=4–5 | Dropdowns=6–7 | Modals=8 | Tooltips=9 | Toasts=10\n' +
+    'DisplayOrder: HUD=10 | Panels=100 | Overlays=500 | Modals=900 | Notifications=999\n\n' +
 
     '# STYLE CONSTANTS — NEVER DEVIATE\n' +
-    '• AutoButtonColor=false — ALL buttons, ALWAYS\n' +
-    '• TextScaled=false — ALL text, ALWAYS — use explicit TextSize\n' +
+    '• AutoButtonColor=false on ALL buttons\n' +
+    '• TextScaled=false on ALL text — use explicit TextSize\n' +
     '• UICorner on every Frame, Button, ScrollingFrame, TextBox, ImageLabel container\n' +
     '• UIStroke on all main panels and primary buttons\n' +
-    '• UIGradient on all headers and primary buttons: accent→accent2, Rotation=90 or 135\n' +
-    '• UIListLayout + UIPadding inside EVERY list, grid, or container\n' +
-    '• TweenService hover feedback on ALL clickable elements — no exceptions\n' +
-    '• Minimum spacing between elements: 8px via UIListLayout Padding';
+    '• UIGradient on all headers and primary buttons\n' +
+    '• UIListLayout + UIPadding inside every list, grid, or container\n' +
+    '• TweenService hover feedback on ALL clickable elements\n' +
+    '• Minimum spacing between elements: 8px via UIListLayout Padding\n' +
+    '• Size and Position: pure scale values only — no mixed scale+offset';
 
   // ════════════════════════════════════════════════════════════════════════
-  // 5. REMOTE ORDER
+  // 4. REMOTE ORDER
   // ════════════════════════════════════════════════════════════════════════
   const remoteOrder: string =
     '## REMOTE ORDER — MANDATORY SEQUENCE\n' +
@@ -274,7 +218,7 @@ export function buildSysPrompt(ctx: SysPromptContext = {}): string {
     'Client access: RS:WaitForChild("RemoteName", 10)';
 
   // ════════════════════════════════════════════════════════════════════════
-  // 6. ICON LIBRARY
+  // 5. ICON LIBRARY
   // ════════════════════════════════════════════════════════════════════════
   const iconLibrary: string =
     '## ICON LIBRARY — Image = "rbxassetid://ID"\n' +
@@ -345,7 +289,7 @@ export function buildSysPrompt(ctx: SysPromptContext = {}): string {
     'UI Controls      → Plus, Minus, Close Button, Checkmark, Info';
 
   // ════════════════════════════════════════════════════════════════════════
-  // 7. SOUND LIBRARY
+  // 6. SOUND LIBRARY
   // ════════════════════════════════════════════════════════════════════════
   const soundLibrary: string =
     '## SOUND LIBRARY — SoundId = "rbxassetid://ID"\n' +
@@ -377,7 +321,7 @@ export function buildSysPrompt(ctx: SysPromptContext = {}): string {
     'Ambience: Volume=0.3, Looped=true,  parent=Part or SoundService';
 
   // ════════════════════════════════════════════════════════════════════════
-  // 8. ACTIONS REFERENCE
+  // 7. ACTIONS REFERENCE
   // ════════════════════════════════════════════════════════════════════════
   const actionsRef: string =
     '## NEXUS ACTIONS — ActionsManager\n' +
@@ -504,13 +448,12 @@ export function buildSysPrompt(ctx: SysPromptContext = {}): string {
     '  class : "ScreenGui" (default) | "BillboardGui" | "SurfaceGui"\n' +
     '  UIElementDef child fields (all optional):\n' +
     '    class/type, name, visible, z_index, layout_order, active, selectable\n' +
-    '    size, position: UDim2 as "0.5,0,0.4,0" or {scale,offset}\n' +
+    '    size, position: UDim2 as pure scale "0.5,0,0.4,0" — NO mixed scale+offset\n' +
     '    anchor_point: [x,y] | background_color: [r,g,b] or "#hex"\n' +
     '    corner_radius, stroke_thickness, stroke_color, stroke_transparency\n' +
     '    padding: number or {top,bottom,left,right}\n' +
     '    gradient: { color1, color2, rotation? }\n' +
     '    list_layout: boolean | grid_layout: { cell_size, cell_padding }\n' +
-    '    text, text_color, text_size, font, text_scaled, text_wrapped, rich_text\n' +
     '    image: assetid or "rbxassetid://..." | image_color, image_transparency, scale_type\n' +
     '    canvas_size: UDim2 | scrollbar_thickness | scrolling_direction\n' +
     '    children: [ UIElementDef, ... ] — unlimited nesting\n\n' +
@@ -659,7 +602,6 @@ export function buildSysPrompt(ctx: SysPromptContext = {}): string {
   const sections: string[] = [
     header,
     identity,
-    codeRules,
     guiRules,
     remoteOrder,
     iconLibrary,
