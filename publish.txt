@@ -2,7 +2,11 @@
 git add .
 git commit -m "fix: Update All Components And Fix Error"
 git push origin main --force
-======================================
+=================================================================
 ## Note
 ROBLOX_OPEN_CLOUD_KEY
 PLUGIN_HMAC_SECRET
+=================================================================
+## Prompt
+"saya sangat capek liat semuanya ga rapih, tolong dirapiin dan semua berfungsi lengkap, dan tombol upload file nya malah ga sejajar tolong buat semua nya dengan lengkap !"
+=================================================================
