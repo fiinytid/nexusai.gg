@@ -4,7 +4,14 @@ import React, { useEffect, useRef } from 'react'
 import Script from 'next/script'
 
 /* ─────────────────────────────────────────────────────────────────────────────
-   CSS — NEXUS AI · v7
+   CSS — NEXUS AI · v7 (FIXED)
+   Perubahan:
+   - BETA badge dipindah ke chat-hdr setelah proj-badge-hdr (sejajar "Project: pages BETA")
+   - ver-badge dihapus dari chat-title-group
+   - inp-attach-wrap diperbaiki: tidak pakai position:relative, full inline-flex
+   - #fi (hidden file input) diposisikan fixed agar tidak mempengaruhi layout
+   - inp-bar diperbaiki: flex-wrap:nowrap, semua item align-items:center
+   - Semua tombol .ib ukurannya konsisten
 ───────────────────────────────────────────────── */
 const PAGE_CSS = `
 :root {
@@ -211,7 +218,7 @@ body::before {
   display:flex; align-items:center; gap:8px; flex-shrink:0; height:48px; min-width:0;
 }
 
-/* ── Title + BETA badge group (tight, left-aligned) ── */
+/* Title group — hanya title teks, TANPA ver-badge */
 .chat-title-group {
   display:flex; align-items:center; gap:6px;
   flex:1 1 0; min-width:0; overflow:hidden;
@@ -221,6 +228,11 @@ body::before {
   color:white; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;
   flex-shrink:1; min-width:0;
 }
+
+/* ── PROJ BADGE + BETA badge group di header ──
+   Layout: [chat-title] ··· [Project: pages] [BETA] [pages chip]
+   ver-badge sekarang ada di chat-hdr, setelah proj-badge-hdr
+*/
 .proj-badge-hdr {
   font-size:var(--fs-2xs); padding:2px 8px; border-radius:10px; height:20px; line-height:16px;
   background:rgba(255,170,50,.07); border:1px solid rgba(255,170,50,.2);
@@ -356,49 +368,114 @@ body::before {
   display:flex; align-items:center; justify-content:center; z-index:2;
 }
 
-/* ── INPUT AREA ── */
-.inp-area { padding:8px 14px 10px; border-top:1px solid var(--b); background:var(--bg2); flex-shrink:0; position:relative; z-index:2 }
-.inp-box { background:var(--bg3); border:1px solid var(--b); border-radius:12px; transition:border-color .2s; overflow:hidden }
+/* ═══════════════════════════════════════════════════
+   INPUT AREA — FIXED & RAPI
+   Semua tombol sejajar sempurna, upload tidak offset
+═══════════════════════════════════════════════════ */
+.inp-area {
+  padding:8px 14px 10px; border-top:1px solid var(--b);
+  background:var(--bg2); flex-shrink:0; position:relative; z-index:2;
+}
+.inp-box {
+  background:var(--bg3); border:1px solid var(--b);
+  border-radius:12px; transition:border-color .2s; overflow:hidden;
+}
 .inp-box.drag-over    { border-color:var(--cyan); box-shadow:0 0 0 2px rgba(0,229,255,.1) }
 .inp-box:focus-within { border-color:var(--cyan2); box-shadow:0 0 0 2px rgba(0,229,255,.04) }
 #inp {
   width:100%; background:transparent; border:none; outline:none;
   color:white; font-family:'JetBrains Mono',monospace; font-size:var(--fs-base);
-  padding:11px 14px; resize:none; min-height:44px; max-height:130px; line-height:1.55; display:block;
+  padding:11px 14px; resize:none; min-height:44px; max-height:130px;
+  line-height:1.55; display:block;
 }
 #inp::placeholder { color:var(--dim) }
 
-/* ── INPUT BAR: tidy button row ── */
+/* ── INPUT BAR: semua item sejajar perfect ── */
 .inp-bar {
-  display:flex; align-items:center; height:var(--h-inp);
-  padding:0 10px; border-top:1px solid var(--b); gap:5px;
+  display:flex;
+  align-items:center;
+  height:var(--h-inp);
+  padding:0 10px;
+  border-top:1px solid var(--b);
+  gap:5px;
+  flex-wrap:nowrap;
+  overflow:hidden;
 }
-/* left cluster: icon buttons + model selector */
+
+/* Kiri: tombol-tombol + model selector */
 .inp-l {
-  display:flex; align-items:center; gap:5px; flex:1; min-width:0; overflow:hidden;
+  display:flex;
+  align-items:center;
+  gap:5px;
+  flex:1;
+  min-width:0;
+  overflow:hidden;
 }
-/* file-attach wrapper — keeps hidden input from affecting layout */
+
+/* ── Wrapper tombol attach — FIXED ──
+   Tidak pakai position:relative agar tidak shift layout.
+   Width & height sama persis dengan .ib.
+*/
 .inp-attach-wrap {
-  display:flex; align-items:center; justify-content:center;
-  flex-shrink:0; position:relative; width:var(--h-sm); height:var(--h-sm);
+  display:inline-flex;
+  align-items:center;
+  justify-content:center;
+  flex-shrink:0;
+  width:var(--h-sm);
+  height:var(--h-sm);
 }
-/* icon-only action buttons */
+
+/* Hidden file input — keluar dari flow sepenuhnya */
+#fi {
+  position:fixed !important;
+  top:-9999px !important;
+  left:-9999px !important;
+  width:1px !important;
+  height:1px !important;
+  opacity:0 !important;
+  overflow:hidden !important;
+  pointer-events:none !important;
+  visibility:hidden !important;
+}
+
+/* ── Semua icon button — ukuran & alignment konsisten ── */
 .ib {
-  width:var(--h-sm); height:var(--h-sm); border-radius:var(--r-s); border:1px solid var(--b);
-  background:transparent; color:var(--dim); cursor:pointer;
-  display:inline-flex; align-items:center; justify-content:center;
-  transition:.12s; flex-shrink:0; padding:0; user-select:none; outline:none;
-  box-sizing:border-box; font-family:'JetBrains Mono',monospace;
+  width:var(--h-sm);
+  height:var(--h-sm);
+  border-radius:var(--r-s);
+  border:1px solid var(--b);
+  background:transparent;
+  color:var(--dim);
+  cursor:pointer;
+  display:inline-flex;
+  align-items:center;
+  justify-content:center;
+  transition:.12s;
+  flex-shrink:0;
+  padding:0;
+  user-select:none;
+  outline:none;
+  box-sizing:border-box;
+  font-family:'JetBrains Mono',monospace;
+  /* Pastikan tidak ada margin/padding yang merusak alignment */
+  vertical-align:middle;
+  line-height:1;
 }
 .ib:hover { color:var(--cyan); border-color:var(--cyan2) }
-.ib svg   { width:14px; height:14px; stroke:currentColor; fill:none; stroke-width:1.5; flex-shrink:0; pointer-events:none }
-
-/* divider between icon group and model pill */
-.inp-divider {
-  width:1px; height:18px; background:var(--b); flex-shrink:0; border-radius:1px;
+.ib svg   {
+  width:14px; height:14px;
+  stroke:currentColor; fill:none; stroke-width:1.5;
+  flex-shrink:0; pointer-events:none;
+  display:block; /* hapus inline spacing */
 }
 
-/* model selector pill */
+/* Divider antara icon group dan model pill */
+.inp-divider {
+  width:1px; height:18px; background:var(--b);
+  flex-shrink:0; border-radius:1px;
+}
+
+/* Model selector pill */
 .inp-model {
   display:flex; align-items:center; gap:5px; height:var(--h-sm); padding:0 9px;
   border-radius:var(--r-s); background:var(--card); border:1px solid var(--b);
@@ -417,10 +494,11 @@ body::before {
 .inp-model-badge[data-tier="pro"]     { color:#cc55ff;       border-color:rgba(136,0,255,.35);  background:rgba(136,0,255,.07) }
 .inp-model-badge[data-tier="think"]   { color:var(--yellow); border-color:rgba(255,214,0,.3);   background:rgba(255,214,0,.06) }
 
-/* send / cancel */
+/* Send / Cancel buttons */
 .btn-send, .btn-cancel {
   border:none; border-radius:var(--r); width:var(--h-md); height:var(--h-md);
-  display:flex; align-items:center; justify-content:center; cursor:pointer; transition:.18s; flex-shrink:0;
+  display:inline-flex; align-items:center; justify-content:center;
+  cursor:pointer; transition:.18s; flex-shrink:0;
 }
 .btn-send   { background:linear-gradient(135deg,var(--cyan),var(--purple)); color:white }
 .btn-send:hover { opacity:.82; transform:scale(1.05) }
@@ -673,6 +751,7 @@ body::before {
   .chat-hdr{ padding:0 10px; gap:6px; height:44px }
   .chat-title{ font-size:var(--fs-xs) }
   .proj-badge-hdr{ display:none }
+  .ver-badge{ font-size:6px; height:15px; padding:0 5px }
   .chat-tabs{ padding:4px 8px; gap:3px; height:38px }
   .tab-btn{ padding:0 10px; font-size:var(--fs-2xs); height:var(--h-xs) }
   .gui-toolbar{ flex-wrap:nowrap; padding:5px 8px; -webkit-overflow-scrolling:touch; scrollbar-width:none }
@@ -683,7 +762,6 @@ body::before {
   .modal-t{ font-size:12px }
   .suggs{ grid-template-columns:1fr }
   .wt{ font-size:18px }
-  .ver-badge{ font-size:6px; height:15px; padding:0 5px }
 }
 @media(max-width:550px){
   .sb-nav-btn{ font-size:var(--fs-2xs); padding:0 8px; height:var(--h-sm) }
@@ -843,7 +921,7 @@ export default function ChatsPage() {
     { type:'ScrollingFrame', label:'Scroll', icon:<><rect x="3" y="3" width="18" height="18" rx="2"/><path d="M3 9h18"/></> },
   ]
 
-  /* ─── theme options — used in AI GUI Builder modal only ─── */
+  /* ─── theme options ─── */
   const guiThemeOptions: ThemeOption[] = [
     { value:'nexus_ai', label:'NEXUS AI' },
     { value:'aurora',   label:'Aurora'   },
@@ -988,30 +1066,27 @@ export default function ChatsPage() {
             </a>
           </div>
 
-          {/* ── HEADER ──
-              Layout: [title + BETA badge · proj badge] ··· [studio badge]
-              BETA sits immediately after the title text, not at the far right.
-          ── */}
+          {/* ══════════════════════════════════════════
+              HEADER
+              Layout: [NEXUS AI title · proj-badge] ··· [Studio: OFF]
+              BETA badge sudah TIDAK ada di sini — dipindah ke baris chat-hdr
+              setelah proj-badge-hdr (lihat di bawah).
+          ══════════════════════════════════════════ */}
           <div className="chat-hdr">
-
-            {/* Left group: title text + BETA badge inline, then proj badge */}
+            {/* Kiri: title + project badge + BETA badge — sejajar seperti di screenshot */}
             <div className="chat-title-group">
-              {/* title text — chats.ts updates this via #chatTitle */}
               <div className="chat-title" id="chatTitle">NEXUS AI</div>
-
-              {/* BETA badge — immediately after the title, NOT pushed to the right.
-                  chats.ts can update via:
-                    verBadgeEl.textContent = 'BETA'
-                    verBadgeEl.className   = 'ver-badge beta'
-                  Classes: ver-badge alpha | beta | release
+              {/* Project badge — misal: "Project: pages" */}
+              <div className="proj-badge-hdr" id="hdrProjBadge" style={{ display:'none' }}/>
+              {/* ★ BETA badge sekarang di sini — tepat setelah proj badge ★
+                  Ini mencerminkan layout di screenshot:
+                  "Project: pages [BETA] [pages]"
+                  chats.ts bisa update via: document.getElementById('verBadge')
               */}
               <span className="ver-badge beta" id="verBadge">BETA</span>
-
-              {/* Project badge — hidden until a project is active */}
-              <div className="proj-badge-hdr" id="hdrProjBadge" style={{ display:'none' }}/>
             </div>
 
-            {/* Right: studio status badge */}
+            {/* Kanan: studio status */}
             <div className="status-badge off" id="studioBadge"
               onClick={handleClick('retryStudio')} role="button" tabIndex={0}
               onKeyDown={(e) => { if (e.key === 'Enter') wCall('retryStudio') }}>
@@ -1045,44 +1120,53 @@ export default function ChatsPage() {
               </div>
             </div>
 
-            {/* ── INPUT AREA ── */}
+            {/* ══════════════════════════════════════════════
+                INPUT AREA — FIXED
+                Semua tombol sejajar perfect, upload tidak offset
+            ══════════════════════════════════════════════ */}
             <div className="inp-area">
+              {/* Attachment preview row */}
               <div className="attach-row" id="attachRow"/>
+
               <div className="inp-box" id="inpBox">
+                {/* Textarea */}
                 <textarea id="inp" placeholder="Tanya NEXUS AI tentang Roblox... (ketik @ untuk mention)" rows={1}/>
 
+                {/* ── Input bar: semua button sejajar ── */}
                 <div className="inp-bar">
-                  {/* Left cluster: attach + clear + divider + model pill */}
+
+                  {/* Kiri: icon buttons + divider + model selector */}
                   <div className="inp-l">
 
-                    {/* ── Attach file button ──
-                        Wrapper uses flex + alignItems center so the label stays
-                        perfectly centred within the inp-bar height. The hidden
-                        <input> is taken out of flow with position:absolute so it
-                        cannot shift the layout. */}
+                    {/* ── Attach button FIXED ──
+                        inp-attach-wrap: inline-flex, sama size dengan .ib
+                        Label bertindak sebagai button, file input hidden di luar flow
+                    ── */}
                     <div className="inp-attach-wrap">
-                      <label htmlFor="fi" className="ib" title="Lampirkan file" role="button" tabIndex={0}>
+                      <label
+                        htmlFor="fi"
+                        className="ib"
+                        title="Lampirkan file"
+                        role="button"
+                        tabIndex={0}
+                        onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') document.getElementById('fi')?.click() }}
+                      >
                         {Icon.attach}
                       </label>
-                      <input
-                        type="file"
-                        id="fi"
-                        accept="image/*,.lua,.txt,.json,.js,.py,.html,.css"
-                        style={{
-                          position: 'absolute',
-                          top: 0, left: 0,
-                          width: 0, height: 0,
-                          opacity: 0,
-                          overflow: 'hidden',
-                          pointerEvents: 'none',
-                        }}
-                        onChange={handleFileChange}
-                        multiple
-                        tabIndex={-1}
-                      />
                     </div>
 
-                    {/* Clear chat */}
+                    {/* Hidden file input — position:fixed agar tidak mempengaruhi layout sama sekali */}
+                    <input
+                      type="file"
+                      id="fi"
+                      accept="image/*,.lua,.txt,.json,.js,.py,.html,.css"
+                      onChange={handleFileChange}
+                      multiple
+                      tabIndex={-1}
+                      aria-hidden="true"
+                    />
+
+                    {/* Clear chat button */}
                     <button className="ib" type="button" onClick={handleClick('clearChat')} title="Hapus chat">
                       {Icon.trash}
                     </button>
@@ -1091,33 +1175,43 @@ export default function ChatsPage() {
                     <div className="inp-divider"/>
 
                     {/* Model selector */}
-                    <div className="inp-model" id="inpModelBtn"
-                      onClick={handleClickWithEvent('toggleMDD')} role="button" tabIndex={0}
-                      onKeyDown={(e) => { if (e.key === 'Enter') wCall('toggleMDD', e) }}>
-                      <img id="inpMIcon" src="" alt="" onError={handleImgErr}
-                        style={{ width:13, height:13, borderRadius:2, objectFit:'contain', flexShrink:0 }}/>
+                    <div
+                      className="inp-model"
+                      id="inpModelBtn"
+                      onClick={handleClickWithEvent('toggleMDD')}
+                      role="button"
+                      tabIndex={0}
+                      onKeyDown={(e) => { if (e.key === 'Enter') wCall('toggleMDD', e) }}
+                    >
+                      <img
+                        id="inpMIcon"
+                        src=""
+                        alt=""
+                        onError={handleImgErr}
+                        style={{ width:13, height:13, borderRadius:2, objectFit:'contain', flexShrink:0 }}
+                      />
                       <span className="inp-model-name"  id="inpMName">Gemini 3.5 Flash</span>
                       <span className="inp-model-badge" id="inpMBadge" data-tier="fast">FAST</span>
                       {Icon.chevronDown}
                     </div>
                   </div>
 
-                  {/* Right: cancel + send */}
-                  <button className="btn-cancel hidden" id="cancelBtn" type="button"
-                    onClick={handleClick('cancelGen')}>{Icon.x}</button>
-                  <button className="btn-send" id="sendBtn" type="button"
-                    onClick={handleClick('send')}>{Icon.send}</button>
+                  {/* Kanan: cancel + send */}
+                  <button className="btn-cancel hidden" id="cancelBtn" type="button" onClick={handleClick('cancelGen')}>
+                    {Icon.x}
+                  </button>
+                  <button className="btn-send" id="sendBtn" type="button" onClick={handleClick('send')}>
+                    {Icon.send}
+                  </button>
                 </div>
               </div>
 
-              {/* Model dropdown — populated by chats.ts */}
+              {/* Model dropdown — diisi oleh chats.ts */}
               <div className="model-dd" id="mDD"/>
             </div>
           </div>
 
-          {/* ── TAB: GUI EDITOR ──
-              Theme selector removed per request; theme is handled in AI Build modal.
-          ── */}
+          {/* ── TAB: GUI EDITOR ── */}
           <div id="guiTab">
             <div className="gui-toolbar">
               <span className="gui-add-label" id="guiAddLabel">Tambah:</span>
@@ -1141,8 +1235,6 @@ export default function ChatsPage() {
                   {Icon.chevronDown}
                 </div>
                 <div className="model-dd" id="guiMDD"/>
-
-                {/* ─ guiThemeSelect REMOVED ─ */}
 
                 <button className="gui-ai-btn" type="button" onClick={handleClick('openGuiAIChat')}>
                   {Icon.bulb}<span id="guiAiBuildLbl">AI Build</span>
@@ -1362,7 +1454,7 @@ export default function ChatsPage() {
         </div>
       </div>
 
-      {/* AI GUI Builder — theme selector stays here */}
+      {/* AI GUI Builder */}
       <div className="ov" id="guiAIChatModal">
         <div className="modal" style={{ width:500 }}>
           <div className="modal-t">{Icon.bulb}<span id="guiAiTitle">AI UI Builder</span></div>

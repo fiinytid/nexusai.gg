@@ -183,8 +183,8 @@ const _sb: SbState = {
 
 async function getSB(): Promise<SupabaseClient | null> {
   const envSnap =
-    (process.env.STORAGE_NEXUS_SUPABASE_URL                ?? '') + '|' +
-    (process.env.STORAGE_NEXUS_SUPABASE_SERVICE_ROLE_KEY   ?? '');
+    (process.env.SUPABASE_URL                ?? '') + '|' +
+    (process.env.SUPABASE_SERVICE_ROLE_KEY   ?? '');
 
   if (_sb.envSnapshot && _sb.envSnapshot !== envSnap) {
     console.log('[supabase] Env changed, resetting client...');
@@ -1165,8 +1165,8 @@ export default handler;
  * ═══════════════════════════════════════════════════════════════════════════
  *
  * Required:
- *   STORAGE_NEXUS_SUPABASE_URL              = https://<project>.supabase.co
- *   STORAGE_NEXUS_SUPABASE_SERVICE_ROLE_KEY = eyJ...
+ *   SUPABASE_URL              = https://<project>.supabase.co
+ *   SUPABASE_SERVICE_ROLE_KEY = eyJ...
  *   ADMIN_TOKEN                             = secret-token-min-16-chars
  *
  * Optional (KV fallback):

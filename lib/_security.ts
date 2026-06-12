@@ -7,7 +7,7 @@
 //     checkRateLimit,
 //     generateStateToken, verifyStateToken,
 //     setSecurityHeaders,
-//   } from './_security.js';
+//   } from './_security';
 //
 // Required env:
 //   OAUTH_STATE_SECRET  — random string ≥ 32 chars  (for CSRF state tokens)
