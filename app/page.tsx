@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useRef } from 'react';
+import { useEffect, useRef, useState } from 'react';
 
 /* ─── Inline Discord icon ─── */
 function DiscordIcon({ size = 14 }: { size?: number }) {
@@ -137,11 +137,17 @@ body {
 .nav-login:hover::after{transform:translateX(100%);}
 .nav-login:hover{opacity:.88;transform:translateY(-1px);box-shadow:0 8px 28px rgba(0,229,255,.28);}
 
-/* ── Hero ── */
+/* ═══════════════════════════════════════
+   HERO — Lemonade-style with game cards
+═══════════════════════════════════════ */
 .hero {
-  min-height:100vh;display:flex;flex-direction:column;
+  min-height:100vh;
+  display:flex;flex-direction:column;
   align-items:center;justify-content:center;
-  text-align:center;padding:120px 24px 100px;position:relative;z-index:1;
+  text-align:center;
+  padding:120px 24px 40px;
+  position:relative;z-index:2;
+  overflow:hidden;
 }
 .hero::before {
   content:'';position:absolute;inset:0;pointer-events:none;
@@ -149,6 +155,7 @@ body {
     radial-gradient(ellipse 70% 55% at 50% -5%,rgba(136,0,255,.2) 0%,transparent 60%),
     radial-gradient(ellipse 50% 40% at 50% 75%,rgba(0,229,255,.06) 0%,transparent 55%);
 }
+
 .hero-badge {
   display:inline-flex;align-items:center;gap:8px;padding:6px 18px;
   background:rgba(0,229,255,.05);border:1px solid var(--b);
@@ -158,10 +165,11 @@ body {
   box-shadow:0 0 20px rgba(0,229,255,.06);
 }
 .badge-dot{width:6px;height:6px;border-radius:50%;background:var(--cyan);animation:liveDot 1.8s infinite;}
+
 .hero-title {
   font-family:'Orbitron',sans-serif;
-  font-size:clamp(36px,7.5vw,92px);font-weight:900;
-  line-height:1.03;margin-bottom:18px;
+  font-size:clamp(34px,6.5vw,80px);font-weight:900;
+  line-height:1.05;margin-bottom:0;
   animation:fadeUpHero .8s .1s ease both;
 }
 .hero-title .grad {
@@ -169,57 +177,170 @@ body {
   -webkit-background-clip:text;-webkit-text-fill-color:transparent;background-clip:text;
   display:inline-block;
 }
-.hero-sub {
-  font-size:clamp(11.5px,1.5vw,14.5px);color:var(--text2);
-  max-width:560px;line-height:2;margin-bottom:42px;
-  animation:fadeUpHero .8s .2s ease both;
-}
-.hero-cta{display:flex;gap:12px;flex-wrap:wrap;justify-content:center;animation:fadeUpHero .8s .3s ease both;}
 
-/* ── Floating preview card ── */
-.hero-preview {
-  margin-top:60px;max-width:520px;width:100%;
+/* ── Prompt box (Lemonade-inspired) ── */
+.hero-prompt-wrap {
+  width:100%;max-width:660px;
+  margin:36px auto 0;
+  position:relative;z-index:5;
+  animation:fadeUpHero .8s .25s ease both;
+}
+.hero-prompt-box {
+  display:flex;align-items:center;gap:0;
+  background:rgba(10,11,34,.9);
+  border:1.5px solid rgba(0,229,255,.22);
+  border-radius:16px;
+  padding:6px 6px 6px 20px;
+  box-shadow:0 0 0 1px rgba(0,229,255,.06) inset, 0 20px 60px rgba(0,0,0,.55), 0 0 50px rgba(0,229,255,.07);
+  backdrop-filter:blur(16px);
+  transition:border-color .25s, box-shadow .25s;
+}
+.hero-prompt-box:focus-within {
+  border-color:rgba(0,229,255,.5);
+  box-shadow:0 0 0 1px rgba(0,229,255,.1) inset, 0 20px 60px rgba(0,0,0,.65), 0 0 60px rgba(0,229,255,.14);
+}
+.hero-prompt-input {
+  flex:1;background:transparent;border:none;outline:none;
+  font-family:'JetBrains Mono',monospace;font-size:13px;color:var(--text);
+  padding:12px 0;
+  line-height:1.5;
+  resize:none;min-height:48px;max-height:120px;
+}
+.hero-prompt-input::placeholder { color:var(--dim); }
+.hero-prompt-btn {
+  flex-shrink:0;
+  padding:13px 26px;
+  background:linear-gradient(135deg,var(--cyan),var(--purple));
+  border:none;border-radius:12px;
+  color:white;font-family:'Orbitron',sans-serif;font-size:10px;font-weight:700;
+  cursor:pointer;transition:.2s;letter-spacing:1px;
+  display:flex;align-items:center;gap:8px;
+  position:relative;overflow:hidden;
+  box-shadow:0 4px 20px rgba(0,229,255,.22);
+}
+.hero-prompt-btn::after{content:'';position:absolute;inset:0;background:linear-gradient(120deg,transparent 40%,rgba(255,255,255,.1) 50%,transparent 60%);transform:translateX(-100%);transition:.35s;}
+.hero-prompt-btn:hover::after{transform:translateX(100%);}
+.hero-prompt-btn:hover{opacity:.88;transform:translateY(-1px);box-shadow:0 8px 32px rgba(0,229,255,.32);}
+.hero-prompt-btn:active{transform:scale(.97);}
+
+.hero-prompt-examples {
+  display:flex;flex-wrap:wrap;gap:8px;justify-content:center;
+  margin-top:14px;
+}
+.hero-prompt-ex {
+  display:inline-flex;align-items:center;gap:6px;
+  padding:5px 13px;border-radius:20px;
+  background:rgba(0,229,255,.04);border:1px solid rgba(0,229,255,.12);
+  font-size:9.5px;color:var(--text2);cursor:pointer;
+  transition:.18s;white-space:nowrap;
+}
+.hero-prompt-ex:hover{background:rgba(0,229,255,.09);border-color:rgba(0,229,255,.3);color:var(--cyan);}
+.hero-prompt-ex svg{flex-shrink:0;}
+
+/* ── Floating game cards ── */
+.hero-games-stage {
+  position:relative;
+  width:100%;max-width:1100px;
+  height:340px;
+  margin:52px auto 0;
   animation:fadeUpHero .8s .35s ease both;
+  pointer-events:none;
 }
-.preview-card {
-  background:rgba(6,7,26,.85);border:1px solid var(--b);border-radius:14px;overflow:hidden;
-  box-shadow:0 0 0 1px rgba(0,229,255,.04) inset,0 20px 60px rgba(0,0,0,.6),0 0 40px rgba(0,229,255,.05);
+
+/* Left/right cards */
+.hg-side {
+  position:absolute;top:50%;
+  display:flex;flex-direction:column;gap:14px;
+  pointer-events:auto;
+}
+.hg-left  { left:0;  transform:translateY(-50%); }
+.hg-right { right:0; transform:translateY(-50%); }
+
+.hg-card {
+  display:flex;align-items:center;gap:10px;
+  padding:8px 14px 8px 8px;
+  background:rgba(6,7,26,.88);
+  border:1px solid rgba(0,229,255,.14);
+  border-radius:12px;
   backdrop-filter:blur(12px);
+  box-shadow:0 8px 32px rgba(0,0,0,.5), 0 0 0 1px rgba(0,229,255,.05) inset;
+  font-size:10.5px;color:var(--text);
+  white-space:nowrap;
+  transition:border-color .22s, box-shadow .22s, transform .22s;
 }
-.preview-hdr {
-  padding:9px 15px;background:rgba(13,14,40,.9);border-bottom:1px solid var(--b);
-  display:flex;align-items:center;gap:7px;
+.hg-card:hover{
+  border-color:rgba(0,229,255,.35);
+  box-shadow:0 12px 40px rgba(0,229,255,.12), 0 0 0 1px rgba(0,229,255,.1) inset;
+  transform:translateY(-3px);
 }
-.pc-dot{width:9px;height:9px;border-radius:50%;}
-.pc-r{background:rgba(255,95,86,.8);} .pc-y{background:rgba(254,188,46,.7);} .pc-g{background:rgba(40,200,64,.7);}
-.preview-path{font-size:9px;color:var(--dim);margin-left:auto;padding:2px 8px;background:var(--dim2);border-radius:4px;}
-.preview-body{padding:14px 18px;text-align:left;font-size:11px;line-height:1.85;}
-.pb-line{display:flex;align-items:flex-start;gap:8px;}
-.pb-line+.pb-line{margin-top:2px;}
-.pb-prompt{color:var(--cyan);flex-shrink:0;user-select:none;}
-.pb-err{color:var(--pink);} .pb-ok{color:var(--green);} .pb-dim{color:var(--text2);}
-.pb-key{color:var(--cyan);} .pb-val{color:var(--yellow);} .pb-str{color:var(--green);}
-.preview-result{
-  margin:0 14px 14px;padding:10px 14px;
-  background:rgba(0,255,170,.05);border:1px solid rgba(0,255,170,.15);border-radius:8px;
-  font-size:10px;color:var(--green);display:flex;align-items:center;gap:8px;
+.hg-card-thumb {
+  width:52px;height:52px;border-radius:8px;object-fit:cover;flex-shrink:0;
+  border:1px solid rgba(0,229,255,.1);
 }
-.preview-result svg{flex-shrink:0;}
-.preview-cursor{
-  display:inline-block;width:7px;height:12px;background:var(--cyan);
-  border-radius:1px;margin-left:3px;vertical-align:middle;
-  animation:blink .85s step-end infinite;
+.hg-card-info { display:flex;flex-direction:column;gap:3px; }
+.hg-card-label { font-size:9px;color:var(--dim);display:flex;align-items:center;gap:5px; }
+.hg-card-label svg{flex-shrink:0;}
+.hg-card-name { font-size:10.5px;color:white;font-weight:600; }
+
+/* Center carousel */
+.hg-center {
+  position:absolute;
+  left:50%;top:50%;
+  transform:translate(-50%,-50%);
+  width:380px;
+  pointer-events:auto;
 }
-@keyframes blink{0%,100%{opacity:1;}50%{opacity:0;}}
+.hg-main-wrap {
+  position:relative;
+  width:380px;height:260px;
+  border-radius:16px;overflow:hidden;
+  border:1.5px solid rgba(0,229,255,.22);
+  box-shadow:0 0 0 1px rgba(0,229,255,.07) inset, 0 24px 64px rgba(0,0,0,.7), 0 0 50px rgba(0,229,255,.1);
+}
+.hg-main-img {
+  position:absolute;inset:0;
+  width:100%;height:100%;object-fit:cover;
+  transition:opacity .7s ease, transform .7s ease;
+}
+.hg-main-img.entering { opacity:0; transform:scale(1.04); }
+.hg-main-img.active   { opacity:1; transform:scale(1); }
+.hg-main-img.leaving  { opacity:0; transform:scale(.97); }
+
+.hg-main-overlay {
+  position:absolute;bottom:0;left:0;right:0;
+  background:linear-gradient(0deg,rgba(3,3,18,.92) 0%,transparent 100%);
+  padding:22px 18px 16px;
+}
+.hg-main-name{font-size:13px;font-weight:600;color:white;margin-bottom:3px;}
+.hg-main-tag{font-size:9px;color:var(--cyan);letter-spacing:1px;text-transform:uppercase;}
+
+/* Dots */
+.hg-dots {
+  display:flex;gap:6px;justify-content:center;margin-top:12px;
+}
+.hg-dot {
+  width:6px;height:6px;border-radius:50%;
+  background:rgba(0,229,255,.2);border:1px solid rgba(0,229,255,.15);
+  cursor:pointer;transition:.2s;
+}
+.hg-dot.active{background:var(--cyan);box-shadow:0 0 8px rgba(0,229,255,.6);}
+
+/* Shine bar on main card top */
+.hg-main-wrap::before{
+  content:'';position:absolute;top:0;left:0;right:0;height:2px;z-index:2;
+  background:linear-gradient(90deg,transparent,var(--cyan),var(--purple),transparent);
+  animation:shimmerBar 3s ease-in-out infinite;
+}
+@keyframes shimmerBar{0%,100%{opacity:.5}50%{opacity:1}}
 
 /* ── Stats ── */
 .hero-stats{
-  display:flex;gap:44px;margin-top:56px;flex-wrap:wrap;justify-content:center;
-  animation:fadeUpHero .8s .4s ease both;
+  display:flex;gap:44px;margin-top:52px;flex-wrap:wrap;justify-content:center;
+  animation:fadeUpHero .8s .45s ease both;
 }
 .stat{text-align:center;position:relative;}
 .stat-n{
-  font-family:'Orbitron',sans-serif;font-size:28px;font-weight:900;
+  font-family:'Orbitron',sans-serif;font-size:26px;font-weight:900;
   background:linear-gradient(135deg,var(--cyan),var(--purple));
   -webkit-background-clip:text;-webkit-text-fill-color:transparent;
   line-height:1.1;
@@ -228,7 +349,7 @@ body {
 .stat-divider{width:1px;background:var(--b);align-self:stretch;margin:4px 0;}
 
 /* ── Scroll arrow ── */
-.hero-scroll{margin-top:52px;cursor:pointer;animation:bounce 2.2s infinite,fadeUpHero .8s .5s ease both;}
+.hero-scroll{margin-top:44px;cursor:pointer;animation:bounce 2.2s infinite,fadeUpHero .8s .5s ease both;}
 @keyframes bounce{0%,100%{transform:translateY(0);}50%{transform:translateY(9px);}}
 .hero-scroll svg{opacity:.3;transition:.2s;stroke:var(--text);fill:none;stroke-width:2;}
 .hero-scroll:hover svg{opacity:.7;}
@@ -534,6 +655,12 @@ footer{
 .footer-copy{font-size:9px;color:var(--dim);}
 
 /* ── Responsive ── */
+@media(max-width:900px){
+  .hg-side{display:none;}
+  .hero-games-stage{height:300px;}
+  .hg-center{width:320px;}
+  .hg-main-wrap{width:320px;height:220px;}
+}
 @media(max-width:860px){
   .nav{padding:0 20px;} .nav.scrolled{padding:0 20px;}
   .nav-sub{display:none;}
@@ -550,7 +677,6 @@ footer{
   .footer-links{justify-content:center;}
   .footer-brand-wrap{justify-content:center;}
   .screen-grid{grid-template-columns:1fr;}
-  .hero-preview{display:none;}
 }
 @media(max-width:480px){
   .hero-cta{flex-direction:column;align-items:stretch;}
@@ -558,8 +684,34 @@ footer{
   .hint-grid{grid-template-columns:1fr;}
   .models-grid{justify-content:center;}
   .gate-box,.cta-box{padding:28px 16px;}
+  .hg-center{width:280px;}
+  .hg-main-wrap{width:280px;height:190px;}
+  .hero-prompt-examples{display:none;}
 }
 `;
+
+/* ─── Game images data ─── */
+const GAMES = [
+  { file: '99_nights_in_the_forest', name: '99 Nights in the Forest', genre: 'Adventure RPG' },
+  { file: 'dead_rails',              name: 'Dead Rails',              genre: 'Survival' },
+  { file: 'escape_tsunami_for_brainrot', name: 'Escape Tsunami',     genre: 'Obby' },
+  { file: 'fish_it',                 name: 'Fish It!',                genre: 'Simulator' },
+  { file: 'fps_flick',               name: 'FPS Flick',               genre: 'Shooter' },
+  { file: 'grow_a_garden',           name: 'Grow a Garden',           genre: 'Tycoon' },
+  { file: 'raft_tycoon',             name: 'Raft Tycoon',             genre: 'Tycoon' },
+  { file: 'shooter',                 name: 'Shooter',                 genre: 'PvP' },
+  { file: 'steal_a_brainrot',        name: 'Steal a Brainrot',        genre: 'Comedy' },
+  { file: 'the_forge',               name: 'The Forge',               genre: 'Fantasy RPG' },
+];
+
+const EXAMPLE_PROMPTS = [
+  'Build me a police game...',
+  'Build me a zombie survival...',
+  'Build me an oil tycoon...',
+  'Build me a mansion tycoon...',
+  'Build me an obby...',
+  'Build me a shop system...',
+];
 
 /* ─── Data ─── */
 const FEATURES = [
@@ -619,7 +771,6 @@ const AI_MODELS = [
     label: 'DeepSeek',
     models: [
       { name: 'DeepSeek V4 Pro', badge: 'new' as const, cls: 'is-new', icon: '/images/deepseek.svg' },
-      { name: 'DeepSeek V4',     badge: 'cr'  as const, badgeTxt: '1 CR', icon: '/images/deepseek.svg' },
     ],
   },
   {
@@ -632,6 +783,7 @@ const AI_MODELS = [
     label: 'Coming Soon',
     models: [
       { name: 'Claude Sonnet', badge: 'soon' as const, cls: 'is-soon', icon: '/images/claude.png' },
+      { name: 'Claude Opus',   badge: 'soon' as const, cls: 'is-soon', icon: '/images/claude.png' },
       { name: 'GPT-5.5',       badge: 'soon' as const, cls: 'is-soon', icon: '/images/chatgpt.png' },
     ],
   },
@@ -640,6 +792,190 @@ const AI_MODELS = [
 const imgFail = (e: React.SyntheticEvent<HTMLImageElement>) => {
   (e.target as HTMLImageElement).style.display = 'none';
 };
+
+/* ─── Hero Game Carousel ─── */
+function HeroGames() {
+  const [activeIdx, setActiveIdx] = useState(0);
+  const [phase, setPhase] = useState<'active' | 'leaving' | 'entering'>('active');
+  const nextIdx = useRef(0);
+  const timerRef = useRef<ReturnType<typeof setInterval> | null>(null);
+
+  const goTo = (idx: number) => {
+    if (idx === activeIdx || phase !== 'active') return;
+    nextIdx.current = idx;
+    setPhase('leaving');
+  };
+
+  useEffect(() => {
+    if (phase === 'leaving') {
+      const t = setTimeout(() => {
+        setActiveIdx(nextIdx.current);
+        setPhase('entering');
+      }, 380);
+      return () => clearTimeout(t);
+    }
+    if (phase === 'entering') {
+      const t = setTimeout(() => setPhase('active'), 60);
+      return () => clearTimeout(t);
+    }
+  }, [phase]);
+
+  // Auto-advance
+  useEffect(() => {
+    timerRef.current = setInterval(() => {
+      const nxt = (activeIdx + 1) % GAMES.length;
+      nextIdx.current = nxt;
+      setPhase('leaving');
+    }, 3200);
+    return () => { if (timerRef.current) clearInterval(timerRef.current); };
+  }, [activeIdx]);
+
+  const sideLeft = GAMES.slice(0, 3);
+  const sideRight = GAMES.slice(7, 10);
+
+  return (
+    <div className="hero-games-stage">
+      {/* Left cards */}
+      <div className="hg-side hg-left">
+        {sideLeft.map((g, i) => (
+          <div key={g.file} className="hg-card" style={{ animationDelay: `${i * 0.1}s` }} onClick={() => goTo(i)}>
+            <img
+              src={`/screenshot/game/${g.file}.webp`}
+              alt={g.name}
+              className="hg-card-thumb"
+              onError={imgFail}
+            />
+            <div className="hg-card-info">
+              <div className="hg-card-label">
+                <svg width="9" height="9" viewBox="0 0 24 24" fill="none" stroke="var(--cyan)" strokeWidth="2">
+                  <polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2" />
+                </svg>
+                {g.genre}
+              </div>
+              <div className="hg-card-name">{g.name}</div>
+            </div>
+          </div>
+        ))}
+      </div>
+
+      {/* Center main */}
+      <div className="hg-center">
+        <div className="hg-main-wrap">
+          {GAMES.map((g, i) => (
+            <img
+              key={g.file}
+              src={`/screenshot/game/${g.file}.webp`}
+              alt={g.name}
+              className={`hg-main-img ${
+                i === activeIdx
+                  ? phase === 'leaving' ? 'leaving' : 'active'
+                  : 'entering'
+              }`}
+              style={{ zIndex: i === activeIdx ? 2 : 1 }}
+              onError={imgFail}
+            />
+          ))}
+          <div className="hg-main-overlay" style={{ zIndex: 3, position: 'relative' }}>
+            <div className="hg-main-name">{GAMES[activeIdx].name}</div>
+            <div className="hg-main-tag">
+              <svg width="8" height="8" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" style={{ display:'inline',verticalAlign:'middle',marginRight:4 }}>
+                <polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2" />
+              </svg>
+              {GAMES[activeIdx].genre}
+            </div>
+          </div>
+        </div>
+        <div className="hg-dots">
+          {GAMES.map((_, i) => (
+            <div
+              key={i}
+              className={`hg-dot${i === activeIdx ? ' active' : ''}`}
+              onClick={() => goTo(i)}
+            />
+          ))}
+        </div>
+      </div>
+
+      {/* Right cards */}
+      <div className="hg-side hg-right">
+        {sideRight.map((g, i) => (
+          <div key={g.file} className="hg-card" style={{ animationDelay: `${i * 0.1}s` }} onClick={() => goTo(7 + i)}>
+            <img
+              src={`/screenshot/game/${g.file}.webp`}
+              alt={g.name}
+              className="hg-card-thumb"
+              onError={imgFail}
+            />
+            <div className="hg-card-info">
+              <div className="hg-card-label">
+                <svg width="9" height="9" viewBox="0 0 24 24" fill="none" stroke="var(--cyan)" strokeWidth="2">
+                  <polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2" />
+                </svg>
+                {g.genre}
+              </div>
+              <div className="hg-card-name">{g.name}</div>
+            </div>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+/* ─── Prompt Box ─── */
+function HeroPrompt() {
+  const [val, setVal] = useState('');
+  const [exIdx, setExIdx] = useState(0);
+
+  // Rotate placeholder examples
+  useEffect(() => {
+    const t = setInterval(() => setExIdx(i => (i + 1) % EXAMPLE_PROMPTS.length), 2800);
+    return () => clearInterval(t);
+  }, []);
+
+  return (
+    <div className="hero-prompt-wrap">
+      <div className="hero-prompt-box">
+        <textarea
+          className="hero-prompt-input"
+          value={val}
+          onChange={e => setVal(e.target.value)}
+          placeholder={EXAMPLE_PROMPTS[exIdx]}
+          rows={1}
+          onKeyDown={e => {
+            if (e.key === 'Enter' && !e.shiftKey) {
+              e.preventDefault();
+              if (val.trim()) window.location.href = '/login';
+            }
+          }}
+        />
+        <button
+          className="hero-prompt-btn"
+          onClick={() => window.location.href = '/login'}
+        >
+          <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
+            <polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2" />
+          </svg>
+          Generate
+        </button>
+      </div>
+      <div className="hero-prompt-examples">
+        {EXAMPLE_PROMPTS.slice(0, 4).map((ex, i) => (
+          <div
+            key={i}
+            className="hero-prompt-ex"
+            onClick={() => setVal(ex)}
+          >
+            <svg width="9" height="9" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
+              <polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2" />
+            </svg>
+            {ex}
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
 
 /* ─── Component ─── */
 export default function HomePage() {
@@ -784,68 +1120,17 @@ export default function HomePage() {
           <div className="badge-dot" />
           Roblox Studio · Direct Injection · AI Agent
         </div>
-        <h1 className="hero-title">
-          Your Game.<br />
-          <span className="grad">Built Instantly.</span>
-        </h1>
-        <p className="hero-sub">
-          NEXUS AI is the most advanced AI assistant for Roblox developers.
-          Describe your idea — watch it appear inside Roblox Studio in seconds.
-          No copy-paste. No limits. Pure creation.
-        </p>
-        <div className="hero-cta">
-          <a href="/login" className="btn-primary">
-            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
-              <polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2" />
-            </svg>
-            Start Building Free
-          </a>
-          <a href="https://discord.gg/FzAF48mvK5" target="_blank" rel="noopener" className="btn-secondary">
-            <DiscordIcon />
-            Join Discord
-          </a>
-        </div>
 
-        {/* Floating terminal preview */}
-        <div className="hero-preview">
-          <div className="preview-card">
-            <div className="preview-hdr">
-              <span className="pc-dot pc-r" /><span className="pc-dot pc-y" /><span className="pc-dot pc-g" />
-              <span className="preview-path">nexus-ai · studio bridge</span>
-            </div>
-            <div className="preview-body">
-              <div className="pb-line">
-                <span className="pb-prompt">$</span>
-                <span><span className="pb-key">nexus</span> inject <span className="pb-str">&quot;build a shop with coins and buy button&quot;</span></span>
-              </div>
-              <div className="pb-line" style={{marginTop:6}}>
-                <span className="pb-prompt pb-dim">~</span>
-                <span className="pb-dim">Parsing intent → 4 commands queued...</span>
-              </div>
-              <div className="pb-line">
-                <span className="pb-prompt" style={{color:'var(--green)'}}>✓</span>
-                <span className="pb-dim">RemoteEvent <span style={{color:'var(--cyan)'}}>BuyItem</span> created in ReplicatedStorage</span>
-              </div>
-              <div className="pb-line">
-                <span className="pb-prompt" style={{color:'var(--green)'}}>✓</span>
-                <span className="pb-dim">Script <span style={{color:'var(--cyan)'}}>ShopServer</span> injected → ServerScriptService</span>
-              </div>
-              <div className="pb-line">
-                <span className="pb-prompt" style={{color:'var(--green)'}}>✓</span>
-                <span className="pb-dim">GUI <span style={{color:'var(--cyan)'}}>ShopGUI</span> built → StarterGui</span>
-              </div>
-              <div className="pb-line">
-                <span className="pb-prompt" style={{color:'var(--amber)' as string}}>⟳</span>
-                <span className="pb-dim">Running play-test <span className="pb-val">(15s)</span>...</span>
-              </div>
-            </div>
-            <div className="preview-result">
-              <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><polyline points="20 6 9 17 4 12" /></svg>
-              4 commands · Shop built · Auto-tested · 0 errors
-              <span className="preview-cursor" />
-            </div>
-          </div>
-        </div>
+        <h1 className="hero-title">
+          Build The Game<br />
+          <span className="grad">Only You Can Imagine</span>
+        </h1>
+
+        {/* ── PROMPT BOX ── */}
+        <HeroPrompt />
+
+        {/* ── FLOATING GAME CARDS ── */}
+        <HeroGames />
 
         <div className="hero-stats">
           <div className="stat"><div className="stat-n">Free</div><div className="stat-l">To Start</div></div>
@@ -1107,7 +1392,7 @@ export default function HomePage() {
             <a href="/privacy">Privacy</a>
             <a href="/terms">Terms</a>
           </div>
-          <span className="footer-copy">&copy; 2026 NEXUS STUDIO · nexusai-roblox.vercel.app</span>
+          <span className="footer-copy">&copy; 2026 NEXUS STUDIO · nexusai-rbx.vercel.app</span>
         </div>
       </footer>
     </>
