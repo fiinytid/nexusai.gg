@@ -599,13 +599,11 @@ const MODEL_LIST: ModelEntry[] = [
   { grp: 'Google' },
   { id: 'gemini-3.5-flash', prov: 'gemini', cost: 3, label: 'Gemini 3.5 Flash', icon: '/images/gemini.png', badge: 'FAST' },
   { id: 'gemini-3.1-flash-lite', prov: 'gemini', cost: 2, label: 'Gemini 3.1 Flash Lite', icon: '/images/gemini.png', badge: 'FAST' },
-  { id: 'gemini-3.1-pro-preview', prov: 'gemini', cost: 10, label: 'Gemini 3.1 Pro', icon: '/images/gemini.png', badge: 'BEST' },
-  { grp: 'StepFun' },
-  { id: 'stepfun/step-3.5-flash', prov: 'openrouter', cost: 1, label: 'Step 3.5 Flash', icon: '/images/stepfun.png', badge: 'FAST' },
-  { grp: 'Poolside' },
-  { id: 'poolside/laguna-m.1:free', prov: 'openrouter', cost: 0, label: 'Laguna M.1', icon: '/images/laguna.svg', badge: 'FREE' },
+  { id: 'gemini-3.1-pro-preview', prov: 'gemini', cost: 12, label: 'Gemini 3.1 Pro', icon: '/images/gemini.png', badge: 'BEST' },
+  { grp: 'ChatGPT' },
+  { id: 'openai/gpt-oss-120b:free', prov: 'openrouter', cost: 0, label: 'ChatGPT', icon: '/images/chatgpt.png', badge: 'FREE' },
   { grp: 'DeepSeek' },
-  { id: 'deepseek/deepseek-v4-flash', prov: 'openrouter', cost: 16, label: 'DeepSeek V4 Pro', icon: '/images/deepseek.svg', badge: 'BEST' },
+  { id: 'deepseek/deepseek-v4-flash', prov: 'openrouter', cost: 15, label: 'DeepSeek V4 Pro', icon: '/images/deepseek.svg', badge: 'BEST' },
 ]
 
 const S: AppState = {
