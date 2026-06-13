@@ -1112,9 +1112,9 @@ const AI_MODELS = [
     ],
   },
   {
-    label:'Step Fun',
+    label:'ChatGPT',
     models:[
-      { name:'Step 3.5 Flash', badge:'new' as const, cls:'is-new', imgSrc:'/images/stepfun.png' },
+      { name:'ChatGPT', badge:'new' as const, cls:'is-new', imgSrc:'/images/chatgpt.png' },
     ],
   },
   {
