@@ -1108,7 +1108,7 @@ const AI_MODELS = [
   {
     label:'DeepSeek',
     models:[
-      { name:'DeepSeek V4 Pro', badge:'new' as const, cls:'is-new', imgSrc:'/images/deepseek.png' },
+      { name:'DeepSeek V4 Pro', badge:'new' as const, cls:'is-new', imgSrc:'/images/deepseek.svg' },
     ],
   },
   {
