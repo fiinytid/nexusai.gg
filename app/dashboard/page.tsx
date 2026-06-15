@@ -2,9 +2,6 @@
 
 import React, { useEffect, useRef, useState, useCallback } from 'react'
 
-/* ─────────────────────────────────────────────────────────────────────────────
-   TYPES
-───────────────────────────────────────────────────────────────────────────── */
 interface Project {
   id: string
   name: string
@@ -43,19 +40,13 @@ interface QueueItem {
   ts: number
 }
 
-/* ─────────────────────────────────────────────────────────────────────────────
-   CONSTANTS
-───────────────────────────────────────────────────────────────────────────── */
 const API_SYNC        = '/api/sync'
 const API_CONTROL     = '/api/control'
 const RETRY_MAX       = 4
 const RETRY_BASE      = 800
 const PROJECT_NAME_LIMIT = 16
-const SESSION_MAX_AGE_MS = 86400000 * 7  // 7 days
+const SESSION_MAX_AGE_MS = 86400000 * 7
 
-/* ─────────────────────────────────────────────────────────────────────────────
-   CSS
-───────────────────────────────────────────────────────────────────────────── */
 const PAGE_CSS = `
 @import url('https://fonts.googleapis.com/css2?family=Orbitron:wght@400;600;700;900&family=JetBrains+Mono:wght@300;400;500;600&display=swap');
 
@@ -120,12 +111,10 @@ body::after {
   mask-image: radial-gradient(ellipse 100% 100% at 50% 0%, black 30%, transparent 70%);
 }
 
-/* ── SCROLLBAR ── */
 ::-webkit-scrollbar { width: 4px; height: 4px; }
 ::-webkit-scrollbar-thumb { background: var(--border2); border-radius: 4px; }
 ::-webkit-scrollbar-track { background: transparent; }
 
-/* ── KEYFRAMES ── */
 @keyframes spin       { to { transform: rotate(360deg); } }
 @keyframes fadeUp     { from { opacity: 0; transform: translateY(12px); } to { opacity: 1; transform: none; } }
 @keyframes fadeIn     { from { opacity: 0; } to { opacity: 1; } }
@@ -145,7 +134,6 @@ body::after {
 @keyframes slideUp    { from { transform: translateY(100%); opacity: 0; } to { transform: translateY(0); opacity: 1; } }
 @keyframes slideDown  { from { transform: translateY(0); opacity: 1; } to { transform: translateY(100%); opacity: 0; } }
 
-/* ── LOADER ── */
 #dash-loader {
   position: fixed; inset: 0; z-index: 9999;
   background: var(--bg);
@@ -154,7 +142,6 @@ body::after {
   transition: opacity .5s ease, visibility .5s ease;
 }
 #dash-loader.hide { opacity: 0; visibility: hidden; pointer-events: none; }
-
 .loader-logo {
   font-family: 'Orbitron', sans-serif;
   font-size: 22px; font-weight: 900;
@@ -177,12 +164,8 @@ body::after {
   background: linear-gradient(90deg, var(--cyan), var(--purple));
   border-radius: 2px; transition: width .28s ease;
 }
-.loader-sub {
-  font-size: 9px; color: var(--dim2);
-  letter-spacing: 2.5px; text-transform: uppercase;
-}
+.loader-sub { font-size: 9px; color: var(--dim2); letter-spacing: 2.5px; text-transform: uppercase; }
 
-/* ── OFFLINE BANNER ── */
 #offlineBanner {
   position: fixed; top: 0; left: 0; right: 0; z-index: 9998;
   background: rgba(249,115,22,.08);
@@ -206,7 +189,6 @@ body::after {
 }
 .btn-retry-offline:hover { background: rgba(249,115,22,.2); }
 
-/* ── SYNC BAR ── */
 #syncBar {
   position: fixed; bottom: 0; left: 0; right: 0; z-index: 300;
   height: 2px; background: transparent; transition: background .3s;
@@ -313,6 +295,8 @@ body::after {
   font-size: 11px; color: var(--text);
   text-decoration: none; transition: all .12s;
   min-height: var(--touch-target);
+  border: none; background: none; width: 100%;
+  font-family: 'JetBrains Mono', monospace; text-align: left;
 }
 .ud-item:hover { background: rgba(0,212,255,.05); color: var(--cyan); }
 .ud-item svg { width: 14px; height: 14px; stroke: currentColor; fill: none; stroke-width: 2; flex-shrink: 0; opacity: .5; transition: opacity .12s; }
@@ -384,9 +368,7 @@ body::after {
 .ms-item.danger { color: rgba(244,63,94,.8); }
 .ms-item.danger svg { opacity: .7; }
 .ms-divider { height: 1px; background: var(--border); margin: 4px 0; }
-.ms-close-row {
-  padding: 12px 20px 4px;
-}
+.ms-close-row { padding: 12px 20px 4px; }
 .ms-close {
   width: 100%; min-height: 48px; border-radius: 10px;
   background: var(--bg3); border: 1px solid var(--border);
@@ -510,7 +492,6 @@ body::after {
 .limit-pill .used { color: var(--cyan); font-weight: 700; }
 .limit-pill .sep  { opacity: .22; }
 
-/* Input group */
 .input-group { display: flex; flex-direction: column; gap: 10px; }
 .input-row   { display: flex; gap: 10px; align-items: stretch; }
 
@@ -540,7 +521,6 @@ body::after {
 .char-count.warn  { color: var(--yellow); }
 .char-count.limit { color: var(--pink); }
 
-/* Create button */
 .btn-create {
   background: linear-gradient(135deg, var(--cyan), var(--purple));
   color: #020210; border: none; border-radius: var(--r);
@@ -568,7 +548,6 @@ body::after {
 .btn-create.loading .btn-spinner { display: block; }
 .btn-create.loading .btn-lbl    { display: none; }
 
-/* Save status */
 .save-status {
   margin-top: 10px; font-size: 10px;
   display: none; align-items: center; gap: 6px;
@@ -579,7 +558,6 @@ body::after {
 .save-status.show-retry  { display: flex; color: var(--orange); }
 .save-status svg { width: 11px; height: 11px; stroke: currentColor; fill: none; stroke-width: 2; flex-shrink: 0; }
 
-/* Queue notice */
 .queue-notice {
   display: none; align-items: center; gap: 10px;
   background: rgba(249,115,22,.04); border: 1px solid rgba(249,115,22,.16);
@@ -597,7 +575,6 @@ body::after {
 }
 .queue-notice button:hover { background: rgba(249,115,22,.16); }
 
-/* Info notice */
 .info-notice {
   display: flex; align-items: flex-start; gap: 12px;
   background: rgba(0,212,255,.025); border: 1px solid rgba(0,212,255,.09);
@@ -628,7 +605,6 @@ body::after {
 }
 .btn-mobile-details:active { background: rgba(249,115,22,.15); }
 
-/* Mobile block on create card */
 .create-block-overlay {
   position: absolute; inset: 0; z-index: 10;
   background: rgba(2,2,16,.75); backdrop-filter: blur(5px);
@@ -650,7 +626,7 @@ body::after {
 
 /* ── SEARCH & SORT ── */
 .filter-row { display: flex; align-items: center; gap: 10px; margin-bottom: 18px; }
-.search-wrap { flex: 1; position: relative; }
+.search-wrap { flex: 1; position: relative; min-width: 0; }
 .search-wrap svg {
   position: absolute; left: 12px; top: 50%; transform: translateY(-50%);
   width: 13px; height: 13px; stroke: var(--dim2); fill: none; stroke-width: 2;
@@ -666,18 +642,21 @@ body::after {
 }
 .search-input:focus { border-color: rgba(0,212,255,.28); box-shadow: 0 0 0 2px rgba(0,212,255,.04); }
 .search-input::placeholder { color: var(--dim2); }
+
+/* ── SORT SELECT — fixed width, no overflow ── */
 .sort-select {
   background: var(--bg2); border: 1px solid var(--border);
-  border-radius: var(--r); padding: 0 13px;
+  border-radius: var(--r); padding: 0 32px 0 12px;
   height: 44px; color: var(--text);
   font-family: 'JetBrains Mono', monospace;
   font-size: 10px; outline: none; cursor: pointer;
   transition: all .2s; flex-shrink: 0;
+  width: 110px;
   -webkit-appearance: none; appearance: none;
-  padding-right: 28px;
   background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='10' height='6' viewBox='0 0 10 6'%3E%3Cpath d='M1 1l4 4 4-4' stroke='%23475569' stroke-width='1.5' fill='none' stroke-linecap='round'/%3E%3C/svg%3E");
   background-repeat: no-repeat;
   background-position: right 10px center;
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
 }
 .sort-select:focus { border-color: rgba(0,212,255,.28); }
 
@@ -825,6 +804,7 @@ body::after {
   box-shadow: 0 0 0 1px rgba(249,115,22,.06), 0 -24px 60px rgba(0,0,0,.8);
   animation: slideUp .3s cubic-bezier(.32,1,.6,1) both;
   max-height: 90vh; overflow-y: auto;
+  position: relative;
 }
 .mobile-info-modal::before {
   content: ""; position: absolute; top: 0; left: 0; right: 0; height: 2px;
@@ -1032,7 +1012,6 @@ body::after {
 .redeem-input:focus { border-color: rgba(0,212,255,.32); box-shadow: 0 0 0 2px rgba(0,212,255,.05); }
 .redeem-msg { font-size: 10px; margin-top: 8px; }
 
-/* ── DEVICE STATUS INDICATOR ── */
 .device-status-row {
   display: flex; align-items: center; gap: 8px;
   padding: 8px 12px; border-radius: var(--r);
@@ -1059,6 +1038,8 @@ body::after {
   .create-card { padding: 20px 16px 20px; }
   .projects-grid { grid-template-columns: 1fr 1fr; gap: 12px; }
   .project-card { padding: 16px 14px 52px; }
+  .sort-select { width: 90px; font-size: 9px; padding: 0 26px 0 10px; }
+  .nav-credits-pill { padding: 0 10px; font-size: 10px; }
 }
 @media (max-width: 520px) {
   .input-row { flex-direction: column; }
@@ -1068,26 +1049,23 @@ body::after {
   .stats-row { grid-template-columns: 1fr; gap: 10px; }
   .page-header { flex-direction: column; align-items: flex-start; }
   .plan-badge { align-self: flex-start; }
-  .filter-row { flex-direction: column; }
-  .sort-select { width: 100%; }
-  .search-wrap { width: 100%; }
+  .filter-row { flex-direction: row; flex-wrap: nowrap; }
+  .sort-select { width: 80px; font-size: 9px; padding: 0 22px 0 8px; }
+  .search-wrap { flex: 1; min-width: 0; }
 }
 @media (min-width: 769px) {
-  /* Restore desktop modal center positioning */
   .overlay { align-items: center; padding: 24px 16px; }
   .modal-box { border-radius: var(--r2); max-width: 440px; padding: 30px; animation: modalIn .22s ease; }
   .modal-box.wide { max-width: 520px; }
   .modal-handle { display: none; }
   .modal-btns { flex-direction: row; }
   .modal-btn { width: auto; flex: 1; }
-  /* Restore desktop dropdown */
   .mobile-sheet { display: none !important; }
   .mobile-sheet-overlay { display: none !important; }
   .user-dd { display: none; }
   .user-dd.open { display: block; }
 }
 @media (max-width: 768px) {
-  /* Hide desktop dropdown on mobile — use sheet instead */
   .user-dd { display: none !important; }
 }
 @media (prefers-reduced-motion: reduce) {
@@ -1095,17 +1073,11 @@ body::after {
 }
 `
 
-/* ─────────────────────────────────────────────────────────────────────────────
-   MOBILE DETECTION — User Agent Only
-───────────────────────────────────────────────────────────────────────────── */
 function detectMobileUA(): boolean {
   if (typeof navigator === 'undefined') return false
   return /\b(Android|iPhone|iPod|IEMobile|Opera Mini|BlackBerry|webOS)\b/i.test(navigator.userAgent)
 }
 
-/* ─────────────────────────────────────────────────────────────────────────────
-   UTILS
-───────────────────────────────────────────────────────────────────────────── */
 function esc(s: unknown): string {
   return String(s ?? '')
     .replace(/&/g, '&amp;').replace(/</g, '&lt;')
@@ -1128,9 +1100,6 @@ function formatDate(iso: string): string {
   return new Date(iso).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })
 }
 
-/* ─────────────────────────────────────────────────────────────────────────────
-   SVG ICONS (inline, no emojis anywhere)
-───────────────────────────────────────────────────────────────────────────── */
 const Icon = {
   bolt:     () => <svg viewBox="0 0 24 24"><polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"/></svg>,
   folder:   () => <svg viewBox="0 0 24 24"><path d="M22 19a2 2 0 01-2 2H4a2 2 0 01-2-2V5a2 2 0 012-2h5l2 3h9a2 2 0 012 2z"/></svg>,
@@ -1157,11 +1126,9 @@ const Icon = {
   download: () => <svg viewBox="0 0 24 24"><path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>,
   warning:  () => <svg viewBox="0 0 24 24"><path d="M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>,
   chevron_right: () => <svg viewBox="0 0 24 24"><polyline points="9 18 15 12 9 6"/></svg>,
+  user:     () => <svg viewBox="0 0 24 24"><path d="M20 21v-2a4 4 0 00-4-4H8a4 4 0 00-4 4v2"/><circle cx="12" cy="7" r="4"/></svg>,
 }
 
-/* ─────────────────────────────────────────────────────────────────────────────
-   COMPONENT
-───────────────────────────────────────────────────────────────────────────── */
 export default function DashboardPage() {
   const [loaded,        setLoaded]        = useState(false)
   const [loaderPct,     setLoaderPct]     = useState(0)
@@ -1171,8 +1138,8 @@ export default function DashboardPage() {
   const [isOnline,      setIsOnline]      = useState(true)
   const [syncState,     setSyncState]     = useState<'' | 'syncing' | 'error' | 'ok'>('')
   const [saveState,     setSaveState]     = useState<{ state: string; msg: string } | null>(null)
-  const [ddOpen,        setDdOpen]        = useState(false)  // desktop dropdown
-  const [sheetOpen,     setSheetOpen]     = useState(false)  // mobile bottom sheet
+  const [ddOpen,        setDdOpen]        = useState(false)
+  const [sheetOpen,     setSheetOpen]     = useState(false)
   const [settingsOpen,  setSettingsOpen]  = useState(false)
   const [deleteModal,   setDeleteModal]   = useState<{ id: string; name: string } | null>(null)
   const [logoutModal,   setLogoutModal]   = useState(false)
@@ -1185,8 +1152,6 @@ export default function DashboardPage() {
   const [dailyInfo,     setDailyInfo]     = useState('')
   const [dailyDisabled, setDailyDisabled] = useState(false)
   const [inputError,    setInputError]    = useState(false)
-
-  // Mobile state
   const [isMobile,      setIsMobile]      = useState(false)
   const [mobileInfoOpen, setMobileInfoOpen]  = useState(false)
   const [mobileInfoDismissed, setMobileInfoDismissed] = useState(false)
@@ -1197,7 +1162,6 @@ export default function DashboardPage() {
   useEffect(() => { sessionRef.current  = session  }, [session])
   useEffect(() => { userDataRef.current = userData }, [userData])
 
-  // UA-only mobile detection
   useEffect(() => {
     const mobile = detectMobileUA()
     setIsMobile(mobile)
@@ -1207,9 +1171,7 @@ export default function DashboardPage() {
     }
   }, [])
 
-  useEffect(() => {
-    document.title = 'NEXUS AI — Dashboard'
-  }, [])
+  useEffect(() => { document.title = 'NEXUS AI — Dashboard' }, [])
 
   useEffect(() => {
     const on  = () => { setIsOnline(true); setTimeout(retryQueue, 1200) }
@@ -1221,7 +1183,6 @@ export default function DashboardPage() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
 
-  // Close desktop dropdown on outside click
   useEffect(() => {
     const h = (e: MouseEvent) => {
       const w = document.getElementById('userPillWrap')
@@ -1258,7 +1219,6 @@ export default function DashboardPage() {
     return () => clearTimeout(t)
   }, [saveState])
 
-  /* ── INIT ── */
   async function initDashboard() {
     setLoaderPct(15)
     const raw = localStorage.getItem('nexus_session')
@@ -1439,7 +1399,6 @@ export default function DashboardPage() {
     } catch {}
   }
 
-  /* ── COMPUTED HELPERS ── */
   function getCredits(ud: UserData) {
     const c      = ud.credits ?? sessionRef.current?.data?.credits ?? 30
     const plan   = (ud.plan || 'free').toLowerCase()
@@ -1480,7 +1439,6 @@ export default function DashboardPage() {
     setDailyInfo('Daily credits available'); setDailyDisabled(false)
   }
 
-  /* ── ACTIONS ── */
   function handleNameChange(val: string) {
     if (val.length <= PROJECT_NAME_LIMIT) {
       setProjectName(val)
@@ -1583,9 +1541,7 @@ export default function DashboardPage() {
     else setDdOpen(o => !o)
   }
 
-  function closeSheet() {
-    setSheetOpen(false)
-  }
+  function closeSheet() { setSheetOpen(false) }
 
   function showToast(msg: string, color?: string, dur?: number) {
     document.querySelectorAll('.nx-toast').forEach(t => t.remove())
@@ -1604,7 +1560,6 @@ export default function DashboardPage() {
     }, total)
   }
 
-  /* ── DERIVED VALUES ── */
   const av = session?.user?.avatar
     || (session?.user?.robloxId
       ? `https://www.roblox.com/headshot-thumbnail/image?userId=${session.user.robloxId}&width=150&height=150&format=png`
@@ -1625,14 +1580,12 @@ export default function DashboardPage() {
   else                          filtered.sort((a, b) => a.name.localeCompare(b.name))
 
   const pendingIds = new Set(pendingQueue.flatMap(q => (q.payload?.data?.projects || []).map((p: Project) => p.id)))
-
   const charLen = projectName.length
   const charCls = charLen >= PROJECT_NAME_LIMIT ? 'limit' : charLen >= PROJECT_NAME_LIMIT - 3 ? 'warn' : ''
-
   const saveStateCls = saveState ? `save-status show-${saveState.state}` : 'save-status'
 
-  /* ── SHARED MENU ITEMS ── */
-  const menuItems = (onAction: () => void) => (
+  /* ── SHARED MENU CONTENT ── */
+  const menuContent = (onAction: () => void) => (
     <>
       <div className="ud-hdr" style={{ padding: '14px 16px' }}>
         <img className="ud-av" src={av} alt="" onError={e => { (e.currentTarget as HTMLImageElement).src = '/images/nexusai.png' }} />
@@ -1643,9 +1596,13 @@ export default function DashboardPage() {
       </div>
 
       <div className="ud-section">
-        <div className="ud-item" onClick={() => { setSettingsOpen(true); onAction() }} role="menuitem">
+        {/* ── MY ACCOUNT BUTTON ── */}
+        <a className="ud-item" href="/account" onClick={onAction} role="menuitem">
+          <Icon.user />My Account
+        </a>
+        <button className="ud-item" onClick={() => { setSettingsOpen(true); onAction() }} role="menuitem">
           <Icon.settings />Settings
-        </div>
+        </button>
         <a className="ud-item" href="/payment" onClick={onAction} role="menuitem">
           <Icon.bolt />Buy Credits <span className="ud-badge">{creditsDisplay} CR</span>
         </a>
@@ -1659,39 +1616,34 @@ export default function DashboardPage() {
 
       <div className="ud-divider" />
       <div className="ud-section">
-        <div className="ud-item" onClick={() => { claimDaily(); onAction() }} role="menuitem">
+        <button className="ud-item" onClick={() => { claimDaily(); onAction() }} role="menuitem">
           <Icon.calendar />
           {dailyDisabled ? dailyInfo : 'Claim Daily Credits'}
-        </div>
+        </button>
       </div>
 
       <div className="ud-divider" />
       <div className="ud-section">
-        <div className="ud-item danger" onClick={() => { setLogoutModal(true); onAction() }} role="menuitem">
+        <button className="ud-item danger" onClick={() => { setLogoutModal(true); onAction() }} role="menuitem">
           <Icon.logout />Sign Out
-        </div>
+        </button>
       </div>
     </>
   )
 
-  /* ── RENDER ── */
   return (
     <>
       <style dangerouslySetInnerHTML={{ __html: PAGE_CSS }} />
 
-      {/* ── SYNC BAR ── */}
       <div id="syncBar" className={syncState} />
 
-      {/* ── OFFLINE BANNER ── */}
       <div id="offlineBanner" className={!isOnline ? 'show' : ''}>
         <Icon.wifi_off />
         No network connection — changes are queued locally
         <button className="btn-retry-offline" onClick={retryQueue}>Retry Now</button>
       </div>
 
-      {/* ════════════════════
-          MOBILE INFO MODAL
-      ════════════════════ */}
+      {/* MOBILE INFO MODAL */}
       {isMobile && mobileInfoOpen && (
         <div
           className="mobile-info-overlay"
@@ -1700,24 +1652,12 @@ export default function DashboardPage() {
         >
           <div className="mobile-info-modal">
             <div className="mi-handle" />
-
-            <div className="mi-icon-wrap">
-              <Icon.monitor />
-            </div>
-
-            <div className="mi-badge">
-              <Icon.warning />
-              MOBILE DEVICE DETECTED
-            </div>
-
-            <div className="mi-title">
-              Desktop Recommended<br/>for <span>Full Access</span>
-            </div>
-
+            <div className="mi-icon-wrap"><Icon.monitor /></div>
+            <div className="mi-badge"><Icon.warning />MOBILE DEVICE DETECTED</div>
+            <div className="mi-title">Desktop Recommended<br/>for <span>Full Access</span></div>
             <div className="mi-desc">
               NEXUS AI is built for <strong>desktop browsers</strong>. On mobile, <strong>project creation is disabled</strong> to prevent input errors. You can still view and manage existing projects.
             </div>
-
             <div className="mi-features">
               <div className="mi-feat ok">
                 <Icon.check />
@@ -1734,7 +1674,6 @@ export default function DashboardPage() {
                 </div>
               </div>
             </div>
-
             <div style={{ fontSize: 9.5, color: 'var(--dim2)', marginBottom: 10, textAlign: 'center' }}>
               Open on your desktop browser:
             </div>
@@ -1742,10 +1681,8 @@ export default function DashboardPage() {
               <Icon.globe />
               {typeof window !== 'undefined' ? window.location.hostname : 'nexusai.app'}/dashboard
             </div>
-
             <button className="btn-mi-continue" onClick={() => setMobileInfoOpen(false)}>
-              <Icon.arrow />
-              Continue in Limited Mode
+              <Icon.arrow />Continue in Limited Mode
             </button>
             <button className="btn-mi-dismiss" onClick={() => { setMobileInfoOpen(false); setMobileInfoDismissed(true) }}>
               Don&apos;t show this again
@@ -1754,7 +1691,7 @@ export default function DashboardPage() {
         </div>
       )}
 
-      {/* ── LOADER ── */}
+      {/* LOADER */}
       <div id="dash-loader" className={loaded ? 'hide' : ''} role="status" aria-label="Loading dashboard">
         <div className="loader-logo">NEXUS AI</div>
         <div className="loader-ring" aria-hidden="true" />
@@ -1764,7 +1701,7 @@ export default function DashboardPage() {
         <div className="loader-sub">Loading workspace...</div>
       </div>
 
-      {/* ── NAV ── */}
+      {/* NAV */}
       <nav className="dnav" role="navigation" aria-label="Main navigation">
         <a className="dnav-logo" onClick={() => window.location.href = '/dashboard'} role="link" tabIndex={0}>
           <div className="dnav-logo-icon">
@@ -1775,8 +1712,7 @@ export default function DashboardPage() {
 
         <div className="dnav-right">
           <a href="/payment" className="nav-credits-pill" title="Buy credits">
-            <Icon.bolt />
-            {creditsDisplay} CR
+            <Icon.bolt />{creditsDisplay} CR
           </a>
 
           <div className="user-pill-wrap" id="userPillWrap">
@@ -1794,15 +1730,13 @@ export default function DashboardPage() {
 
             {/* Desktop dropdown */}
             <div className={`user-dd${ddOpen ? ' open' : ''}`} role="menu">
-              {menuItems(() => setDdOpen(false))}
+              {menuContent(() => setDdOpen(false))}
             </div>
           </div>
         </div>
       </nav>
 
-      {/* ════════════════════
-          MOBILE BOTTOM SHEET
-      ════════════════════ */}
+      {/* MOBILE BOTTOM SHEET */}
       <div
         className={`mobile-sheet-overlay${sheetOpen ? ' show' : ''}`}
         onClick={closeSheet}
@@ -1821,6 +1755,10 @@ export default function DashboardPage() {
           </div>
         </div>
 
+        {/* ── MY ACCOUNT ── */}
+        <a className="ms-item" href="/account" onClick={closeSheet}>
+          <Icon.user />My Account
+        </a>
         <button className="ms-item" onClick={() => { setSettingsOpen(true); closeSheet() }}>
           <Icon.settings />Settings
         </button>
@@ -1850,10 +1788,8 @@ export default function DashboardPage() {
         </div>
       </div>
 
-      {/* ── MAIN CONTENT ── */}
+      {/* MAIN */}
       <main className="dash-main" role="main">
-
-        {/* PAGE HEADER */}
         <header className="page-header">
           <div className="header-left">
             <div className="header-av-wrap">
@@ -1865,8 +1801,7 @@ export default function DashboardPage() {
             </div>
           </div>
           <a href="/payment" className={`plan-badge${planCls ? ' ' + planCls : ''}`}>
-            <Icon.star />
-            {planLabel} PLAN
+            <Icon.star />{planLabel} PLAN
           </a>
         </header>
 
@@ -1904,9 +1839,7 @@ export default function DashboardPage() {
               <div className="mobile-banner-desc">
                 You are on a <strong>mobile device</strong>. Project creation is disabled. Switch to a desktop browser for full access.
               </div>
-              <button className="btn-mobile-details" onClick={() => setMobileInfoOpen(true)}>
-                View details
-              </button>
+              <button className="btn-mobile-details" onClick={() => setMobileInfoOpen(true)}>View details</button>
             </div>
           </div>
         )}
@@ -1921,12 +1854,8 @@ export default function DashboardPage() {
               <button onClick={() => setMobileInfoOpen(true)}>Learn More</button>
             </div>
           )}
-
           <div className="create-card-header">
-            <div className="card-title">
-              <Icon.plus />
-              New Project
-            </div>
+            <div className="card-title"><Icon.plus />New Project</div>
             <div className="limit-pill">
               <span className="used">{allProjects.length}</span>
               <span className="sep">/</span>
@@ -1934,7 +1863,6 @@ export default function DashboardPage() {
               &nbsp;used
             </div>
           </div>
-
           <div className="input-group">
             <div className="input-row">
               <input
@@ -1960,17 +1888,13 @@ export default function DashboardPage() {
               >
                 <div className="btn-spinner" aria-hidden="true" />
                 <span className="btn-lbl">CREATE</span>
-                <span className="btn-lbl" aria-hidden="true">
-                  <Icon.chevron_right />
-                </span>
+                <span className="btn-lbl" aria-hidden="true"><Icon.chevron_right /></span>
               </button>
             </div>
-
             {!isMobile && (
               <div className="input-meta" id="char-count-hint">
                 <span className="input-hint">
-                  <Icon.info />
-                  Letters, numbers, spaces — max {PROJECT_NAME_LIMIT} characters
+                  <Icon.info />Letters, numbers, spaces — max {PROJECT_NAME_LIMIT} characters
                 </span>
                 <span className={`char-count ${charCls}`} aria-live="polite">
                   {charLen} / {PROJECT_NAME_LIMIT}
@@ -1978,14 +1902,11 @@ export default function DashboardPage() {
               </div>
             )}
           </div>
-
           {saveState && (
             <div className={saveStateCls} role="status" aria-live="polite">
-              <Icon.check />
-              <span>{saveState.msg}</span>
+              <Icon.check /><span>{saveState.msg}</span>
             </div>
           )}
-
           {pendingQueue.length > 0 && (
             <div className="queue-notice show" role="alert">
               <Icon.info />
@@ -1993,7 +1914,6 @@ export default function DashboardPage() {
               <button onClick={retryQueue}>Retry Now</button>
             </div>
           )}
-
           <div className="info-notice" role="note">
             <Icon.info />
             <p>
@@ -2053,15 +1973,9 @@ export default function DashboardPage() {
                     : 'Create a project above to start chatting with NEXUS AI. Each project has its own isolated chat history.'}
                 </p>
                 {!isMobile ? (
-                  <div className="empty-hint">
-                    <Icon.plus />
-                    Type a name above and press CREATE
-                  </div>
+                  <div className="empty-hint"><Icon.plus />Type a name above and press CREATE</div>
                 ) : (
-                  <div className="empty-hint warn">
-                    <Icon.monitor />
-                    Desktop browser required to create projects
-                  </div>
+                  <div className="empty-hint warn"><Icon.monitor />Desktop browser required to create projects</div>
                 )}
               </div>
             )
@@ -2091,24 +2005,17 @@ export default function DashboardPage() {
                     </button>
                   </div>
                 </div>
-
                 <div className="project-name" title={p.name}>{p.name}</div>
                 <div className="project-desc">Roblox AI project — isolated chat history &amp; Studio sync</div>
-
                 <div className="project-meta">
-                  <span className="meta-date">
-                    <Icon.calendar />
-                    {formatDate(p.createdAt)}
-                  </span>
+                  <span className="meta-date"><Icon.calendar />{formatDate(p.createdAt)}</span>
                   <span className={`meta-status${pendingIds.has(p.id) ? ' pending' : ''}`}>
                     <span className="status-dot" />
                     {pendingIds.has(p.id) ? 'Pending sync' : 'Active'}
                   </span>
                 </div>
-
                 <div className="project-open-btn" aria-hidden="true">
-                  <Icon.play />
-                  OPEN PROJECT
+                  <Icon.play />OPEN PROJECT
                 </div>
               </div>
             ))
@@ -2116,9 +2023,7 @@ export default function DashboardPage() {
         </div>
       </main>
 
-      {/* ════════════
-          DELETE MODAL
-      ════════════ */}
+      {/* DELETE MODAL */}
       <div
         className={`overlay${deleteModal ? ' show' : ''}`}
         onClick={e => { if (e.target === e.currentTarget) setDeleteModal(null) }}
@@ -2126,9 +2031,7 @@ export default function DashboardPage() {
       >
         <div className="modal-box">
           <div className="modal-handle" />
-          <div className="modal-icon">
-            <Icon.trash />
-          </div>
+          <div className="modal-icon"><Icon.trash /></div>
           <div className="modal-title">Delete Project?</div>
           <div className="modal-desc">
             Are you sure you want to delete <span className="highlight">&quot;{deleteModal?.name}&quot;</span>?
@@ -2141,9 +2044,7 @@ export default function DashboardPage() {
         </div>
       </div>
 
-      {/* ════════════
-          LOGOUT MODAL
-      ════════════ */}
+      {/* LOGOUT MODAL */}
       <div
         className={`overlay${logoutModal ? ' show' : ''}`}
         onClick={e => { if (e.target === e.currentTarget) setLogoutModal(false) }}
@@ -2151,9 +2052,7 @@ export default function DashboardPage() {
       >
         <div className="modal-box">
           <div className="modal-handle" />
-          <div className="modal-icon">
-            <Icon.logout />
-          </div>
+          <div className="modal-icon"><Icon.logout /></div>
           <div className="modal-title">Sign Out?</div>
           <div className="modal-desc">
             You will be signed out of NEXUS AI. Your projects and chat history are safely stored on the server.
@@ -2165,9 +2064,7 @@ export default function DashboardPage() {
         </div>
       </div>
 
-      {/* ════════════════
-          SETTINGS MODAL
-      ════════════════ */}
+      {/* SETTINGS MODAL */}
       <div
         className={`overlay${settingsOpen ? ' show' : ''}`}
         onClick={e => { if (e.target === e.currentTarget) setSettingsOpen(false) }}
@@ -2176,16 +2073,12 @@ export default function DashboardPage() {
         <div className="modal-box wide">
           <div className="modal-handle" />
           <div className="settings-hdr">
-            <div className="settings-hdr-title">
-              <Icon.settings />
-              Settings
-            </div>
+            <div className="settings-hdr-title"><Icon.settings />Settings</div>
             <button className="settings-close" onClick={() => setSettingsOpen(false)} aria-label="Close settings">
               <Icon.cross />
             </button>
           </div>
 
-          {/* Account */}
           <div className="settings-sec">
             <div className="settings-sec-title">Roblox Account</div>
             <div className="settings-av-row">
@@ -2197,9 +2090,14 @@ export default function DashboardPage() {
             </div>
             <div className="settings-row"><label>Credits</label><span className="s-val yellow">{creditsDisplay} CR</span></div>
             <div className="settings-row"><label>Plan</label><span className="s-val cyan">{planLabel}</span></div>
+            <div className="settings-row">
+              <label>Manage full account</label>
+              <a href="/account" className="settings-btn" onClick={() => setSettingsOpen(false)}>
+                My Account
+              </a>
+            </div>
           </div>
 
-          {/* Daily */}
           <div className="settings-sec">
             <div className="settings-sec-title">Daily Credits</div>
             <div className="settings-row"><label>Free plan</label><span style={{ color: 'var(--green)', fontSize: 11 }}>+2 CR / day</span></div>
@@ -2210,7 +2108,6 @@ export default function DashboardPage() {
             </div>
           </div>
 
-          {/* Redeem */}
           <div className="settings-sec">
             <div className="settings-sec-title">Redeem Code</div>
             <div style={{ fontSize: 10, color: 'var(--dim2)', marginBottom: 10 }}>
@@ -2240,7 +2137,6 @@ export default function DashboardPage() {
             )}
           </div>
 
-          {/* Plugin */}
           <div className="settings-sec">
             <div className="settings-sec-title">Studio Plugin</div>
             <div className="settings-row">
@@ -2254,7 +2150,6 @@ export default function DashboardPage() {
             </div>
           </div>
 
-          {/* Device */}
           <div className="settings-sec">
             <div className="settings-sec-title">Device</div>
             <div className="device-status-row">
@@ -2277,7 +2172,6 @@ export default function DashboardPage() {
             </div>
           </div>
 
-          {/* Danger */}
           <div className="settings-sec">
             <div className="settings-sec-title" style={{ color: 'var(--pink)', opacity: .85 }}>Danger Zone</div>
             <div className="settings-row">

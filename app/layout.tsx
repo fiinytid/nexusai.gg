@@ -476,10 +476,10 @@ export default function RootLayout({
       <body suppressHydrationWarning>
         <ClerkProvider
           appearance={clerkAppearance}
-          signInUrl="/sign-in"
-          signUpUrl="/sign-up"
-          signInFallbackRedirectUrl="/app"
-          signUpFallbackRedirectUrl="/app"
+          signInUrl="/login"
+          signUpUrl="/login"
+          signInFallbackRedirectUrl="/dashboard"
+          signUpFallbackRedirectUrl="/dashboard"
           dynamic
         >
           <AccountModalProvider>
