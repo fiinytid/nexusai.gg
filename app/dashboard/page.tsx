@@ -1,6 +1,7 @@
 'use client'
 
 import { useClerk } from '@clerk/nextjs'
+import { useRouter } from 'next/navigation'
 import React, { useEffect, useRef, useState, useCallback } from 'react'
 
 interface Project {
@@ -1154,7 +1155,7 @@ export default function DashboardPage() {
   const [dailyDisabled, setDailyDisabled] = useState(false)
   const [inputError,    setInputError]    = useState(false)
   const [isMobile,      setIsMobile]      = useState(false)
-  const { openUserProfile } = useClerk()
+  const router = useRouter()
   const [mobileInfoOpen, setMobileInfoOpen]  = useState(false)
   const [mobileInfoDismissed, setMobileInfoDismissed] = useState(false)
 
@@ -1599,7 +1600,7 @@ export default function DashboardPage() {
 
       <div className="ud-section">
         {/* ── MY ACCOUNT — opens Clerk modal ── */}
-        <button className="ud-item" onClick={() => { openUserProfile(); onAction() }} role="menuitem">
+        <button className="ud-item" onClick={() => { router.push('/clerk'); onAction() }} role="menuitem">
           <Icon.user />My Account
         </button>
         <button className="ud-item" onClick={() => { setSettingsOpen(true); onAction() }} role="menuitem">
@@ -1758,7 +1759,7 @@ export default function DashboardPage() {
         </div>
 
         {/* ── MY ACCOUNT — opens Clerk modal ── */}
-        <button className="ms-item" onClick={() => { openUserProfile(); closeSheet() }}>
+        <button className="ms-item" onClick={() => { router.push('/clerk'); closeSheet() }}>
           <Icon.user />My Account
         </button>
         <button className="ms-item" onClick={() => { setSettingsOpen(true); closeSheet() }}>
@@ -2095,7 +2096,7 @@ export default function DashboardPage() {
             <div className="settings-row">
               <label>Manage full account</label>
               {/* ── MY ACCOUNT — opens Clerk modal ── */}
-              <button className="settings-btn" onClick={() => { setSettingsOpen(false); openUserProfile() }}>
+              <button className="settings-btn" onClick={() => { setSettingsOpen(false); router.push('/clerk') }}>
                 My Account
               </button>
             </div>
