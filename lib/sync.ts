@@ -1,16 +1,16 @@
-// lib/sync.ts — NEXUS AI User Data Sync (TypeScript v15)
+// lib/sync.ts — NEXUS AI User Data Sync (TypeScript v16)
 //
 // Storage: Supabase (primary) + Vercel KV (fallback/cache)
 //
-// FIXES v15:
-//   • All TypeScript type errors resolved
-//   • PostgrestBuilder cast errors fixed — use `unknown` intermediate cast
-//   • SbGetResult / SbSetResult interfaces aligned with actual Supabase return types
-//   • sbGet, sbSet, sbDel, sbList all properly typed without unsafe casts
-//   • healthCheck queries properly typed
-//   • All language: English
+// FIXES v16:
+//   • ENV VAR MISMATCH fixed — semua pakai SUPABASE_URL & SUPABASE_SERVICE_ROLE_KEY
+//   • initLock deadlock fixed — Promise-based lock
+//   • KV retry mechanism added
+//   • Unused `import crypto` removed
+//   • healthCheck now cleans up __health__ record after test
+//   • storageSet race condition fixed — getSB() only called once
+//   • RLS Policy SQL fixed for Supabase service role
 
-import crypto from 'crypto';
 import type { SupabaseClient }                             from '@supabase/supabase-js';
 import type { HandlerFn, AdaptedRequest, AdaptedResponse } from '../app/api/[...slug]/route.js';
 import { verifyAdminToken, sanitizeStr, checkRateLimit }  from './_security';
@@ -70,7 +70,8 @@ interface SbState {
   error:       string | null;
   nextRetry:   number;
   envSnapshot: string;
-  initLock:    boolean;
+  // FIX: Promise-based lock menggantikan boolean sederhana
+  initPromise: Promise<SupabaseClient | null> | null;
 }
 
 interface KvClient {
@@ -84,6 +85,7 @@ interface KvState {
   client:      KvClient | null;
   ready:       boolean;
   error:       string | null;
+  nextRetry:   number; // FIX: tambah retry untuk KV
   envSnapshot: string;
 }
 
@@ -110,8 +112,6 @@ interface PostBody {
 }
 
 // ─── Raw Supabase response shapes ─────────────────────────────────────────
-// We use these as the result of `await`-ing the query directly,
-// which avoids the PostgrestBuilder → Promise cast that TypeScript rejects.
 
 interface SbRowGet {
   data:  { data: UserData } | null;
@@ -136,13 +136,14 @@ interface SbRowAny {
 // CONSTANTS
 // ═══════════════════════════════════════════════════════════════════════════
 
-const TABLE             = 'nexus_users'    as const;
-const TIMEOUT_OP        = 8_000;            // ms per operation
+const TABLE             = 'nexus_users' as const;
+const TIMEOUT_OP        = 8_000;
 const MAX_RETRY         = 3;
-const KV_PREFIX         = 'nexusai:'       as const;
-const KV_TTL            = 60 * 60 * 24 * 365 * 2; // 2 years
-const MAX_PAYLOAD       = 900 * 1024;       // 900 KB
-const SB_RETRY_COOLDOWN = 30_000;           // 30 seconds
+const KV_PREFIX         = 'nexusai:'   as const;
+const KV_TTL            = 60 * 60 * 24 * 365 * 2;
+const MAX_PAYLOAD       = 900 * 1024;
+const SB_RETRY_COOLDOWN = 30_000;
+const KV_RETRY_COOLDOWN = 60_000; // FIX: KV juga punya cooldown
 
 // ═══════════════════════════════════════════════════════════════════════════
 // UTILITIES
@@ -168,8 +169,12 @@ function normalizeKey(key: unknown): string {
   return String(key ?? '').toLowerCase().trim();
 }
 
+function makeEnvSnap(...vars: (string | undefined)[]): string {
+  return vars.map(v => v ?? '').join('|');
+}
+
 // ═══════════════════════════════════════════════════════════════════════════
-// SUPABASE — async lazy init
+// SUPABASE — async lazy init (FIX: Promise-based lock)
 // ═══════════════════════════════════════════════════════════════════════════
 
 const _sb: SbState = {
@@ -178,54 +183,39 @@ const _sb: SbState = {
   error:       null,
   nextRetry:   0,
   envSnapshot: '',
-  initLock:    false,
+  initPromise: null,
 };
 
-async function getSB(): Promise<SupabaseClient | null> {
-  const envSnap =
-    (process.env.SUPABASE_URL                ?? '') + '|' +
-    (process.env.SUPABASE_SERVICE_ROLE_KEY   ?? '');
-
-  if (_sb.envSnapshot && _sb.envSnapshot !== envSnap) {
-    console.log('[supabase] Env changed, resetting client...');
-    _sb.client    = null;
-    _sb.ready     = false;
-    _sb.error     = null;
-    _sb.nextRetry = 0;
-  }
-  _sb.envSnapshot = envSnap;
-
-  if (_sb.ready && _sb.client) return _sb.client;
-  if (_sb.error && Date.now() < _sb.nextRetry) return null;
-  if (_sb.initLock) return null;
-  _sb.initLock = true;
-
+async function _doInitSB(): Promise<SupabaseClient | null> {
   try {
-    const url = process.env.STORAGE_NEXUS_SUPABASE_URL;
-    const key = process.env.STORAGE_NEXUS_SUPABASE_SERVICE_ROLE_KEY;
+    // FIX: nama env var sekarang konsisten — SUPABASE_URL & SUPABASE_SERVICE_ROLE_KEY
+    const url = process.env.SUPABASE_URL;
+    const key = process.env.SUPABASE_SERVICE_ROLE_KEY;
 
     if (!url || !url.startsWith('https://')) {
       throw new Error(
-        'STORAGE_NEXUS_SUPABASE_URL is invalid. ' +
+        'SUPABASE_URL is missing or invalid. ' +
         'Expected format: https://<project-id>.supabase.co',
       );
     }
     if (!key || key.length < 20) {
-      throw new Error('STORAGE_NEXUS_SUPABASE_SERVICE_ROLE_KEY is invalid or too short.');
+      throw new Error('SUPABASE_SERVICE_ROLE_KEY is missing or too short.');
     }
 
     const { createClient } = await import('@supabase/supabase-js');
-    _sb.client = createClient(url, key, {
+    const client = createClient(url, key, {
       auth:   { persistSession: false, autoRefreshToken: false },
-      global: { headers: { 'X-Client-Info': 'nexus-sync/15' } },
+      global: { headers: { 'X-Client-Info': 'nexus-sync/16' } },
     });
+
+    _sb.client    = client;
     _sb.ready     = true;
     _sb.error     = null;
     _sb.nextRetry = 0;
     console.log('[supabase] ✅ Client initialized successfully.');
-    return _sb.client;
+    return client;
   } catch (e: unknown) {
-    const msg = e instanceof Error ? e.message : String(e);
+    const msg     = e instanceof Error ? e.message : String(e);
     _sb.error     = msg;
     _sb.ready     = false;
     _sb.client    = null;
@@ -233,35 +223,71 @@ async function getSB(): Promise<SupabaseClient | null> {
     console.error('[supabase] ❌ Init failed:', msg);
     return null;
   } finally {
-    _sb.initLock = false;
+    // FIX: lock selalu di-release setelah selesai (sukses maupun gagal)
+    _sb.initPromise = null;
   }
 }
 
+async function getSB(): Promise<SupabaseClient | null> {
+  // FIX: envSnapshot sekarang pakai nama var yang sama dengan _doInitSB
+  const envSnap = makeEnvSnap(
+    process.env.SUPABASE_URL,
+    process.env.SUPABASE_SERVICE_ROLE_KEY,
+  );
+
+  if (_sb.envSnapshot && _sb.envSnapshot !== envSnap) {
+    console.log('[supabase] Env changed, resetting client...');
+    _sb.client      = null;
+    _sb.ready       = false;
+    _sb.error       = null;
+    _sb.nextRetry   = 0;
+    _sb.initPromise = null;
+  }
+  _sb.envSnapshot = envSnap;
+
+  if (_sb.ready && _sb.client) return _sb.client;
+  if (_sb.error && Date.now() < _sb.nextRetry) {
+    console.warn('[supabase] In cooldown, skipping init. Next retry in',
+      Math.ceil((_sb.nextRetry - Date.now()) / 1000), 's');
+    return null;
+  }
+
+  // FIX: kalau sudah ada init berjalan, tunggu hasilnya (tidak double-init)
+  if (_sb.initPromise) return _sb.initPromise;
+
+  _sb.initPromise = _doInitSB();
+  return _sb.initPromise;
+}
+
 // ═══════════════════════════════════════════════════════════════════════════
-// KV — async lazy init
+// KV — async lazy init (FIX: tambah retry cooldown)
 // ═══════════════════════════════════════════════════════════════════════════
 
 const _kv: KvState = {
   client:      null,
   ready:       false,
   error:       null,
+  nextRetry:   0, // FIX: KV sekarang punya nextRetry
   envSnapshot: '',
 };
 
 async function getKV(): Promise<KvClient | null> {
-  const envSnap =
-    (process.env.KV_REST_API_URL   ?? '') + '|' +
-    (process.env.KV_REST_API_TOKEN ?? '');
+  const envSnap = makeEnvSnap(
+    process.env.KV_REST_API_URL,
+    process.env.KV_REST_API_TOKEN,
+  );
 
   if (_kv.envSnapshot && _kv.envSnapshot !== envSnap) {
-    _kv.client = null;
-    _kv.ready  = false;
-    _kv.error  = null;
+    _kv.client    = null;
+    _kv.ready     = false;
+    _kv.error     = null;
+    _kv.nextRetry = 0; // FIX: reset retry saat env berubah
   }
   _kv.envSnapshot = envSnap;
 
   if (_kv.ready && _kv.client) return _kv.client;
-  if (_kv.error) return null;
+  // FIX: KV error sekarang punya cooldown, bukan selamanya null
+  if (_kv.error && Date.now() < _kv.nextRetry) return null;
 
   try {
     if (!process.env.KV_REST_API_URL || !process.env.KV_REST_API_TOKEN) {
@@ -273,16 +299,21 @@ async function getKV(): Promise<KvClient | null> {
                 ?? mod;
 
     if (typeof (client as KvClient).get !== 'function') {
-      throw new Error('@vercel/kv: method .get() not found.');
+      throw new Error('@vercel/kv: method .get() not found on imported module.');
     }
-    _kv.client = client as KvClient;
-    _kv.ready  = true;
-    _kv.error  = null;
+
+    _kv.client    = client as KvClient;
+    _kv.ready     = true;
+    _kv.error     = null;
+    _kv.nextRetry = 0;
     console.log('[kv] ✅ KV client initialized successfully.');
     return _kv.client;
   } catch (e: unknown) {
-    const msg = e instanceof Error ? e.message : String(e);
-    _kv.error = msg;
+    const msg     = e instanceof Error ? e.message : String(e);
+    _kv.error     = msg;
+    _kv.ready     = false;
+    _kv.client    = null;
+    _kv.nextRetry = Date.now() + KV_RETRY_COOLDOWN; // FIX: retry setelah 60 detik
     console.warn('[kv] ⚠️ KV not available (optional):', msg);
     return null;
   }
@@ -304,7 +335,7 @@ function formatSBError(error: unknown): string {
 
 // ═══════════════════════════════════════════════════════════════════════════
 // SUPABASE OPERATIONS
-// ─────────────────────────────────────────────────────────────────────────
+// ═══════════════════════════════════════════════════════════════════════════
 
 async function sbGet(username: string): Promise<UserData | null> {
   const sb = await getSB();
@@ -313,7 +344,6 @@ async function sbGet(username: string): Promise<UserData | null> {
   for (let i = 1; i <= MAX_RETRY; i++) {
     try {
       const raw = await withTimeout(
-        // PostgrestBuilder is thenable — await it as Promise<unknown>
         (sb.from(TABLE)
            .select('data')
            .eq('username', username)
@@ -392,7 +422,9 @@ async function sbDel(username: string): Promise<boolean> {
   for (let i = 1; i <= MAX_RETRY; i++) {
     try {
       const raw = await withTimeout(
-        (sb.from(TABLE).delete().eq('username', username) as unknown) as Promise<unknown>,
+        (sb.from(TABLE)
+           .delete()
+           .eq('username', username) as unknown) as Promise<unknown>,
         TIMEOUT_OP,
         'sbDel',
       );
@@ -424,6 +456,7 @@ async function sbList(): Promise<Record<string, UserData>> {
     if (error) throw new Error(formatSBError(error));
     const result: Record<string, UserData> = {};
     for (const row of (data ?? [])) {
+      // FIX: skip semua internal records (prefix _)
       if (row.username && !row.username.startsWith('_')) {
         result[row.username] = row.data;
       }
@@ -472,7 +505,7 @@ async function kvDel(username: string): Promise<void> {
   if (!kv) return;
   try {
     const delFn =
-      typeof kv.del    === 'function' ? kv.del.bind(kv) :
+      typeof kv.del    === 'function' ? kv.del.bind(kv)    :
       typeof kv.delete === 'function' ? kv.delete.bind(kv) :
       null;
     if (delFn) await withTimeout(delFn(KV_PREFIX + username), TIMEOUT_OP, 'kvDel');
@@ -489,7 +522,6 @@ async function storageGet(username: string): Promise<UserData | null> {
   try {
     const sbData = await sbGet(username);
     if (sbData !== null) return sbData;
-    // Record not in Supabase — check KV (legacy data migration)
     return await kvGet(username);
   } catch (sbErr: unknown) {
     const msg = sbErr instanceof Error ? sbErr.message : String(sbErr);
@@ -503,6 +535,7 @@ async function storageGet(username: string): Promise<UserData | null> {
 }
 
 async function storageSet(username: string, data: UserData): Promise<UserData> {
+  // FIX: getSB() dipanggil sekali saja, tidak dua kali (race condition)
   const sb = await getSB();
 
   if (!sb) {
@@ -517,7 +550,7 @@ async function storageSet(username: string, data: UserData): Promise<UserData> {
 
   const saved = await sbSet(username, data);
 
-  // Sync to KV asynchronously (fire-and-forget)
+  // Sync ke KV secara async (fire-and-forget)
   getKV().then(kv => {
     if (kv) {
       kvSet(username, saved).catch((e: unknown) =>
@@ -672,9 +705,9 @@ function errResponse(res: AdaptedResponse, e: unknown): AdaptedResponse {
   const msg = e instanceof Error ? e.message : String(e);
   console.error('[handler] storage error:', msg);
 
-  let hint = 'Check environment variables.';
-  if (_sb.error)      hint = 'Supabase: ' + _sb.error;
-  else if (_kv.error) hint = 'KV: '       + _kv.error;
+  let hint = 'Check environment variables (SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY).';
+  if (_sb.error)      hint = 'Supabase init error: ' + _sb.error;
+  else if (_kv.error) hint = 'KV init error: '       + _kv.error;
 
   return res.status(500).json({
     error:  'A storage error occurred.',
@@ -693,7 +726,6 @@ const handler: HandlerFn = async (req: AdaptedRequest, res: AdaptedResponse) => 
 
   if (req.method === 'OPTIONS') { res.status(200).end(); return; }
 
-  // Rate limiting per IP
   const ip: string =
     (req.headers['x-forwarded-for'] ?? '').split(',')[0].trim() || 'unknown';
   if (!checkRateLimit(`sync:${ip}`, 120)) {
@@ -707,7 +739,6 @@ const handler: HandlerFn = async (req: AdaptedRequest, res: AdaptedResponse) => 
   // ══════════════════════════════════════════════════════════
   if (req.method === 'GET') {
 
-    // GET ?admin_ids=1
     if (req.query['admin_ids'] === '1') {
       if (!verifyAdminToken(req)) {
         return res.status(401).json({ error: 'Unauthorized: admin token required.' });
@@ -718,7 +749,7 @@ const handler: HandlerFn = async (req: AdaptedRequest, res: AdaptedResponse) => 
       });
     }
 
-    // GET ?health=1 — storage status
+    // GET ?health=1
     if (req.query['health'] === '1') {
       if (!verifyAdminToken(req)) {
         return res.status(401).json({ error: 'Unauthorized: admin token required.' });
@@ -736,7 +767,7 @@ const handler: HandlerFn = async (req: AdaptedRequest, res: AdaptedResponse) => 
             updated_at: new Date().toISOString(),
           };
 
-          // ── write ──
+          // write
           const rawW = await withTimeout(
             (sb.from(TABLE).upsert(
               testRecord,
@@ -749,7 +780,7 @@ const handler: HandlerFn = async (req: AdaptedRequest, res: AdaptedResponse) => 
           if (wErr) throw new Error(formatSBError(wErr));
           canWrite = true;
 
-          // ── read ──
+          // read
           const rawR = await withTimeout(
             (sb.from(TABLE)
                .select('data')
@@ -761,6 +792,15 @@ const handler: HandlerFn = async (req: AdaptedRequest, res: AdaptedResponse) => 
           const { data: rData, error: rErr } = rawR as SbRowAny;
           if (rErr) throw new Error(formatSBError(rErr));
           canRead = !!rData;
+
+          // FIX: cleanup __health__ record setelah test
+          await withTimeout(
+            (sb.from(TABLE)
+               .delete()
+               .eq('username', '__health__') as unknown) as Promise<unknown>,
+            5_000,
+            'healthCleanup',
+          );
         } catch (e: unknown) {
           healthErr = e instanceof Error ? e.message : String(e);
         }
@@ -780,7 +820,6 @@ const handler: HandlerFn = async (req: AdaptedRequest, res: AdaptedResponse) => 
       });
     }
 
-    // GET ?list=1
     if (req.query['list'] === '1') {
       if (!verifyAdminToken(req)) {
         return res.status(401).json({ error: 'Unauthorized: admin token required.' });
@@ -793,7 +832,6 @@ const handler: HandlerFn = async (req: AdaptedRequest, res: AdaptedResponse) => 
       }
     }
 
-    // GET ?user=<username>
     if (!userKey) return res.status(200).json(null);
 
     try {
@@ -823,7 +861,6 @@ const handler: HandlerFn = async (req: AdaptedRequest, res: AdaptedResponse) => 
 
     const { user, robloxId: bodyRobloxId, data, action } = body;
 
-    // ── ADMIN ACTIONS ──────────────────────────────────────
     if (action) {
       if (!verifyAdminToken(req)) {
         return res.status(403).json({
@@ -831,10 +868,6 @@ const handler: HandlerFn = async (req: AdaptedRequest, res: AdaptedResponse) => 
         });
       }
 
-      /**
-       * Fetch user, apply updateFn, save back.
-       * Returns null on success, AdaptedResponse on error.
-       */
       async function adminUpdate(
         target:   unknown,
         updateFn: (existing: UserData) => UserData,
@@ -1023,7 +1056,6 @@ const handler: HandlerFn = async (req: AdaptedRequest, res: AdaptedResponse) => 
 
       const clientData = data as UserData;
 
-      // Whitelist of fields the client is allowed to write
       const SAFE_FIELDS: (keyof UserData)[] = [
         'convs', 'allConvs', 'curConv', 'model', 'guiModel',
         'lastClaim', 'draftText', 'avatar', 'displayName',
@@ -1035,7 +1067,6 @@ const handler: HandlerFn = async (req: AdaptedRequest, res: AdaptedResponse) => 
         if (clientData[f] !== undefined) clientUpdate[f] = clientData[f];
       }
 
-      // robloxId cannot be overwritten once saved on the server
       const resolvedRobloxId: string =
         existing?.robloxId
           ? existing.robloxId
@@ -1047,14 +1078,13 @@ const handler: HandlerFn = async (req: AdaptedRequest, res: AdaptedResponse) => 
         merged = {
           ...existing,
           ...clientUpdate,
-          // Critical fields — server always wins
-          credits:     existing.credits     !== undefined
+          credits:     existing.credits !== undefined
                          ? existing.credits
                          : (parseFloat(String(clientData.credits)) || 30),
-          plan:        existing.plan        ?? 'free',
-          roles:       existing.roles       ?? [],
-          banned:      existing.banned      ?? false,
-          banReason:   existing.banReason   ?? null,
+          plan:        existing.plan      ?? 'free',
+          roles:       existing.roles     ?? [],
+          banned:      existing.banned    ?? false,
+          banReason:   existing.banReason ?? null,
           robloxId:    resolvedRobloxId,
           googleEmail: existing.googleEmail ?? sanitizeStr(String(clientData.googleEmail ?? ''), 100),
           _updated:    Date.now(),
@@ -1089,12 +1119,12 @@ const handler: HandlerFn = async (req: AdaptedRequest, res: AdaptedResponse) => 
 
       const responseData = applyRoleOverrides({ ...savedPayload });
 
-      const sbAvail = await getSB();
-      const kvAvail = await getKV();
+      // FIX: gunakan sb yang sudah di-resolve, tidak panggil getSB() lagi
+      const sbAvail = !!_sb.client && _sb.ready;
+      const kvAvail = !!_kv.client && _kv.ready;
       let storageWarning: string | undefined;
       if (!sbAvail && !kvAvail) {
-        storageWarning =
-          '⚠️ No storage backend available. Data may not have been saved.';
+        storageWarning = '⚠️ No storage backend available. Data may not have been saved.';
       } else if (!sbAvail) {
         storageWarning = '⚠️ Supabase not available, using KV only.';
       }
@@ -1157,17 +1187,23 @@ export default handler;
  *
  * ALTER TABLE nexus_users ENABLE ROW LEVEL SECURITY;
  *
- * CREATE POLICY "service_role_only" ON nexus_users
- *   USING (auth.role() = 'service_role');
+ * -- FIX v16: Policy yang benar untuk service_role di Supabase terbaru
+ * -- auth.role() tidak reliable untuk service role, pakai TO service_role
+ * CREATE POLICY "service_role_full_access" ON nexus_users
+ *   AS PERMISSIVE
+ *   FOR ALL
+ *   TO service_role
+ *   USING (true)
+ *   WITH CHECK (true);
  *
  * ═══════════════════════════════════════════════════════════════════════════
- * ENVIRONMENT VARIABLES
+ * ENVIRONMENT VARIABLES — v16 (NAMA SUDAH DISTANDARISASI)
  * ═══════════════════════════════════════════════════════════════════════════
  *
  * Required:
  *   SUPABASE_URL              = https://<project>.supabase.co
  *   SUPABASE_SERVICE_ROLE_KEY = eyJ...
- *   ADMIN_TOKEN                             = secret-token-min-16-chars
+ *   ADMIN_TOKEN               = secret-token-min-16-chars
  *
  * Optional (KV fallback):
  *   KV_REST_API_URL   = https://...upstash.io

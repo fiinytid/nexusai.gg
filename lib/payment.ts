@@ -11,6 +11,8 @@
 //   • sendEmail return type ExplicitEmailResult interface
 //   • Semua catch (err) → err: unknown dengan narrowing
 //   • Tidak ada perubahan behaviour / endpoint / response shape
+// Email HTML v2: Gmail-compatible (no border-radius on td, no overflow:hidden,
+//   no linear-gradient, table-based layout only)
 
 import { readFileSync, writeFileSync, existsSync } from 'fs';
 import crypto from 'crypto';
@@ -225,40 +227,37 @@ async function resolveAvatar(rawAvatar: string, userId: string): Promise<string>
 
 // ─── EMAIL BUILDER ────────────────────────────────────────────────────────────
 
+/**
+ * Gmail-compatible avatar block.
+ * - No border-radius on <td> (Gmail strips it) — use a wrapping <img> with style
+ * - No linear-gradient backgrounds on <td>
+ * - Fallback initial block uses a flat solid color
+ */
 function buildAvatarBlock(avatarUrl: string, displayName: string, size: number = 70): string {
-  const initial = (displayName || '?').charAt(0).toUpperCase();
-  const half    = Math.round(size / 2);
+  const initial  = (displayName || '?').charAt(0).toUpperCase();
+  const fontSize = Math.round(size * 0.38);
 
   if (avatarUrl) {
     return `
-      <table cellpadding="0" cellspacing="0" border="0" align="center"
-             style="margin:0 auto 12px;">
+      <table cellpadding="0" cellspacing="0" border="0" align="center" style="margin:0 auto 12px;">
         <tr>
-          <td width="${size + 6}" height="${size + 6}" align="center" valign="middle"
-              style="width:${size + 6}px;height:${size + 6}px;
-                     border-radius:${half + 3}px;
-                     background:linear-gradient(135deg,#00e5ff,#8800ff);
-                     padding:3px;">
+          <td align="center" valign="middle" width="${size}" height="${size}"
+              style="width:${size}px;height:${size}px;padding:3px;background-color:#5500cc;">
             <img src="${avatarUrl}" width="${size}" height="${size}"
                  alt="@${displayName}"
-                 style="display:block;width:${size}px;height:${size}px;
-                        border-radius:${half}px;border:0;" />
+                 style="display:block;width:${size}px;height:${size}px;border:0;" />
           </td>
         </tr>
       </table>`;
   }
 
   return `
-    <table cellpadding="0" cellspacing="0" border="0" align="center"
-           style="margin:0 auto 12px;">
+    <table cellpadding="0" cellspacing="0" border="0" align="center" style="margin:0 auto 12px;">
       <tr>
-        <td width="${size}" height="${size}" align="center" valign="middle"
-            style="width:${size}px;height:${size}px;
-                   border-radius:${half}px;
-                   background:linear-gradient(135deg,#0a1040,#0f2060);
+        <td align="center" valign="middle" width="${size}" height="${size}"
+            style="width:${size}px;height:${size}px;background-color:#0a1040;
                    border:3px solid #00e5ff;
-                   font-size:${Math.round(size * 0.38)}px;
-                   font-weight:700;color:#ffffff;
+                   font-size:${fontSize}px;font-weight:700;color:#ffffff;
                    font-family:${FONT_SANS};text-align:center;">
           ${initial}
         </td>
@@ -285,207 +284,302 @@ function buildPaymentEmail({
 </head>
 <body style="margin:0;padding:0;background-color:#030312;">
 
+<!--[if mso]><table width="100%" cellpadding="0" cellspacing="0" border="0"><tr><td><![endif]-->
 <table cellpadding="0" cellspacing="0" border="0" width="100%"
-       style="background-color:#030312;">
-<tr><td align="center" style="padding:28px 12px;">
+       style="background-color:#030312;margin:0;padding:0;">
+  <tr>
+    <td align="center" style="padding:28px 12px;">
 
-  <table cellpadding="0" cellspacing="0" border="0" width="580"
-         style="max-width:580px;width:100%;">
+      <table cellpadding="0" cellspacing="0" border="0" width="580"
+             style="max-width:580px;width:100%;">
 
-    <!-- HEADER -->
-    <tr><td>
-      <table cellpadding="0" cellspacing="0" border="0" width="100%"
-             style="background-color:#0b0c24;border:1px solid #1a2a4a;
-                    border-radius:14px 14px 0 0;overflow:hidden;">
+        <!-- ══ HEADER TOP COLOR BAR ══ -->
         <tr>
-          <td height="3" style="background-color:#8800ff;font-size:0;width:33%;">&nbsp;</td>
-          <td height="3" style="background-color:#00e5ff;font-size:0;width:34%;">&nbsp;</td>
-          <td height="3" style="background-color:#00ffaa;font-size:0;width:33%;">&nbsp;</td>
+          <td width="194" height="4" bgcolor="#8800ff" style="font-size:0;line-height:0;">&nbsp;</td>
+          <td width="193" height="4" bgcolor="#00e5ff" style="font-size:0;line-height:0;">&nbsp;</td>
+          <td width="193" height="4" bgcolor="#00ffaa" style="font-size:0;line-height:0;">&nbsp;</td>
         </tr>
+
+        <!-- ══ HEADER ══ -->
         <tr>
-          <td colspan="3" align="center" style="padding:26px 28px 8px;">
+          <td colspan="3" bgcolor="#0b0c24"
+              style="padding:26px 28px 8px;border-left:1px solid #1a2a4a;
+                     border-right:1px solid #1a2a4a;text-align:center;">
             <p style="margin:0 0 4px;font-family:${FONT_MONO};font-size:10px;
                       font-weight:700;color:#8800ff;letter-spacing:5px;
-                      text-transform:uppercase;">◆ NEXUS STUDIO ◆</p>
+                      text-transform:uppercase;">&#9670; NEXUS STUDIO &#9670;</p>
             <p style="margin:0;font-family:${FONT_MONO};font-size:28px;
                       font-weight:900;letter-spacing:5px;color:#00e5ff;">NEXUS AI</p>
           </td>
         </tr>
         <tr>
-          <td colspan="3" align="center" style="padding:0 28px 24px;">
-            <table cellpadding="0" cellspacing="0" border="0" align="center"><tr>
-              <td style="background-color:#002a18;color:#00ffaa;border:1px solid #005a30;
-                         border-radius:20px;padding:5px 18px;font-family:${FONT_SANS};
-                         font-size:10px;font-weight:700;letter-spacing:2px;
-                         text-transform:uppercase;">💳 NEW PAYMENT RECEIVED</td>
-            </tr></table>
-          </td>
-        </tr>
-      </table>
-    </td></tr>
-
-    <!-- BODY -->
-    <tr><td style="background-color:#07081e;border-left:1px solid #1a2a4a;
-                   border-right:1px solid #1a2a4a;padding:24px 24px 8px;">
-
-      <!-- USER CARD -->
-      <table cellpadding="0" cellspacing="0" border="0" width="100%"
-             style="background-color:#0c0e26;border:1px solid #1a2a50;
-                    border-radius:12px;margin-bottom:18px;">
-        <tr>
-          <td align="center" style="padding:22px 20px 20px;">
-            ${avatarBlock}
-            <p style="margin:0 0 3px;font-family:${FONT_SANS};font-size:17px;
-                      font-weight:700;color:#ffffff;letter-spacing:1px;">@${displayName}</p>
-            <p style="margin:0;font-family:${FONT_MONO};font-size:10px;
-                      color:#3a5a7a;letter-spacing:1px;">
-              Roblox UID:&nbsp;<span style="color:#5a7aaa;">${displayUid}</span>
-            </p>
-          </td>
-        </tr>
-      </table>
-
-      <!-- PAYMENT DETAILS -->
-      <table cellpadding="0" cellspacing="0" border="0" width="100%"
-             style="margin-bottom:18px;background-color:#060d1e;
-                    border:1px solid #0a3a1a;border-radius:10px;overflow:hidden;">
-        <tr>
-          <td colspan="2" height="3"
-              style="background-color:#00ffaa;font-size:0;line-height:0;">&nbsp;</td>
-        </tr>
-        <tr>
-          <td colspan="2" style="padding:14px 20px 8px;">
-            <p style="margin:0;font-family:${FONT_MONO};font-size:10px;font-weight:700;
-                      color:#00ffaa;letter-spacing:3px;text-transform:uppercase;">
-              💳 PAYMENT DETAILS</p>
-          </td>
-        </tr>
-        <tr>
-          <td style="padding:10px 20px;font-family:${FONT_MONO};font-size:10px;
-                     color:#3a5a7a;width:120px;border-bottom:1px solid #0a1e2a;">PACKAGE</td>
-          <td style="padding:10px 20px 10px 0;font-family:${FONT_SANS};font-size:13px;
-                     color:#ffffff;font-weight:700;border-bottom:1px solid #0a1e2a;">
-            ${esc(pkg.label, 70)}</td>
-        </tr>
-        <tr>
-          <td style="padding:10px 20px;font-family:${FONT_MONO};font-size:10px;
-                     color:#3a5a7a;border-bottom:1px solid #0a1e2a;">CREDITS</td>
-          <td style="padding:10px 20px 10px 0;font-family:${FONT_MONO};font-size:20px;
-                     color:#ffd600;font-weight:700;border-bottom:1px solid #0a1e2a;">
-            ${pkg.cr} CR</td>
-        </tr>
-        <tr>
-          <td style="padding:10px 20px;font-family:${FONT_MONO};font-size:10px;
-                     color:#3a5a7a;border-bottom:1px solid #0a1e2a;">METHOD</td>
-          <td style="padding:10px 20px 10px 0;font-family:${FONT_SANS};font-size:12px;
-                     color:#00e5ff;font-weight:700;text-transform:uppercase;
-                     letter-spacing:1px;border-bottom:1px solid #0a1e2a;">
-            ${esc(method.toUpperCase(), 20)}</td>
-        </tr>
-        <tr>
-          <td style="padding:14px 20px;font-family:${FONT_SANS};font-size:12px;
-                     color:#ffffff;font-weight:700;letter-spacing:1px;">TOTAL PAID</td>
-          <td style="padding:14px 20px 14px 0;font-family:${FONT_MONO};font-size:22px;
-                     color:#00ffaa;font-weight:700;">${esc(paymentFmt, 30)}</td>
-        </tr>
-        <tr>
-          <td colspan="2" style="padding:0 16px 16px;">
-            <table cellpadding="0" cellspacing="0" border="0" width="100%"
-                   style="background-color:#1a1200;border:1px solid #3a2a00;border-radius:8px;">
-              <tr><td style="padding:14px 16px;">
-                <p style="margin:0 0 8px;font-family:${FONT_SANS};font-size:10px;
-                          font-weight:700;color:#ffd600;letter-spacing:2px;
-                          text-transform:uppercase;">⚡ ACTION REQUIRED</p>
-                <p style="margin:0;font-family:${FONT_SANS};font-size:12px;
-                          color:#b8cce8;line-height:1.7;">
-                  Add <strong style="color:#ffd600;font-size:15px;">${pkg.cr} CR</strong>
-                  to account <strong style="color:#ffffff;">@${displayName}</strong>
-                  <span style="color:#3a5a7a;">(UID: ${displayUid})</span>
-                  after verifying the transfer.
-                </p>
-              </td></tr>
+          <td colspan="3" bgcolor="#0b0c24"
+              style="padding:0 28px 24px;border-left:1px solid #1a2a4a;
+                     border-right:1px solid #1a2a4a;text-align:center;">
+            <table cellpadding="0" cellspacing="0" border="0" align="center">
+              <tr>
+                <td bgcolor="#002a18"
+                    style="color:#00ffaa;border:1px solid #005a30;
+                           padding:5px 18px;font-family:${FONT_SANS};
+                           font-size:10px;font-weight:700;letter-spacing:2px;
+                           text-transform:uppercase;">
+                  &#128179; NEW PAYMENT RECEIVED
+                </td>
+              </tr>
             </table>
           </td>
         </tr>
-      </table>
 
-      ${note ? `
-      <!-- TRANSFER NOTE -->
-      <table cellpadding="0" cellspacing="0" border="0" width="100%"
-             style="margin-bottom:18px;background-color:#06080f;
-                    border:1px solid #0e1e3a;border-radius:10px;overflow:hidden;">
+        <!-- ══ BODY ══ -->
         <tr>
-          <td width="4" style="background-color:#8800ff;font-size:0;">&nbsp;</td>
-          <td style="padding:14px 16px;">
-            <p style="margin:0 0 8px;font-family:${FONT_MONO};font-size:9px;font-weight:700;
-                      color:#8800ff;letter-spacing:3px;text-transform:uppercase;">
-              📋 TRANSFER NOTE</p>
-            <p style="margin:0;font-family:${FONT_SANS};font-size:12px;
-                      color:#b0c8e8;line-height:1.7;">${esc(note, 300)}</p>
+          <td colspan="3" bgcolor="#07081e"
+              style="padding:24px 24px 8px;border-left:1px solid #1a2a4a;
+                     border-right:1px solid #1a2a4a;">
+
+            <!-- USER CARD -->
+            <table cellpadding="0" cellspacing="0" border="0" width="100%"
+                   style="margin-bottom:18px;">
+              <!-- top border line -->
+              <tr>
+                <td bgcolor="#00e5ff" height="2" style="font-size:0;line-height:0;">&nbsp;</td>
+              </tr>
+              <tr>
+                <td bgcolor="#0c0e26"
+                    style="padding:22px 20px 20px;border-left:1px solid #1a2a50;
+                           border-right:1px solid #1a2a50;text-align:center;">
+                  ${avatarBlock}
+                  <p style="margin:0 0 3px;font-family:${FONT_SANS};font-size:17px;
+                            font-weight:700;color:#ffffff;letter-spacing:1px;">
+                    @${displayName}
+                  </p>
+                  <p style="margin:0;font-family:${FONT_MONO};font-size:10px;
+                            color:#3a5a7a;letter-spacing:1px;">
+                    Roblox UID:&nbsp;<span style="color:#5a7aaa;">${displayUid}</span>
+                  </p>
+                </td>
+              </tr>
+              <tr>
+                <td bgcolor="#1a2a50" height="1" style="font-size:0;line-height:0;">&nbsp;</td>
+              </tr>
+            </table>
+
+            <!-- PAYMENT DETAILS TABLE -->
+            <table cellpadding="0" cellspacing="0" border="0" width="100%"
+                   style="margin-bottom:18px;">
+              <!-- top accent bar -->
+              <tr>
+                <td colspan="2" bgcolor="#00ffaa" height="3"
+                    style="font-size:0;line-height:0;">&nbsp;</td>
+              </tr>
+              <!-- section title -->
+              <tr>
+                <td colspan="2" bgcolor="#060d1e"
+                    style="padding:14px 20px 8px;border-left:1px solid #0a3a1a;
+                           border-right:1px solid #0a3a1a;">
+                  <p style="margin:0;font-family:${FONT_MONO};font-size:10px;font-weight:700;
+                            color:#00ffaa;letter-spacing:3px;text-transform:uppercase;">
+                    &#128179; PAYMENT DETAILS
+                  </p>
+                </td>
+              </tr>
+              <!-- row: package -->
+              <tr>
+                <td bgcolor="#060d1e" width="120"
+                    style="padding:10px 20px;font-family:${FONT_MONO};font-size:10px;
+                           color:#3a5a7a;border-left:1px solid #0a3a1a;
+                           border-bottom:1px solid #0a1e2a;">
+                  PACKAGE
+                </td>
+                <td bgcolor="#060d1e"
+                    style="padding:10px 20px 10px 0;font-family:${FONT_SANS};font-size:13px;
+                           color:#ffffff;font-weight:700;border-right:1px solid #0a3a1a;
+                           border-bottom:1px solid #0a1e2a;">
+                  ${esc(pkg.label, 70)}
+                </td>
+              </tr>
+              <!-- row: credits -->
+              <tr>
+                <td bgcolor="#060d1e"
+                    style="padding:10px 20px;font-family:${FONT_MONO};font-size:10px;
+                           color:#3a5a7a;border-left:1px solid #0a3a1a;
+                           border-bottom:1px solid #0a1e2a;">
+                  CREDITS
+                </td>
+                <td bgcolor="#060d1e"
+                    style="padding:10px 20px 10px 0;font-family:${FONT_MONO};font-size:20px;
+                           color:#ffd600;font-weight:700;border-right:1px solid #0a3a1a;
+                           border-bottom:1px solid #0a1e2a;">
+                  ${pkg.cr} CR
+                </td>
+              </tr>
+              <!-- row: method -->
+              <tr>
+                <td bgcolor="#060d1e"
+                    style="padding:10px 20px;font-family:${FONT_MONO};font-size:10px;
+                           color:#3a5a7a;border-left:1px solid #0a3a1a;
+                           border-bottom:1px solid #0a1e2a;">
+                  METHOD
+                </td>
+                <td bgcolor="#060d1e"
+                    style="padding:10px 20px 10px 0;font-family:${FONT_SANS};font-size:12px;
+                           color:#00e5ff;font-weight:700;text-transform:uppercase;
+                           letter-spacing:1px;border-right:1px solid #0a3a1a;
+                           border-bottom:1px solid #0a1e2a;">
+                  ${esc(method.toUpperCase(), 20)}
+                </td>
+              </tr>
+              <!-- row: total -->
+              <tr>
+                <td bgcolor="#060d1e"
+                    style="padding:14px 20px;font-family:${FONT_SANS};font-size:12px;
+                           color:#ffffff;font-weight:700;letter-spacing:1px;
+                           border-left:1px solid #0a3a1a;border-bottom:1px solid #0a3a1a;">
+                  TOTAL PAID
+                </td>
+                <td bgcolor="#060d1e"
+                    style="padding:14px 20px 14px 0;font-family:${FONT_MONO};font-size:22px;
+                           color:#00ffaa;font-weight:700;border-right:1px solid #0a3a1a;
+                           border-bottom:1px solid #0a3a1a;">
+                  ${esc(paymentFmt, 30)}
+                </td>
+              </tr>
+              <!-- ACTION REQUIRED box -->
+              <tr>
+                <td colspan="2" bgcolor="#060d1e"
+                    style="padding:12px 16px 16px;border-left:1px solid #0a3a1a;
+                           border-right:1px solid #0a3a1a;border-bottom:1px solid #0a3a1a;">
+                  <table cellpadding="0" cellspacing="0" border="0" width="100%">
+                    <tr>
+                      <td bgcolor="#1a1200"
+                          style="padding:14px 16px;border:1px solid #3a2a00;">
+                        <p style="margin:0 0 8px;font-family:${FONT_SANS};font-size:10px;
+                                  font-weight:700;color:#ffd600;letter-spacing:2px;
+                                  text-transform:uppercase;">
+                          &#9889; ACTION REQUIRED
+                        </p>
+                        <p style="margin:0;font-family:${FONT_SANS};font-size:12px;
+                                  color:#b8cce8;line-height:1.7;">
+                          Add <strong style="color:#ffd600;font-size:15px;">${pkg.cr} CR</strong>
+                          to account <strong style="color:#ffffff;">@${displayName}</strong>
+                          <span style="color:#3a5a7a;">(UID: ${displayUid})</span>
+                          after verifying the transfer.
+                        </p>
+                      </td>
+                    </tr>
+                  </table>
+                </td>
+              </tr>
+            </table>
+
+            ${note ? `
+            <!-- TRANSFER NOTE -->
+            <table cellpadding="0" cellspacing="0" border="0" width="100%"
+                   style="margin-bottom:18px;">
+              <tr>
+                <td width="4" bgcolor="#8800ff" style="font-size:0;">&nbsp;</td>
+                <td bgcolor="#06080f"
+                    style="padding:14px 16px;border-top:1px solid #0e1e3a;
+                           border-right:1px solid #0e1e3a;border-bottom:1px solid #0e1e3a;">
+                  <p style="margin:0 0 8px;font-family:${FONT_MONO};font-size:9px;
+                            font-weight:700;color:#8800ff;letter-spacing:3px;
+                            text-transform:uppercase;">
+                    &#128203; TRANSFER NOTE
+                  </p>
+                  <p style="margin:0;font-family:${FONT_SANS};font-size:12px;
+                            color:#b0c8e8;line-height:1.7;">
+                    ${esc(note, 300)}
+                  </p>
+                </td>
+              </tr>
+            </table>` : ''}
+
+            <!-- TRANSACTION META -->
+            <table cellpadding="0" cellspacing="0" border="0" width="100%"
+                   style="margin-bottom:24px;">
+              <tr>
+                <td colspan="2" bgcolor="#04050f"
+                    style="padding:14px 18px;border:1px solid #0a0f20;
+                           border-bottom:1px solid #0a0f1e;">
+                  <table cellpadding="0" cellspacing="0" border="0" width="100%">
+                    <tr>
+                      <td style="vertical-align:top;">
+                        <p style="margin:0 0 3px;font-family:${FONT_MONO};font-size:9px;
+                                  color:#1e3050;letter-spacing:1px;text-transform:uppercase;">
+                          Transaction ID
+                        </p>
+                        <p style="margin:0;font-family:${FONT_MONO};font-size:11px;
+                                  color:#4a6a9a;word-break:break-all;">
+                          ${esc(transactionId, 60)}
+                        </p>
+                      </td>
+                      <td align="right" style="white-space:nowrap;padding-left:16px;vertical-align:top;">
+                        <p style="margin:0 0 3px;font-family:${FONT_MONO};font-size:9px;
+                                  color:#1e3050;letter-spacing:1px;text-transform:uppercase;">
+                          Submitted
+                        </p>
+                        <p style="margin:0;font-family:${FONT_MONO};font-size:11px;
+                                  color:#4a6a9a;">
+                          ${formattedAt}
+                        </p>
+                      </td>
+                    </tr>
+                  </table>
+                </td>
+              </tr>
+              <tr>
+                <td colspan="2" bgcolor="#04050f"
+                    style="padding:12px 18px;border-left:1px solid #0a0f20;
+                           border-right:1px solid #0a0f20;border-bottom:1px solid #0a0f20;">
+                  <p style="margin:0 0 3px;font-family:${FONT_MONO};font-size:9px;
+                            color:#1e3050;letter-spacing:1px;text-transform:uppercase;">
+                    Payment Status
+                  </p>
+                  <p style="margin:0;font-family:${FONT_SANS};font-size:12px;font-weight:700;
+                            color:#ffd600;letter-spacing:1px;text-transform:uppercase;">
+                    &#9203; AWAITING CONFIRMATION
+                  </p>
+                </td>
+              </tr>
+            </table>
+
           </td>
         </tr>
-      </table>` : ''}
 
-      <!-- TRANSACTION META -->
-      <table cellpadding="0" cellspacing="0" border="0" width="100%"
-             style="margin-bottom:24px;background-color:#04050f;
-                    border:1px solid #0a0f20;border-radius:10px;overflow:hidden;">
+        <!-- ══ FOOTER ══ -->
         <tr>
-          <td style="padding:14px 18px;border-bottom:1px solid #0a0f1e;">
-            <table cellpadding="0" cellspacing="0" border="0" width="100%"><tr>
-              <td>
-                <p style="margin:0 0 3px;font-family:${FONT_MONO};font-size:9px;
-                          color:#1e3050;letter-spacing:1px;text-transform:uppercase;">
-                  Transaction ID</p>
-                <p style="margin:0;font-family:${FONT_MONO};font-size:11px;
-                          color:#4a6a9a;word-break:break-all;">
-                  ${esc(transactionId, 60)}</p>
-              </td>
-              <td align="right" style="white-space:nowrap;padding-left:16px;">
-                <p style="margin:0 0 3px;font-family:${FONT_MONO};font-size:9px;
-                          color:#1e3050;letter-spacing:1px;text-transform:uppercase;">
-                  Submitted</p>
-                <p style="margin:0;font-family:${FONT_MONO};font-size:11px;
-                          color:#4a6a9a;">${formattedAt}</p>
-              </td>
-            </tr></table>
+          <td colspan="3" bgcolor="#03040e"
+              style="padding:0;border-left:1px solid #0f1830;
+                     border-right:1px solid #0f1830;border-bottom:1px solid #0f1830;">
+            <!-- divider bar -->
+            <table cellpadding="0" cellspacing="0" border="0" width="100%">
+              <tr>
+                <td width="194" height="1" bgcolor="#8800ff" style="font-size:0;">&nbsp;</td>
+                <td width="193" height="1" bgcolor="#00e5ff" style="font-size:0;">&nbsp;</td>
+                <td width="193" height="1" bgcolor="#00ffaa" style="font-size:0;">&nbsp;</td>
+              </tr>
+            </table>
+            <table cellpadding="0" cellspacing="0" border="0" width="100%">
+              <tr>
+                <td style="padding:18px 24px;text-align:center;">
+                  <p style="margin:0 0 4px;font-family:${FONT_MONO};font-size:9px;
+                            color:#1e2a4a;letter-spacing:3px;text-transform:uppercase;">
+                    NEXUS AI &nbsp;&middot;&nbsp; NEXUS STUDIO
+                  </p>
+                  <p style="margin:0;font-family:${FONT_SANS};font-size:10px;color:#141e30;">
+                    Automated notification — do not reply to this email.
+                  </p>
+                </td>
+              </tr>
+            </table>
           </td>
         </tr>
-        <tr>
-          <td style="padding:12px 18px;">
-            <p style="margin:0 0 3px;font-family:${FONT_MONO};font-size:9px;
-                      color:#1e3050;letter-spacing:1px;text-transform:uppercase;">
-              Payment Status</p>
-            <p style="margin:0;font-family:${FONT_SANS};font-size:12px;font-weight:700;
-                      color:#ffd600;letter-spacing:1px;text-transform:uppercase;">
-              ⏳ AWAITING CONFIRMATION</p>
-          </td>
-        </tr>
+
       </table>
-
-    </td></tr>
-
-    <!-- FOOTER -->
-    <tr><td style="background-color:#03040e;border:1px solid #0f1830;
-                   border-top:none;border-radius:0 0 14px 14px;padding:20px 24px;">
-      <table cellpadding="0" cellspacing="0" border="0" width="100%"
-             style="margin-bottom:14px;">
-        <tr>
-          <td height="1" style="background-color:#8800ff;font-size:0;width:33%;">&nbsp;</td>
-          <td height="1" style="background-color:#00e5ff;font-size:0;width:34%;">&nbsp;</td>
-          <td height="1" style="background-color:#00ffaa;font-size:0;width:33%;">&nbsp;</td>
-        </tr>
-      </table>
-      <p style="margin:0 0 4px;text-align:center;font-family:${FONT_MONO};font-size:9px;
-                color:#1e2a4a;letter-spacing:3px;text-transform:uppercase;">
-        NEXUS AI &nbsp;&middot;&nbsp; NEXUS STUDIO</p>
-      <p style="margin:0;text-align:center;font-family:${FONT_SANS};font-size:10px;
-                color:#141e30;">Automated notification — do not reply to this email.</p>
-    </td></tr>
-
-  </table>
-</td></tr>
+    </td>
+  </tr>
 </table>
+<!--[if mso]></td></tr></table><![endif]-->
+
 </body>
 </html>`;
 }
@@ -704,7 +798,7 @@ const handler: HandlerFn = async (req: AdaptedRequest, res: AdaptedResponse) => 
     // Fire-and-forget email notification
     sendEmail({
       to:      ADMIN_EMAIL,
-      subject: `[NEXUS] 💳 New Payment — @${cleanUsername} · ${pkg.cr} CR (${pkg.id})`,
+      subject: `[NEXUS] New Payment — @${cleanUsername} · ${pkg.cr} CR (${pkg.id})`,
       html,
     }).then(r => {
       if (!r.ok) console.warn('[payment] Email delivery failed:', r.reason ?? r.error);
@@ -773,7 +867,7 @@ const handler: HandlerFn = async (req: AdaptedRequest, res: AdaptedResponse) => 
     // ── CONFIRM ────────────────────────────────────────────────────
     if (action === 'confirm') {
       try {
-        const host    = req.headers['host'] ?? 'nexusai-roblox.vercel.app';
+        const host    = req.headers['host'] ?? 'nexusai-rbx.vercel.app';
         const syncUrl = `https://${host}/api/sync`;
         const syncRes = await fetch(syncUrl, {
           method:  'POST',

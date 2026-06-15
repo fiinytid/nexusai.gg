@@ -51,7 +51,7 @@ const DANGER_KEYS: readonly string[] = [
   'ROBLOX_CLIENT_SECRET',
   'GMAIL_CLIENT_SECRET',
   'OAUTH_STATE_SECRET',
-  'STORAGE_NEXUS_SUPABASE_SERVICE_ROLE_KEY',
+  'SUPABASE_SERVICE_ROLE_KEY',
 ] as const;
 
 // ─── MAIN HANDLER ─────────────────────────────────────────────────────────────
