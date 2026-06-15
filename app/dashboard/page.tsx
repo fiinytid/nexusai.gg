@@ -1,5 +1,6 @@
 'use client'
 
+import { useClerk } from '@clerk/nextjs'
 import React, { useEffect, useRef, useState, useCallback } from 'react'
 
 interface Project {
@@ -1153,6 +1154,7 @@ export default function DashboardPage() {
   const [dailyDisabled, setDailyDisabled] = useState(false)
   const [inputError,    setInputError]    = useState(false)
   const [isMobile,      setIsMobile]      = useState(false)
+  const { openUserProfile } = useClerk()
   const [mobileInfoOpen, setMobileInfoOpen]  = useState(false)
   const [mobileInfoDismissed, setMobileInfoDismissed] = useState(false)
 
@@ -1596,10 +1598,10 @@ export default function DashboardPage() {
       </div>
 
       <div className="ud-section">
-        {/* ── MY ACCOUNT BUTTON ── */}
-        <a className="ud-item" href="/account" onClick={onAction} role="menuitem">
+        {/* ── MY ACCOUNT — opens Clerk modal ── */}
+        <button className="ud-item" onClick={() => { openUserProfile(); onAction() }} role="menuitem">
           <Icon.user />My Account
-        </a>
+        </button>
         <button className="ud-item" onClick={() => { setSettingsOpen(true); onAction() }} role="menuitem">
           <Icon.settings />Settings
         </button>
@@ -1755,10 +1757,10 @@ export default function DashboardPage() {
           </div>
         </div>
 
-        {/* ── MY ACCOUNT ── */}
-        <a className="ms-item" href="/account" onClick={closeSheet}>
+        {/* ── MY ACCOUNT — opens Clerk modal ── */}
+        <button className="ms-item" onClick={() => { openUserProfile(); closeSheet() }}>
           <Icon.user />My Account
-        </a>
+        </button>
         <button className="ms-item" onClick={() => { setSettingsOpen(true); closeSheet() }}>
           <Icon.settings />Settings
         </button>
@@ -2092,9 +2094,10 @@ export default function DashboardPage() {
             <div className="settings-row"><label>Plan</label><span className="s-val cyan">{planLabel}</span></div>
             <div className="settings-row">
               <label>Manage full account</label>
-              <a href="/account" className="settings-btn" onClick={() => setSettingsOpen(false)}>
+              {/* ── MY ACCOUNT — opens Clerk modal ── */}
+              <button className="settings-btn" onClick={() => { setSettingsOpen(false); openUserProfile() }}>
                 My Account
-              </a>
+              </button>
             </div>
           </div>
 

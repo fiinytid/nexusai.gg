@@ -1,6 +1,6 @@
 import { auth } from "@clerk/nextjs/server";
+import { UserProfile } from "@clerk/nextjs";
 import { redirect } from "next/navigation";
-import { AccountPageClient } from "./AccountPageClient";
 import type { Metadata } from "next";
 
 export const metadata: Metadata = {
@@ -13,5 +13,16 @@ export default async function AccountPage() {
   const { userId } = await auth();
   if (!userId) redirect("/login");
 
-  return <AccountPageClient />;
+  return (
+    <div className="flex justify-center py-10">
+      <UserProfile
+        appearance={{
+          elements: {
+            rootBox: "w-full max-w-4xl",
+            card: "shadow-none border border-border rounded-xl",
+          },
+        }}
+      />
+    </div>
+  );
 }

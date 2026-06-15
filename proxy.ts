@@ -1,4 +1,4 @@
-// middleware.ts
+// proxy.ts
 import { clerkMiddleware } from "@clerk/nextjs/server";
 
 export default clerkMiddleware();
