@@ -1320,7 +1320,6 @@ export default function DashboardPage() {
                   variables: {
                     colorPrimary:         '#00d4ff',
                     colorBackground:      'transparent',
-                    colorInputBackground: 'rgba(0,0,0,0.4)',
                     colorText:            '#cbd5e1',
                     colorTextSecondary:   '#94a3b8',
                     colorNeutral:         '#0c0c24',
