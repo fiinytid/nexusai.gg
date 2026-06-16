@@ -825,14 +825,11 @@ function ClerkProfileModal({ onClose }: { onClose: () => void }) {
                 variables: {
                   colorPrimary:       '#00d4ff',
                   colorBackground:    'transparent',
-                  colorText:          '#cbd5e1',
-                  colorTextSecondary: '#94a3b8',
                   colorDanger:        '#f43f5e',
                   colorSuccess:       '#10b981',
                   borderRadius:       '10px',
                   fontFamily:         "'JetBrains Mono', monospace",
                   fontFamilyButtons:  "'Orbitron', sans-serif",
-                  fontSize:           '13px',
                 },
                 elements: {
                   rootBox:                  { width: '100%', maxWidth: '100%' },
