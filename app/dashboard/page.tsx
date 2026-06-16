@@ -1,7 +1,6 @@
 'use client'
 
 import { useRouter } from 'next/navigation'
-import { UserProfile } from '@clerk/nextjs'
 import React, { useEffect, useRef, useState, useCallback } from 'react'
 
 interface Project {
@@ -259,7 +258,13 @@ body::after {
 /* ── MOBILE BOTTOM SHEET ── */
 .mobile-sheet-overlay { position: fixed; inset: 0; z-index: 8000; background: rgba(2,2,16,.7); backdrop-filter: blur(8px); display: none; animation: overlayIn .2s ease; }
 .mobile-sheet-overlay.show { display: block; }
-.mobile-sheet { position: fixed; bottom: 0; left: 0; right: 0; z-index: 8001; background: var(--bg2); border-top: 1px solid var(--border); border-radius: 20px 20px 0 0; padding: 8px 0 env(safe-area-inset-bottom, 16px); max-height: 85vh; overflow-y: auto; display: none; }
+.mobile-sheet {
+  position: fixed; bottom: 0; left: 0; right: 0; z-index: 8001;
+  background: var(--bg2); border-top: 1px solid var(--border);
+  border-radius: 20px 20px 0 0;
+  padding: 8px 0 max(env(safe-area-inset-bottom, 16px), 16px);
+  max-height: 90vh; overflow-y: auto; display: none;
+}
 .mobile-sheet.show { display: block; animation: slideUp .28s cubic-bezier(.32,1,.6,1) both; }
 .mobile-sheet.hide { animation: slideDown .22s ease forwards; }
 .ms-handle { width: 36px; height: 4px; border-radius: 2px; background: var(--dim); margin: 8px auto 16px; }
@@ -284,7 +289,7 @@ body::after {
 /* ── PAGE HEADER ── */
 .page-header { display: flex; align-items: center; justify-content: space-between; gap: 16px; margin-bottom: 32px; flex-wrap: wrap; animation: fadeUp .4s ease both; }
 .header-left { display: flex; align-items: center; gap: 14px; min-width: 0; }
-.header-av-wrap { width: 58px; height: 58px; border-radius: var(--r2); background: var(--bg2); border: 1px solid var(--border); overflow: hidden; flex-shrink: 0; box-shadow: var(--glow-cyan), var(--shadow); }
+.header-av-wrap { width: 58px; height: 58px; border-radius: var(--r2); background: var(--bg2); border: 1px solid var(--border); overflow: hidden; flex-shrink: 0; box-shadow: var(--glow-cyan), var(--shadow); cursor: pointer; }
 .header-av-wrap img { width: 100%; height: 100%; object-fit: cover; display: block; }
 .header-info { min-width: 0; }
 .header-info h1 { font-family: 'Orbitron', sans-serif; font-size: 20px; font-weight: 900; color: #fff; margin-bottom: 4px; line-height: 1.25; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
@@ -382,7 +387,7 @@ body::after {
 .search-input { width: 100%; background: var(--bg2); border: 1px solid var(--border); border-radius: var(--r); padding: 0 12px 0 36px; height: 44px; color: var(--text); font-family: 'JetBrains Mono', monospace; font-size: 12px; outline: none; transition: all .2s; -webkit-appearance: none; appearance: none; }
 .search-input:focus { border-color: rgba(0,212,255,.28); box-shadow: 0 0 0 2px rgba(0,212,255,.04); }
 .search-input::placeholder { color: var(--dim2); }
-.sort-select { background: var(--bg2); border: 1px solid var(--border); border-radius: var(--r); padding: 0 32px 0 12px; height: 44px; color: var(--text); font-family: 'JetBrains Mono', monospace; font-size: 10px; outline: none; cursor: pointer; transition: all .2s; flex-shrink: 0; width: 110px; -webkit-appearance: none; appearance: none; background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='10' height='6' viewBox='0 0 10 6'%3E%3Cpath d='M1 1l4 4 4-4' stroke='%23475569' stroke-width='1.5' fill='none' stroke-linecap='round'/%3E%3C/svg%3E"); background-repeat: no-repeat; background-position: right 10px center; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.sort-select { background: var(--bg2); border: 1px solid var(--border); border-radius: var(--r); padding: 0 32px 0 12px; height: 44px; color: var(--text); font-family: 'JetBrains Mono', monospace; font-size: 10px; outline: none; cursor: pointer; transition: all .2s; flex-shrink: 0; width: 110px; -webkit-appearance: none; appearance: none; background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='10' height='6' viewBox='0 0 10 6'%3E%3Cpath d='M1 1l4 4 4-4' stroke='%23475569' stroke-width='1.5' fill='none' stroke-linecap='round'/%3E%3C/svg%3E"); background-repeat: no-repeat; background-position: right 10px center; }
 .sort-select:focus { border-color: rgba(0,212,255,.28); }
 
 /* ── SECTION HEADER ── */
@@ -432,9 +437,103 @@ body::after {
 .empty-hint.warn { color: var(--orange); border-color: rgba(249,115,22,.18); background: rgba(249,115,22,.04); }
 .empty-hint.warn svg { stroke: var(--orange); }
 
+/* ── ACCOUNT MODAL (replaces Clerk UserProfile) ── */
+.account-overlay {
+  position: fixed; inset: 0; z-index: 10000;
+  background: rgba(2,2,16,.92);
+  backdrop-filter: blur(18px) saturate(1.3);
+  -webkit-backdrop-filter: blur(18px) saturate(1.3);
+  display: flex; align-items: center; justify-content: center;
+  padding: 16px;
+  animation: overlayIn .22s ease;
+}
+.account-panel {
+  position: relative;
+  background: var(--bg2);
+  border: 1px solid var(--border2);
+  border-radius: 20px;
+  box-shadow: 0 32px 80px rgba(0,0,0,.85), 0 0 0 1px rgba(0,212,255,.06);
+  width: 100%; max-width: 520px;
+  max-height: calc(100vh - 32px);
+  overflow-y: auto;
+  -webkit-overflow-scrolling: touch;
+  animation: scaleIn .22s ease;
+}
+.account-panel::before {
+  content: ""; position: absolute; top: 0; left: 0; right: 0; height: 2px;
+  background: linear-gradient(90deg, transparent 5%, var(--cyan) 35%, var(--purple) 65%, transparent 95%);
+  border-radius: 20px 20px 0 0; pointer-events: none; z-index: 1;
+}
+.account-header {
+  display: flex; align-items: center; justify-content: space-between;
+  padding: 20px 24px 16px;
+  position: sticky; top: 0; z-index: 2;
+  background: var(--bg2);
+  border-bottom: 1px solid var(--border);
+}
+.account-title {
+  font-family: 'Orbitron', sans-serif; font-size: 12px; font-weight: 700;
+  color: var(--cyan); display: flex; align-items: center; gap: 8px;
+  letter-spacing: .5px;
+}
+.account-title svg { width: 15px; height: 15px; stroke: currentColor; fill: none; stroke-width: 2; }
+.account-close {
+  width: 36px; height: 36px; border-radius: 10px;
+  border: 1px solid var(--border); background: var(--bg3);
+  color: var(--dim2); cursor: pointer; display: flex;
+  align-items: center; justify-content: center; transition: all .15s;
+  flex-shrink: 0;
+}
+.account-close svg { width: 16px; height: 16px; stroke: currentColor; fill: none; stroke-width: 2; }
+.account-close:hover { border-color: rgba(244,63,94,.35); color: var(--pink); background: rgba(244,63,94,.07); }
+.account-close:active { transform: scale(.93); }
+.account-body { padding: 24px; }
+.account-avatar-section {
+  display: flex; align-items: center; gap: 16px;
+  padding: 16px; border-radius: var(--r2);
+  background: linear-gradient(135deg, rgba(0,212,255,.03), rgba(124,58,237,.02));
+  border: 1px solid var(--border); margin-bottom: 20px;
+}
+.account-avatar { width: 60px; height: 60px; border-radius: 50%; border: 2px solid rgba(0,212,255,.3); object-fit: cover; flex-shrink: 0; }
+.account-avatar-info { flex: 1; min-width: 0; }
+.account-username { font-size: 16px; color: #fff; font-weight: 700; margin-bottom: 3px; font-family: 'Orbitron', sans-serif; }
+.account-username span { background: linear-gradient(135deg, var(--cyan), var(--purple)); -webkit-background-clip: text; -webkit-text-fill-color: transparent; }
+.account-sub { font-size: 10px; color: var(--dim2); }
+.account-section { margin-bottom: 20px; }
+.account-section-title { font-size: 9px; color: var(--cyan); text-transform: uppercase; letter-spacing: 2px; font-family: 'Orbitron', sans-serif; margin-bottom: 12px; opacity: .8; }
+.account-row { display: flex; align-items: center; justify-content: space-between; padding: 12px 0; border-bottom: 1px solid rgba(0,212,255,.05); gap: 12px; }
+.account-row:last-child { border-bottom: none; }
+.account-row-label { font-size: 11px; color: var(--text2); flex: 1; }
+.account-row-value { font-size: 11px; font-weight: 600; }
+.account-row-value.cyan   { color: var(--cyan); }
+.account-row-value.yellow { color: var(--yellow); }
+.account-row-value.green  { color: var(--green); }
+.account-info-badge {
+  display: flex; align-items: flex-start; gap: 10px;
+  background: rgba(0,212,255,.025); border: 1px solid rgba(0,212,255,.09);
+  border-radius: var(--r); padding: 12px 14px; margin-top: 8px;
+}
+.account-info-badge svg { width: 12px; height: 12px; stroke: var(--cyan); fill: none; stroke-width: 2; flex-shrink: 0; margin-top: 1px; opacity: .7; }
+.account-info-badge p { font-size: 10px; color: var(--dim2); line-height: 1.7; }
+.account-info-badge a { color: var(--cyan); text-decoration: none; }
+.account-info-badge a:hover { text-decoration: underline; }
+.account-action-btn {
+  width: 100%; padding: 13px; border-radius: var(--r); margin-top: 8px;
+  font-family: 'JetBrains Mono', monospace; font-size: 11px; font-weight: 600;
+  cursor: pointer; transition: all .15s; border: 1px solid var(--border);
+  background: var(--bg3); color: var(--text); display: flex; align-items: center;
+  gap: 10px; min-height: var(--touch-target);
+}
+.account-action-btn svg { width: 14px; height: 14px; stroke: currentColor; fill: none; stroke-width: 2; flex-shrink: 0; opacity: .6; }
+.account-action-btn:hover { border-color: var(--border2); color: var(--cyan); background: rgba(0,212,255,.04); }
+.account-action-btn:hover svg { opacity: 1; }
+.account-action-btn.danger { color: rgba(244,63,94,.7); border-color: rgba(244,63,94,.18); background: rgba(244,63,94,.03); }
+.account-action-btn.danger:hover { color: var(--pink); border-color: rgba(244,63,94,.35); background: rgba(244,63,94,.07); }
+.account-action-btn.danger svg { opacity: .7; }
+
 /* ── MOBILE INFO MODAL ── */
 .mobile-info-overlay { position: fixed; inset: 0; z-index: 99999; background: rgba(2,2,16,.94); display: flex; align-items: flex-end; backdrop-filter: blur(20px) saturate(1.2); animation: overlayIn .25s ease; }
-.mobile-info-modal { background: linear-gradient(145deg, rgba(12,12,36,.98), rgba(7,7,28,.99)); border: 1px solid rgba(249,115,22,.22); border-radius: 20px 20px 0 0; padding: 32px 24px env(safe-area-inset-bottom, 24px); width: 100%; text-align: center; box-shadow: 0 0 0 1px rgba(249,115,22,.06), 0 -24px 60px rgba(0,0,0,.8); animation: slideUp .3s cubic-bezier(.32,1,.6,1) both; max-height: 90vh; overflow-y: auto; position: relative; }
+.mobile-info-modal { background: linear-gradient(145deg, rgba(12,12,36,.98), rgba(7,7,28,.99)); border: 1px solid rgba(249,115,22,.22); border-radius: 20px 20px 0 0; padding: 32px 24px max(env(safe-area-inset-bottom, 24px), 24px); width: 100%; text-align: center; box-shadow: 0 0 0 1px rgba(249,115,22,.06), 0 -24px 60px rgba(0,0,0,.8); animation: slideUp .3s cubic-bezier(.32,1,.6,1) both; max-height: 90vh; overflow-y: auto; position: relative; }
 .mobile-info-modal::before { content: ""; position: absolute; top: 0; left: 0; right: 0; height: 2px; background: linear-gradient(90deg, transparent 8%, var(--orange) 38%, var(--yellow) 62%, transparent 92%); border-radius: 20px 20px 0 0; }
 .mi-handle { width: 36px; height: 4px; border-radius: 2px; background: var(--dim); margin: 0 auto 24px; }
 .mi-icon-wrap { width: 68px; height: 68px; border-radius: 18px; background: linear-gradient(135deg, rgba(249,115,22,.1), rgba(245,158,11,.05)); border: 1px solid rgba(249,115,22,.22); display: flex; align-items: center; justify-content: center; margin: 0 auto 20px; animation: iconPulse 3s ease-in-out infinite; }
@@ -468,7 +567,7 @@ body::after {
 /* ── OVERLAYS & MODALS ── */
 .overlay { position: fixed; inset: 0; background: rgba(2,2,16,.88); z-index: 500; display: none; align-items: flex-end; justify-content: center; backdrop-filter: blur(10px); overflow-y: auto; padding: 0; }
 .overlay.show { display: flex; animation: overlayIn .2s ease; }
-.modal-box { background: var(--bg2); border: 1px solid var(--border); border-radius: 20px 20px 0 0; padding: 28px 24px env(safe-area-inset-bottom, 24px); width: 100%; max-width: 100%; box-shadow: 0 -24px 60px rgba(0,0,0,.8), 0 0 0 1px rgba(255,255,255,.02); animation: slideUp .28s cubic-bezier(.32,1,.6,1); position: relative; }
+.modal-box { background: var(--bg2); border: 1px solid var(--border); border-radius: 20px 20px 0 0; padding: 28px 24px max(env(safe-area-inset-bottom, 24px), 24px); width: 100%; max-width: 100%; box-shadow: 0 -24px 60px rgba(0,0,0,.8), 0 0 0 1px rgba(255,255,255,.02); animation: slideUp .28s cubic-bezier(.32,1,.6,1); position: relative; }
 .modal-handle { width: 36px; height: 4px; border-radius: 2px; background: var(--dim); margin: 0 auto 22px; }
 .modal-icon { width: 44px; height: 44px; border-radius: 11px; background: rgba(244,63,94,.08); border: 1px solid rgba(244,63,94,.2); display: flex; align-items: center; justify-content: center; margin-bottom: 16px; }
 .modal-icon svg { width: 19px; height: 19px; stroke: var(--pink); fill: none; stroke-width: 2; }
@@ -528,172 +627,51 @@ body::after {
 .device-status-label .device-type.desktop { color: var(--green); }
 .device-status-label .device-sub { font-size: 9px; color: var(--dim2); margin-top: 1px; }
 
-/* ── CLERK USER PROFILE MODAL ── */
-.clerk-profile-overlay {
-  position: fixed; inset: 0; z-index: 10000;
-  background: rgba(2,2,16,.92);
-  backdrop-filter: blur(18px) saturate(1.3);
-  -webkit-backdrop-filter: blur(18px) saturate(1.3);
-  display: flex; align-items: center; justify-content: center;
-  padding: 16px;
-  animation: overlayIn .22s ease;
-}
-.clerk-profile-panel {
-  position: relative;
-  background: var(--bg2);
-  border: 1px solid var(--border2);
-  border-radius: 20px;
-  box-shadow: 0 32px 80px rgba(0,0,0,.85), 0 0 0 1px rgba(0,212,255,.06);
-  width: 100%; max-width: 860px;
-  max-height: calc(100vh - 32px);
-  overflow-y: auto;
-  -webkit-overflow-scrolling: touch;
-  animation: scaleIn .22s ease;
-}
-.clerk-profile-panel::before {
-  content: ""; position: absolute; top: 0; left: 0; right: 0; height: 2px;
-  background: linear-gradient(90deg, transparent 5%, var(--cyan) 35%, var(--purple) 65%, transparent 95%);
-  border-radius: 20px 20px 0 0; pointer-events: none; z-index: 1;
-}
-.clerk-profile-header {
-  display: flex; align-items: center; justify-content: space-between;
-  padding: 20px 24px 16px;
-  position: sticky; top: 0; z-index: 2;
-  background: var(--bg2);
-  border-bottom: 1px solid var(--border);
-}
-.clerk-profile-title {
-  font-family: 'Orbitron', sans-serif; font-size: 12px; font-weight: 700;
-  color: var(--cyan); display: flex; align-items: center; gap: 8px;
-  letter-spacing: .5px;
-}
-.clerk-profile-title svg { width: 15px; height: 15px; stroke: currentColor; fill: none; stroke-width: 2; }
-.clerk-profile-close {
-  width: 36px; height: 36px; border-radius: 10px;
-  border: 1px solid var(--border); background: var(--bg3);
-  color: var(--dim2); cursor: pointer; display: flex;
-  align-items: center; justify-content: center; transition: all .15s;
-  flex-shrink: 0;
-}
-.clerk-profile-close svg { width: 16px; height: 16px; stroke: currentColor; fill: none; stroke-width: 2; }
-.clerk-profile-close:hover { border-color: rgba(244,63,94,.35); color: var(--pink); background: rgba(244,63,94,.07); }
-.clerk-profile-close:active { transform: scale(.93); }
-.clerk-profile-body { padding: 24px; }
-
-/* Clerk loading placeholder */
-.clerk-loading {
-  display: flex; flex-direction: column; align-items: center;
-  justify-content: center; padding: 60px 20px; gap: 16px;
-}
-.clerk-loading-text {
-  font-size: 11px; color: var(--dim2); letter-spacing: 2px; text-transform: uppercase;
+/* ── RESPONSIVE — TABLET ── */
+@media (max-width: 900px) and (min-width: 601px) {
+  .dnav { padding: 0 20px; }
+  .dash-main { padding: 32px 20px 100px; }
+  .stats-row { grid-template-columns: repeat(3, 1fr); }
+  .projects-grid { grid-template-columns: repeat(2, 1fr); }
+  .header-info h1 { font-size: 18px; }
 }
 
-/* Clerk dark-mode overrides */
-.clerk-profile-body .cl-rootBox,
-.clerk-profile-body .cl-card {
-  background: transparent !important;
-  border: none !important;
-  box-shadow: none !important;
-  width: 100% !important;
-  max-width: 100% !important;
-}
-.clerk-profile-body .cl-navbar {
-  background: var(--bg3) !important;
-  border-right: 1px solid var(--border) !important;
-  border-radius: 12px 0 0 12px !important;
-}
-.clerk-profile-body .cl-navbarButton {
-  color: var(--text2) !important;
-  font-family: 'JetBrains Mono', monospace !important;
-  font-size: 11px !important;
-}
-.clerk-profile-body .cl-navbarButton:hover,
-.clerk-profile-body .cl-navbarButton[data-active="true"] {
-  background: rgba(0,212,255,.07) !important;
-  color: var(--cyan) !important;
-  border-color: rgba(0,212,255,.18) !important;
-}
-.clerk-profile-body .cl-headerTitle   { color: #fff !important; font-family: 'Orbitron', sans-serif !important; }
-.clerk-profile-body .cl-headerSubtitle { color: var(--dim2) !important; }
-.clerk-profile-body .cl-formFieldLabel { color: var(--text) !important; }
-.clerk-profile-body .cl-formFieldInput {
-  background: rgba(0,0,0,.4) !important;
-  border: 1px solid var(--border) !important;
-  color: #fff !important;
-  border-radius: var(--r) !important;
-  font-family: 'JetBrains Mono', monospace !important;
-}
-.clerk-profile-body .cl-formFieldInput:focus {
-  border-color: rgba(0,212,255,.38) !important;
-  box-shadow: 0 0 0 3px rgba(0,212,255,.06) !important;
-}
-.clerk-profile-body .cl-formButtonPrimary {
-  background: linear-gradient(135deg, var(--cyan), var(--purple)) !important;
-  color: #020210 !important;
-  font-family: 'Orbitron', sans-serif !important;
-  font-weight: 700 !important;
-  letter-spacing: .3px !important;
-  border: none !important;
-}
-.clerk-profile-body .cl-formButtonReset { color: var(--text2) !important; }
-.clerk-profile-body .cl-dividerLine { background: var(--border) !important; }
-.clerk-profile-body .cl-profileSectionTitle { color: var(--cyan) !important; font-family: 'Orbitron', sans-serif !important; font-size: 9px !important; letter-spacing: 2px !important; }
-.clerk-profile-body .cl-profileSectionTitleText { color: var(--cyan) !important; }
-.clerk-profile-body .cl-badge { background: rgba(0,212,255,.08) !important; color: var(--cyan) !important; border: 1px solid rgba(0,212,255,.16) !important; }
-.clerk-profile-body .cl-menuList { background: var(--bg2) !important; border: 1px solid var(--border) !important; border-radius: var(--r) !important; }
-.clerk-profile-body .cl-menuItem:hover { background: rgba(0,212,255,.06) !important; }
-.clerk-profile-body .cl-avatarBox { border: 2px solid rgba(0,212,255,.3) !important; }
-.clerk-profile-body .cl-userPreviewMainIdentifier { color: #fff !important; }
-.clerk-profile-body .cl-userPreviewSecondaryIdentifier { color: var(--dim2) !important; }
-.clerk-profile-body .cl-internal-b3fm57 { display: none !important; }
-.clerk-profile-body .cl-footer { display: none !important; }
-.clerk-profile-body .cl-footerAction { display: none !important; }
-.clerk-profile-body .cl-page { background: transparent !important; }
-.clerk-profile-body .cl-pageScrollBox { background: transparent !important; }
-
-/* ── RESPONSIVE ── */
-@media (max-width: 768px) {
-  .dnav { padding: 0 16px; height: 56px; }
-  .dash-main { padding: 28px 16px 100px; }
-  .stats-row { grid-template-columns: 1fr 1fr; }
-  .header-info h1 { font-size: 17px; }
+/* ── RESPONSIVE — MOBILE ── */
+@media (max-width: 600px) {
+  .dnav { padding: 0 14px; height: 54px; }
+  .dash-main { padding: 22px 14px 90px; }
+  .stats-row { grid-template-columns: 1fr 1fr; gap: 10px; }
+  .stat-card { padding: 14px 14px; gap: 10px; }
+  .stat-icon { width: 36px; height: 36px; border-radius: 9px; }
+  .stat-val { font-size: 17px; }
+  .header-info h1 { font-size: 16px; }
+  .header-av-wrap { width: 48px; height: 48px; }
   .user-name-nav { display: none; }
   .dnav-logo span.logo-text { display: none; }
-  .create-card { padding: 20px 16px 20px; }
-  .projects-grid { grid-template-columns: 1fr 1fr; gap: 12px; }
-  .project-card { padding: 16px 14px 52px; }
-  .sort-select { width: 90px; font-size: 9px; padding: 0 26px 0 10px; }
+  .create-card { padding: 18px 14px 18px; }
+  .projects-grid { grid-template-columns: 1fr; gap: 12px; }
+  .project-card { padding: 15px 14px 52px; }
+  .sort-select { width: 80px; font-size: 9px; padding: 0 22px 0 8px; }
   .nav-credits-pill { padding: 0 10px; font-size: 10px; }
-  .clerk-profile-overlay { padding: 0; align-items: flex-end; }
-  .clerk-profile-panel {
+  .input-row { flex-direction: column; gap: 8px; }
+  .btn-create { width: 100%; justify-content: center; height: 46px; }
+  .project-input { height: 46px; font-size: 12px; }
+  .page-header { flex-direction: column; align-items: flex-start; gap: 12px; }
+  .plan-badge { align-self: flex-start; }
+  .filter-row { flex-wrap: nowrap; }
+  .search-wrap { flex: 1; min-width: 0; }
+  .account-overlay { padding: 0; align-items: flex-end; }
+  .account-panel {
     max-width: 100%;
     border-radius: 20px 20px 0 0;
     max-height: 92vh;
   }
-  .clerk-profile-body .cl-navbar {
-    flex-direction: row !important;
-    overflow-x: auto !important;
-    border-radius: 10px !important;
-    border-right: none !important;
-    border-bottom: 1px solid rgba(0,212,255,.10) !important;
-    margin-bottom: 16px !important;
-  }
-  .clerk-profile-body .cl-scrollBox { padding: 0 !important; }
+  .account-body { padding: 16px; }
+  .account-avatar { width: 48px; height: 48px; }
+  .account-username { font-size: 14px; }
 }
-@media (max-width: 520px) {
-  .input-row { flex-direction: column; }
-  .btn-create { width: 100%; justify-content: center; }
-  .projects-grid { grid-template-columns: 1fr; }
-  .modal-box { border-radius: 18px 18px 0 0; }
-  .stats-row { grid-template-columns: 1fr; gap: 10px; }
-  .page-header { flex-direction: column; align-items: flex-start; }
-  .plan-badge { align-self: flex-start; }
-  .filter-row { flex-direction: row; flex-wrap: nowrap; }
-  .sort-select { width: 80px; font-size: 9px; padding: 0 22px 0 8px; }
-  .search-wrap { flex: 1; min-width: 0; }
-  .clerk-profile-body { padding: 16px; }
-}
+
+/* ── RESPONSIVE — DESKTOP ── */
 @media (min-width: 769px) {
   .overlay { align-items: center; padding: 24px 16px; }
   .modal-box { border-radius: var(--r2); max-width: 440px; padding: 30px; animation: modalIn .22s ease; }
@@ -721,7 +699,6 @@ function detectMobileUA(): boolean {
   if (typeof navigator === 'undefined') return false
   return /\b(Android|iPhone|iPod|IEMobile|Opera Mini|BlackBerry|webOS|iPad|Tablet)\b/i.test(navigator.userAgent)
 }
-
 function esc(s: unknown): string {
   return String(s ?? '')
     .replace(/&/g, '&amp;').replace(/</g, '&lt;')
@@ -774,105 +751,159 @@ const Icon = {
   warning:  () => <svg viewBox="0 0 24 24"><path d="M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>,
   chevron_right: () => <svg viewBox="0 0 24 24"><polyline points="9 18 15 12 9 6"/></svg>,
   user:     () => <svg viewBox="0 0 24 24"><path d="M20 21v-2a4 4 0 00-4-4H8a4 4 0 00-4 4v2"/><circle cx="12" cy="7" r="4"/></svg>,
+  key:      () => <svg viewBox="0 0 24 24"><path d="M21 2l-2 2m-7.61 7.61a5.5 5.5 0 1 1-7.778 7.778 5.5 5.5 0 0 1 7.777-7.777zm0 0L15.5 7.5m0 0l3 3L22 7l-3-3m-3.5 3.5L19 4"/></svg>,
+  mail:     () => <svg viewBox="0 0 24 24"><path d="M4 4h16c1.1 0 2 .9 2 2v12c0 1.1-.9 2-2 2H4c-1.1 0-2-.9-2-2V6c0-1.1.9-2 2-2z"/><polyline points="22,6 12,13 2,6"/></svg>,
+  lock:     () => <svg viewBox="0 0 24 24"><rect x="3" y="11" width="18" height="11" rx="2" ry="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg>,
+  external: () => <svg viewBox="0 0 24 24"><path d="M18 13v6a2 2 0 01-2 2H5a2 2 0 01-2-2V8a2 2 0 012-2h6"/><polyline points="15 3 21 3 21 9"/><line x1="10" y1="14" x2="21" y2="3"/></svg>,
 }
 
 /* ─────────────────────────────────────────────────────────────────────────────
-   CLERK PROFILE MODAL COMPONENT (isolated to prevent crash)
+   ACCOUNT MODAL — custom, no Clerk dependency
 ───────────────────────────────────────────────────────────────────────────── */
-function ClerkProfileModal({ onClose }: { onClose: () => void }) {
-  const [mounted, setMounted] = useState(false)
-
-  useEffect(() => {
-    // Delay mount by one frame so overlay animation runs first
-    const t = requestAnimationFrame(() => setMounted(true))
-    return () => cancelAnimationFrame(t)
-  }, [])
-
+function AccountModal({
+  session,
+  userData,
+  av,
+  planLabel,
+  creditsDisplay,
+  onClose,
+  onLogout,
+}: {
+  session: NexusSession | null
+  userData: UserData
+  av: string
+  planLabel: string
+  creditsDisplay: string
+  onClose: () => void
+  onLogout: () => void
+}) {
   return (
     <div
-      className="clerk-profile-overlay"
+      className="account-overlay"
       role="dialog"
       aria-modal="true"
       aria-label="Account settings"
       onClick={e => { if (e.target === e.currentTarget) onClose() }}
     >
-      <div className="clerk-profile-panel">
-        {/* Sticky Header */}
-        <div className="clerk-profile-header">
-          <div className="clerk-profile-title">
+      <div className="account-panel">
+        {/* Header */}
+        <div className="account-header">
+          <div className="account-title">
             <Icon.user />
             My Account
           </div>
-          <button
-            className="clerk-profile-close"
-            onClick={onClose}
-            aria-label="Close account panel"
-          >
+          <button className="account-close" onClick={onClose} aria-label="Close">
             <Icon.cross />
           </button>
         </div>
 
         {/* Body */}
-        <div className="clerk-profile-body">
-          {!mounted ? (
-            <div className="clerk-loading">
-              <div className="loader-ring" aria-hidden="true" />
-              <span className="clerk-loading-text">Loading account...</span>
-            </div>
-          ) : (
-            <UserProfile
-              appearance={{
-                variables: {
-                  colorPrimary:       '#00d4ff',
-                  colorBackground:    'transparent',
-                  colorDanger:        '#f43f5e',
-                  colorSuccess:       '#10b981',
-                  borderRadius:       '10px',
-                  fontFamily:         "'JetBrains Mono', monospace",
-                  fontFamilyButtons:  "'Orbitron', sans-serif",
-                },
-                elements: {
-                  rootBox:                  { width: '100%', maxWidth: '100%' },
-                  card:                     { background: 'transparent', border: 'none', boxShadow: 'none', width: '100%', maxWidth: '100%', padding: '0' },
-                  navbar:                   { background: 'rgba(12,12,36,0.9)', border: '1px solid rgba(0,212,255,0.12)', borderRadius: '12px', marginBottom: '16px' },
-                  navbarButton:             { fontFamily: "'JetBrains Mono', monospace", fontSize: '11px', color: '#94a3b8' },
-                  navbarButtonIcon:         { opacity: '0.6' },
-                  headerTitle:              { fontFamily: "'Orbitron', sans-serif", color: '#ffffff', fontSize: '16px', fontWeight: '700' },
-                  headerSubtitle:           { color: '#94a3b8', fontSize: '11px' },
-                  profileSectionTitle:      { fontFamily: "'Orbitron', sans-serif", fontSize: '9px', letterSpacing: '2px', textTransform: 'uppercase', color: '#00d4ff' },
-                  profileSectionTitleText:  { color: '#00d4ff' },
-                  profileSectionContent:    { color: '#cbd5e1' },
-                  profileSectionPrimaryButton: { color: '#00d4ff', fontSize: '11px' },
-                  formFieldLabel:           { color: '#cbd5e1', fontSize: '11px' },
-                  formFieldInput:           { background: 'rgba(0,0,0,0.4)', border: '1px solid rgba(0,212,255,0.12)', color: '#ffffff', borderRadius: '10px', fontFamily: "'JetBrains Mono', monospace", fontSize: '12px' },
-                  formFieldInputShowPasswordButton: { color: '#94a3b8' },
-                  formButtonPrimary:        { background: 'linear-gradient(135deg, #00d4ff, #7c3aed)', color: '#020210', fontFamily: "'Orbitron', sans-serif", fontWeight: '700', border: 'none', borderRadius: '10px', fontSize: '10px', letterSpacing: '0.5px' },
-                  formButtonReset:          { color: '#94a3b8', fontSize: '11px' },
-                  formResendCodeLink:       { color: '#00d4ff' },
-                  dividerLine:              { background: 'rgba(0,212,255,0.10)' },
-                  dividerText:              { color: '#475569', fontSize: '10px' },
-                  avatarBox:                { border: '2px solid rgba(0,212,255,0.3)', borderRadius: '50%' },
-                  avatarImageActionsUpload: { color: '#00d4ff' },
-                  badge:                    { background: 'rgba(0,212,255,0.08)', color: '#00d4ff', border: '1px solid rgba(0,212,255,0.16)', borderRadius: '8px' },
-                  menuList:                 { background: '#07071c', border: '1px solid rgba(0,212,255,0.10)', borderRadius: '10px' },
-                  menuItem:                 { color: '#cbd5e1', fontSize: '12px' },
-                  menuItemButton:           { color: '#cbd5e1', fontSize: '12px' },
-                  userPreviewMainIdentifier:      { color: '#ffffff', fontSize: '13px', fontWeight: '600' },
-                  userPreviewSecondaryIdentifier: { color: '#94a3b8', fontSize: '11px' },
-                  identityPreviewText:            { color: '#cbd5e1', fontSize: '12px' },
-                  identityPreviewEditButtonIcon:  { color: '#00d4ff' },
-                  accordionTriggerButton:         { color: '#cbd5e1', fontSize: '12px' },
-                  alertText:                { color: '#cbd5e1', fontSize: '11px' },
-                  alertIcon:                { color: '#f43f5e' },
-                  page:                     { background: 'transparent' },
-                  pageScrollBox:            { background: 'transparent', padding: '0' },
-                  footer:                   { display: 'none' },
-                  footerAction:             { display: 'none' },
-                  footerActionLink:         { display: 'none' },
-                },
-              }}
+        <div className="account-body">
+          {/* Avatar section */}
+          <div className="account-avatar-section">
+            <img
+              className="account-avatar"
+              src={av}
+              alt={`@${session?.user.username}`}
+              onError={e => { (e.currentTarget as HTMLImageElement).src = '/images/nexusai.png' }}
             />
-          )}
+            <div className="account-avatar-info">
+              <div className="account-username">
+                <span>@{session?.user.username || '—'}</span>
+              </div>
+              <div className="account-sub">
+                Roblox ID: {session?.user.robloxId || '—'}
+              </div>
+              <div className="account-sub" style={{ marginTop: 3 }}>
+                {planLabel} Plan · {creditsDisplay} CR
+              </div>
+            </div>
+          </div>
+
+          {/* Account info */}
+          <div className="account-section">
+            <div className="account-section-title">Account Info</div>
+            <div className="account-row">
+              <span className="account-row-label">Username</span>
+              <span className="account-row-value cyan">@{session?.user.username || '—'}</span>
+            </div>
+            <div className="account-row">
+              <span className="account-row-label">Roblox ID</span>
+              <span className="account-row-value" style={{ color: 'var(--text)', fontSize: 10 }}>
+                {session?.user.robloxId || '—'}
+              </span>
+            </div>
+            <div className="account-row">
+              <span className="account-row-label">Current Plan</span>
+              <span className="account-row-value cyan">{planLabel}</span>
+            </div>
+            <div className="account-row">
+              <span className="account-row-label">Credits Balance</span>
+              <span className="account-row-value yellow">{creditsDisplay} CR</span>
+            </div>
+            <div className="account-row">
+              <span className="account-row-label">Total Projects</span>
+              <span className="account-row-value green">{(userData.projects || []).length}</span>
+            </div>
+          </div>
+
+          {/* Security info */}
+          <div className="account-section">
+            <div className="account-section-title">Security</div>
+            <div className="account-info-badge">
+              <Icon.info />
+              <p>
+                Your account is linked to your <strong style={{ color: 'var(--text)' }}>Roblox identity</strong>.
+                To change your email or password, visit{' '}
+                <a href="https://www.roblox.com/my/account#!/security" target="_blank" rel="noreferrer">
+                  Roblox Account Settings
+                </a>.
+                NEXUS AI does not store passwords — authentication is handled securely via Roblox.
+              </p>
+            </div>
+          </div>
+
+          {/* Quick actions */}
+          <div className="account-section">
+            <div className="account-section-title">Quick Actions</div>
+            <button
+              className="account-action-btn"
+              onClick={() => window.open('/payment', '_self')}
+            >
+              <Icon.bolt />
+              Buy More Credits
+            </button>
+            <button
+              className="account-action-btn"
+              onClick={() => window.open('https://discord.gg/FzAF48mvK5', '_blank')}
+              style={{ marginTop: 8 }}
+            >
+              <Icon.discord />
+              Join Discord Community
+            </button>
+            <button
+              className="account-action-btn"
+              onClick={() => window.open('https://create.roblox.com/store/asset/91870814099475/NEXUS-AI', '_blank')}
+              style={{ marginTop: 8 }}
+            >
+              <Icon.download />
+              Download Studio Plugin
+            </button>
+          </div>
+
+          {/* Danger */}
+          <div className="account-section">
+            <div className="account-section-title" style={{ color: 'var(--pink)', opacity: .85 }}>
+              Session
+            </div>
+            <button
+              className="account-action-btn danger"
+              onClick={() => { onClose(); onLogout() }}
+            >
+              <Icon.logout />
+              Sign Out of NEXUS AI
+            </button>
+          </div>
         </div>
       </div>
     </div>
@@ -908,7 +939,7 @@ export default function DashboardPage() {
   const [isMobile,             setIsMobile]              = useState(false)
   const [mobileInfoOpen,       setMobileInfoOpen]        = useState(false)
   const [mobileInfoDismissed,  setMobileInfoDismissed]   = useState(false)
-  const [clerkProfileOpen,     setClerkProfileOpen]      = useState(false)
+  const [accountOpen,          setAccountOpen]           = useState(false)
 
   const sessionRef  = useRef<NexusSession | null>(null)
   const userDataRef = useRef<UserData>({})
@@ -933,7 +964,10 @@ export default function DashboardPage() {
     window.addEventListener('online',  on)
     window.addEventListener('offline', off)
     setIsOnline(navigator.onLine)
-    return () => { window.removeEventListener('online', on); window.removeEventListener('offline', off) }
+    return () => {
+      window.removeEventListener('online', on)
+      window.removeEventListener('offline', off)
+    }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
 
@@ -949,10 +983,13 @@ export default function DashboardPage() {
   useEffect(() => {
     const h = (e: KeyboardEvent) => {
       if (e.key === 'Escape') {
-        if (clerkProfileOpen) { setClerkProfileOpen(false); return }
-        setSettingsOpen(false); setDeleteModal(null)
-        setLogoutModal(false);  setDdOpen(false); setSheetOpen(false)
-        setMobileInfoOpen(false)
+        if (accountOpen)    { setAccountOpen(false); return }
+        if (settingsOpen)   { setSettingsOpen(false); return }
+        if (deleteModal)    { setDeleteModal(null); return }
+        if (logoutModal)    { setLogoutModal(false); return }
+        if (mobileInfoOpen) { setMobileInfoOpen(false); return }
+        setDdOpen(false)
+        setSheetOpen(false)
       }
       if ((e.ctrlKey || e.metaKey) && e.key === 'n') {
         e.preventDefault()
@@ -961,7 +998,7 @@ export default function DashboardPage() {
     }
     document.addEventListener('keydown', h)
     return () => document.removeEventListener('keydown', h)
-  }, [isMobile, clerkProfileOpen])
+  }, [isMobile, accountOpen, settingsOpen, deleteModal, logoutModal, mobileInfoOpen])
 
   useEffect(() => { initDashboard() }, []) // eslint-disable-line
   useEffect(() => { updateDailyStatus(userData) }, [userData])
@@ -974,11 +1011,10 @@ export default function DashboardPage() {
     return () => clearTimeout(t)
   }, [saveState])
 
-  // Lock body scroll when Clerk profile is open
   useEffect(() => {
-    document.body.style.overflow = clerkProfileOpen ? 'hidden' : ''
+    document.body.style.overflow = accountOpen ? 'hidden' : ''
     return () => { document.body.style.overflow = '' }
-  }, [clerkProfileOpen])
+  }, [accountOpen])
 
   /* ── DATA INIT ── */
   async function initDashboard() {
@@ -1302,11 +1338,11 @@ export default function DashboardPage() {
   }
   function closeSheet() { setSheetOpen(false) }
 
-  function openClerkProfile() {
+  function openAccountModal() {
     setDdOpen(false)
     setSheetOpen(false)
     setSettingsOpen(false)
-    setClerkProfileOpen(true)
+    setAccountOpen(true)
   }
 
   function showToast(msg: string, color?: string, dur?: number) {
@@ -1351,7 +1387,7 @@ export default function DashboardPage() {
   /* ── SHARED MENU CONTENT ── */
   const menuContent = (onAction: () => void) => (
     <>
-      <div className="ud-hdr" style={{ padding: '14px 16px' }}>
+      <div className="ud-hdr">
         <img className="ud-av" src={av} alt="" onError={e => { (e.currentTarget as HTMLImageElement).src = '/images/nexusai.png' }} />
         <div>
           <div className="ud-name">@{session?.user.username}</div>
@@ -1359,7 +1395,7 @@ export default function DashboardPage() {
         </div>
       </div>
       <div className="ud-section">
-        <button className="ud-item" onClick={() => { onAction(); openClerkProfile() }} role="menuitem">
+        <button className="ud-item" onClick={() => { onAction(); openAccountModal() }} role="menuitem">
           <Icon.user />My Account
         </button>
         <button className="ud-item" onClick={() => { setSettingsOpen(true); onAction() }} role="menuitem">
@@ -1406,9 +1442,17 @@ export default function DashboardPage() {
         <button className="btn-retry-offline" onClick={retryQueue}>Retry Now</button>
       </div>
 
-      {/* ── CLERK USER PROFILE MODAL ── */}
-      {clerkProfileOpen && (
-        <ClerkProfileModal onClose={() => setClerkProfileOpen(false)} />
+      {/* ── ACCOUNT MODAL (no Clerk dependency) ── */}
+      {accountOpen && (
+        <AccountModal
+          session={session}
+          userData={userData}
+          av={av}
+          planLabel={planLabel}
+          creditsDisplay={creditsDisplay}
+          onClose={() => setAccountOpen(false)}
+          onLogout={() => setLogoutModal(true)}
+        />
       )}
 
       {/* MOBILE INFO MODAL */}
@@ -1515,7 +1559,7 @@ export default function DashboardPage() {
             <div className="ms-role">{planLabel} Plan · {creditsDisplay} CR</div>
           </div>
         </div>
-        <button className="ms-item" onClick={openClerkProfile}>
+        <button className="ms-item" onClick={openAccountModal}>
           <Icon.user />My Account
         </button>
         <button className="ms-item" onClick={() => { setSettingsOpen(true); closeSheet() }}>
@@ -1550,8 +1594,7 @@ export default function DashboardPage() {
           <div className="header-left">
             <div
               className="header-av-wrap"
-              style={{ cursor: 'pointer' }}
-              onClick={openClerkProfile}
+              onClick={openAccountModal}
               title="Manage your account"
             >
               <img src={av} alt={`@${session?.user.username}`} onError={e => { (e.currentTarget as HTMLImageElement).src = '/images/nexusai.png' }} />
@@ -1852,8 +1895,8 @@ export default function DashboardPage() {
             <div className="settings-row"><label>Credits</label><span className="s-val yellow">{creditsDisplay} CR</span></div>
             <div className="settings-row"><label>Plan</label><span className="s-val cyan">{planLabel}</span></div>
             <div className="settings-row">
-              <label>Manage Clerk account (email, password, security)</label>
-              <button className="settings-btn" onClick={openClerkProfile}>My Account</button>
+              <label>Manage account (email, security)</label>
+              <button className="settings-btn" onClick={openAccountModal}>My Account</button>
             </div>
           </div>
 
