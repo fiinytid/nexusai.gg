@@ -407,28 +407,6 @@ export const viewport: Viewport = {
     { media: "(prefers-color-scheme: light)", color: THEME_COLOR },
   ],
 };
-
-/* ─────────────────────────────────────────────────────────────────────────────
-   Root Layout
-
-   Clerk v7 rule: ClerkProvider goes in layout (Server Component).
-   UI components (SignedIn, SignedOut, SignInButton, SignUpButton,
-   UserButton, RedirectToSignIn) must ONLY be used inside
-   "use client" components — never imported or re-exported here.
-
-   Nesting order:
-   <html>
-     <body>
-       <ClerkProvider>
-         <AccountModalProvider>
-           {children}
-         </AccountModalProvider>
-       </ClerkProvider>
-       <Analytics />
-       <SpeedInsights />
-     </body>
-   </html>
-───────────────────────────────────────────────────────────────────────────── */
 export default function RootLayout({
   children,
 }: Readonly<{ children: React.ReactNode }>) {
