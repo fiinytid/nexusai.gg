@@ -1318,14 +1318,11 @@ export default function DashboardPage() {
                 routing="hash"
                 appearance={{
                   variables: {
-                    colorPrimary:         '#00d4ff',
-                    colorBackground:      'transparent',
-                    colorText:            '#cbd5e1',
-                    colorTextSecondary:   '#94a3b8',
-                    colorNeutral:         '#0c0c24',
-                    colorDanger:          '#f43f5e',
-                    borderRadius:         '10px',
-                    fontFamily:           "'JetBrains Mono', monospace",
+                    colorPrimary:    '#00d4ff',
+                    colorBackground: 'transparent',
+                    colorDanger:     '#f43f5e',
+                    borderRadius:    '10px',
+                    fontFamily:      "'JetBrains Mono', monospace",
                   },
                   elements: {
                     rootBox:           { width: '100%' },
