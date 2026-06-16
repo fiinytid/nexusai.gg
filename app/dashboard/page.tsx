@@ -528,10 +528,7 @@ body::after {
 .device-status-label .device-type.desktop { color: var(--green); }
 .device-status-label .device-sub { font-size: 9px; color: var(--dim2); margin-top: 1px; }
 
-/* ────────────────────────────────────────────────────────────────
-   CLERK USER PROFILE MODAL OVERLAY
-   Opens as a full-screen overlay on /dashboard — no redirect
-──────────────────────────────────────────────────────────────── */
+/* ── CLERK USER PROFILE MODAL ── */
 .clerk-profile-overlay {
   position: fixed; inset: 0; z-index: 10000;
   background: rgba(2,2,16,.92);
@@ -550,6 +547,7 @@ body::after {
   width: 100%; max-width: 860px;
   max-height: calc(100vh - 32px);
   overflow-y: auto;
+  -webkit-overflow-scrolling: touch;
   animation: scaleIn .22s ease;
 }
 .clerk-profile-panel::before {
@@ -559,11 +557,10 @@ body::after {
 }
 .clerk-profile-header {
   display: flex; align-items: center; justify-content: space-between;
-  padding: 20px 24px 0;
+  padding: 20px 24px 16px;
   position: sticky; top: 0; z-index: 2;
   background: var(--bg2);
   border-bottom: 1px solid var(--border);
-  padding-bottom: 16px;
 }
 .clerk-profile-title {
   font-family: 'Orbitron', sans-serif; font-size: 12px; font-weight: 700;
@@ -583,7 +580,16 @@ body::after {
 .clerk-profile-close:active { transform: scale(.93); }
 .clerk-profile-body { padding: 24px; }
 
-/* Clerk component dark-mode overrides — scoped to our panel */
+/* Clerk loading placeholder */
+.clerk-loading {
+  display: flex; flex-direction: column; align-items: center;
+  justify-content: center; padding: 60px 20px; gap: 16px;
+}
+.clerk-loading-text {
+  font-size: 11px; color: var(--dim2); letter-spacing: 2px; text-transform: uppercase;
+}
+
+/* Clerk dark-mode overrides */
 .clerk-profile-body .cl-rootBox,
 .clerk-profile-body .cl-card {
   background: transparent !important;
@@ -595,7 +601,7 @@ body::after {
 .clerk-profile-body .cl-navbar {
   background: var(--bg3) !important;
   border-right: 1px solid var(--border) !important;
-  border-radius: 12px 0 0 12px;
+  border-radius: 12px 0 0 12px !important;
 }
 .clerk-profile-body .cl-navbarButton {
   color: var(--text2) !important;
@@ -624,20 +630,27 @@ body::after {
 }
 .clerk-profile-body .cl-formButtonPrimary {
   background: linear-gradient(135deg, var(--cyan), var(--purple)) !important;
-  color: #020210 !important; font-family: 'Orbitron', sans-serif !important;
-  font-weight: 700 !important; letter-spacing: .3px !important;
+  color: #020210 !important;
+  font-family: 'Orbitron', sans-serif !important;
+  font-weight: 700 !important;
+  letter-spacing: .3px !important;
+  border: none !important;
 }
 .clerk-profile-body .cl-formButtonReset { color: var(--text2) !important; }
 .clerk-profile-body .cl-dividerLine { background: var(--border) !important; }
 .clerk-profile-body .cl-profileSectionTitle { color: var(--cyan) !important; font-family: 'Orbitron', sans-serif !important; font-size: 9px !important; letter-spacing: 2px !important; }
 .clerk-profile-body .cl-profileSectionTitleText { color: var(--cyan) !important; }
 .clerk-profile-body .cl-badge { background: rgba(0,212,255,.08) !important; color: var(--cyan) !important; border: 1px solid rgba(0,212,255,.16) !important; }
-.clerk-profile-body .cl-menuList { background: var(--bg2) !important; border: 1px solid var(--border) !important; }
+.clerk-profile-body .cl-menuList { background: var(--bg2) !important; border: 1px solid var(--border) !important; border-radius: var(--r) !important; }
 .clerk-profile-body .cl-menuItem:hover { background: rgba(0,212,255,.06) !important; }
 .clerk-profile-body .cl-avatarBox { border: 2px solid rgba(0,212,255,.3) !important; }
 .clerk-profile-body .cl-userPreviewMainIdentifier { color: #fff !important; }
 .clerk-profile-body .cl-userPreviewSecondaryIdentifier { color: var(--dim2) !important; }
-.clerk-profile-body .cl-internal-b3fm57 { display: none !important; } /* Hides "Secured by Clerk" */
+.clerk-profile-body .cl-internal-b3fm57 { display: none !important; }
+.clerk-profile-body .cl-footer { display: none !important; }
+.clerk-profile-body .cl-footerAction { display: none !important; }
+.clerk-profile-body .cl-page { background: transparent !important; }
+.clerk-profile-body .cl-pageScrollBox { background: transparent !important; }
 
 /* ── RESPONSIVE ── */
 @media (max-width: 768px) {
@@ -653,7 +666,20 @@ body::after {
   .sort-select { width: 90px; font-size: 9px; padding: 0 26px 0 10px; }
   .nav-credits-pill { padding: 0 10px; font-size: 10px; }
   .clerk-profile-overlay { padding: 0; align-items: flex-end; }
-  .clerk-profile-panel { max-width: 100%; border-radius: 20px 20px 0 0; max-height: 92vh; }
+  .clerk-profile-panel {
+    max-width: 100%;
+    border-radius: 20px 20px 0 0;
+    max-height: 92vh;
+  }
+  .clerk-profile-body .cl-navbar {
+    flex-direction: row !important;
+    overflow-x: auto !important;
+    border-radius: 10px !important;
+    border-right: none !important;
+    border-bottom: 1px solid rgba(0,212,255,.10) !important;
+    margin-bottom: 16px !important;
+  }
+  .clerk-profile-body .cl-scrollBox { padding: 0 !important; }
 }
 @media (max-width: 520px) {
   .input-row { flex-direction: column; }
@@ -666,6 +692,7 @@ body::after {
   .filter-row { flex-direction: row; flex-wrap: nowrap; }
   .sort-select { width: 80px; font-size: 9px; padding: 0 22px 0 8px; }
   .search-wrap { flex: 1; min-width: 0; }
+  .clerk-profile-body { padding: 16px; }
 }
 @media (min-width: 769px) {
   .overlay { align-items: center; padding: 24px 16px; }
@@ -692,7 +719,7 @@ body::after {
 ───────────────────────────────────────────────────────────────────────────── */
 function detectMobileUA(): boolean {
   if (typeof navigator === 'undefined') return false
-  return /\b(Android|iPhone|iPod|IEMobile|Opera Mini|BlackBerry|webOS)\b/i.test(navigator.userAgent)
+  return /\b(Android|iPhone|iPod|IEMobile|Opera Mini|BlackBerry|webOS|iPad|Tablet)\b/i.test(navigator.userAgent)
 }
 
 function esc(s: unknown): string {
@@ -750,7 +777,114 @@ const Icon = {
 }
 
 /* ─────────────────────────────────────────────────────────────────────────────
-   COMPONENT
+   CLERK PROFILE MODAL COMPONENT (isolated to prevent crash)
+───────────────────────────────────────────────────────────────────────────── */
+function ClerkProfileModal({ onClose }: { onClose: () => void }) {
+  const [mounted, setMounted] = useState(false)
+
+  useEffect(() => {
+    // Delay mount by one frame so overlay animation runs first
+    const t = requestAnimationFrame(() => setMounted(true))
+    return () => cancelAnimationFrame(t)
+  }, [])
+
+  return (
+    <div
+      className="clerk-profile-overlay"
+      role="dialog"
+      aria-modal="true"
+      aria-label="Account settings"
+      onClick={e => { if (e.target === e.currentTarget) onClose() }}
+    >
+      <div className="clerk-profile-panel">
+        {/* Sticky Header */}
+        <div className="clerk-profile-header">
+          <div className="clerk-profile-title">
+            <Icon.user />
+            My Account
+          </div>
+          <button
+            className="clerk-profile-close"
+            onClick={onClose}
+            aria-label="Close account panel"
+          >
+            <Icon.cross />
+          </button>
+        </div>
+
+        {/* Body */}
+        <div className="clerk-profile-body">
+          {!mounted ? (
+            <div className="clerk-loading">
+              <div className="loader-ring" aria-hidden="true" />
+              <span className="clerk-loading-text">Loading account...</span>
+            </div>
+          ) : (
+            <UserProfile
+              routing="virtual"
+              appearance={{
+                variables: {
+                  colorPrimary:       '#00d4ff',
+                  colorBackground:    'transparent',
+                  colorText:          '#cbd5e1',
+                  colorTextSecondary: '#94a3b8',
+                  colorDanger:        '#f43f5e',
+                  colorSuccess:       '#10b981',
+                  borderRadius:       '10px',
+                  fontFamily:         "'JetBrains Mono', monospace",
+                  fontFamilyButtons:  "'Orbitron', sans-serif",
+                  fontSize:           '13px',
+                },
+                elements: {
+                  rootBox:                  { width: '100%', maxWidth: '100%' },
+                  card:                     { background: 'transparent', border: 'none', boxShadow: 'none', width: '100%', maxWidth: '100%', padding: '0' },
+                  navbar:                   { background: 'rgba(12,12,36,0.9)', border: '1px solid rgba(0,212,255,0.12)', borderRadius: '12px', marginBottom: '16px' },
+                  navbarButton:             { fontFamily: "'JetBrains Mono', monospace", fontSize: '11px', color: '#94a3b8' },
+                  navbarButtonIcon:         { opacity: '0.6' },
+                  headerTitle:              { fontFamily: "'Orbitron', sans-serif", color: '#ffffff', fontSize: '16px', fontWeight: '700' },
+                  headerSubtitle:           { color: '#94a3b8', fontSize: '11px' },
+                  profileSectionTitle:      { fontFamily: "'Orbitron', sans-serif", fontSize: '9px', letterSpacing: '2px', textTransform: 'uppercase', color: '#00d4ff' },
+                  profileSectionTitleText:  { color: '#00d4ff' },
+                  profileSectionContent:    { color: '#cbd5e1' },
+                  profileSectionPrimaryButton: { color: '#00d4ff', fontSize: '11px' },
+                  formFieldLabel:           { color: '#cbd5e1', fontSize: '11px' },
+                  formFieldInput:           { background: 'rgba(0,0,0,0.4)', border: '1px solid rgba(0,212,255,0.12)', color: '#ffffff', borderRadius: '10px', fontFamily: "'JetBrains Mono', monospace", fontSize: '12px' },
+                  formFieldInputShowPasswordButton: { color: '#94a3b8' },
+                  formButtonPrimary:        { background: 'linear-gradient(135deg, #00d4ff, #7c3aed)', color: '#020210', fontFamily: "'Orbitron', sans-serif", fontWeight: '700', border: 'none', borderRadius: '10px', fontSize: '10px', letterSpacing: '0.5px' },
+                  formButtonReset:          { color: '#94a3b8', fontSize: '11px' },
+                  formResendCodeLink:       { color: '#00d4ff' },
+                  dividerLine:              { background: 'rgba(0,212,255,0.10)' },
+                  dividerText:              { color: '#475569', fontSize: '10px' },
+                  avatarBox:                { border: '2px solid rgba(0,212,255,0.3)', borderRadius: '50%' },
+                  avatarImageActionsUpload: { color: '#00d4ff' },
+                  badge:                    { background: 'rgba(0,212,255,0.08)', color: '#00d4ff', border: '1px solid rgba(0,212,255,0.16)', borderRadius: '8px' },
+                  menuList:                 { background: '#07071c', border: '1px solid rgba(0,212,255,0.10)', borderRadius: '10px' },
+                  menuItem:                 { color: '#cbd5e1', fontSize: '12px' },
+                  menuItemButton:           { color: '#cbd5e1', fontSize: '12px' },
+                  userPreviewMainIdentifier:      { color: '#ffffff', fontSize: '13px', fontWeight: '600' },
+                  userPreviewSecondaryIdentifier: { color: '#94a3b8', fontSize: '11px' },
+                  identityPreviewText:            { color: '#cbd5e1', fontSize: '12px' },
+                  identityPreviewEditButtonIcon:  { color: '#00d4ff' },
+                  accordionTriggerButton:         { color: '#cbd5e1', fontSize: '12px' },
+                  alertText:                { color: '#cbd5e1', fontSize: '11px' },
+                  alertIcon:                { color: '#f43f5e' },
+                  page:                     { background: 'transparent' },
+                  pageScrollBox:            { background: 'transparent', padding: '0' },
+                  footer:                   { display: 'none' },
+                  footerAction:             { display: 'none' },
+                  footerActionLink:         { display: 'none' },
+                },
+              }}
+            />
+          )}
+        </div>
+      </div>
+    </div>
+  )
+}
+
+/* ─────────────────────────────────────────────────────────────────────────────
+   MAIN COMPONENT
 ───────────────────────────────────────────────────────────────────────────── */
 export default function DashboardPage() {
   const [loaded,               setLoaded]               = useState(false)
@@ -778,8 +912,6 @@ export default function DashboardPage() {
   const [isMobile,             setIsMobile]              = useState(false)
   const [mobileInfoOpen,       setMobileInfoOpen]        = useState(false)
   const [mobileInfoDismissed,  setMobileInfoDismissed]   = useState(false)
-
-  // ── NEW: Clerk UserProfile modal state ──
   const [clerkProfileOpen,     setClerkProfileOpen]      = useState(false)
 
   const sessionRef  = useRef<NexusSession | null>(null)
@@ -821,7 +953,6 @@ export default function DashboardPage() {
   useEffect(() => {
     const h = (e: KeyboardEvent) => {
       if (e.key === 'Escape') {
-        // Close Clerk profile first if open, then other modals
         if (clerkProfileOpen) { setClerkProfileOpen(false); return }
         setSettingsOpen(false); setDeleteModal(null)
         setLogoutModal(false);  setDdOpen(false); setSheetOpen(false)
@@ -847,13 +978,9 @@ export default function DashboardPage() {
     return () => clearTimeout(t)
   }, [saveState])
 
-  // ── Lock body scroll when Clerk profile is open ──
+  // Lock body scroll when Clerk profile is open
   useEffect(() => {
-    if (clerkProfileOpen) {
-      document.body.style.overflow = 'hidden'
-    } else {
-      document.body.style.overflow = ''
-    }
+    document.body.style.overflow = clerkProfileOpen ? 'hidden' : ''
     return () => { document.body.style.overflow = '' }
   }, [clerkProfileOpen])
 
@@ -1179,7 +1306,6 @@ export default function DashboardPage() {
   }
   function closeSheet() { setSheetOpen(false) }
 
-  // ── Open Clerk UserProfile panel (no redirect) ──
   function openClerkProfile() {
     setDdOpen(false)
     setSheetOpen(false)
@@ -1221,9 +1347,9 @@ export default function DashboardPage() {
   else if (sortBy === 'oldest') filtered.sort((a, b) => new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime())
   else                          filtered.sort((a, b) => a.name.localeCompare(b.name))
 
-  const pendingIds = new Set(pendingQueue.flatMap(q => (q.payload?.data?.projects || []).map((p: Project) => p.id)))
-  const charLen    = projectName.length
-  const charCls    = charLen >= PROJECT_NAME_LIMIT ? 'limit' : charLen >= PROJECT_NAME_LIMIT - 3 ? 'warn' : ''
+  const pendingIds   = new Set(pendingQueue.flatMap(q => (q.payload?.data?.projects || []).map((p: Project) => p.id)))
+  const charLen      = projectName.length
+  const charCls      = charLen >= PROJECT_NAME_LIMIT ? 'limit' : charLen >= PROJECT_NAME_LIMIT - 3 ? 'warn' : ''
   const saveStateCls = saveState ? `save-status show-${saveState.state}` : 'save-status'
 
   /* ── SHARED MENU CONTENT ── */
@@ -1236,9 +1362,7 @@ export default function DashboardPage() {
           <div className="ud-role">{planLabel} Plan</div>
         </div>
       </div>
-
       <div className="ud-section">
-        {/* ── MY ACCOUNT — opens Clerk UserProfile panel inline ── */}
         <button className="ud-item" onClick={() => { onAction(); openClerkProfile() }} role="menuitem">
           <Icon.user />My Account
         </button>
@@ -1255,7 +1379,6 @@ export default function DashboardPage() {
           <Icon.discord />Discord Community
         </a>
       </div>
-
       <div className="ud-divider" />
       <div className="ud-section">
         <button className="ud-item" onClick={() => { claimDaily(); onAction() }} role="menuitem">
@@ -1263,7 +1386,6 @@ export default function DashboardPage() {
           {dailyDisabled ? dailyInfo : 'Claim Daily Credits'}
         </button>
       </div>
-
       <div className="ud-divider" />
       <div className="ud-section">
         <button className="ud-item danger" onClick={() => { setLogoutModal(true); onAction() }} role="menuitem">
@@ -1288,66 +1410,9 @@ export default function DashboardPage() {
         <button className="btn-retry-offline" onClick={retryQueue}>Retry Now</button>
       </div>
 
-      {/* ── CLERK USER PROFILE MODAL — stays on /dashboard ── */}
+      {/* ── CLERK USER PROFILE MODAL ── */}
       {clerkProfileOpen && (
-        <div
-          className="clerk-profile-overlay"
-          role="dialog"
-          aria-modal="true"
-          aria-label="Account settings"
-          onClick={e => { if (e.target === e.currentTarget) setClerkProfileOpen(false) }}
-        >
-          <div className="clerk-profile-panel">
-            {/* Header */}
-            <div className="clerk-profile-header">
-              <div className="clerk-profile-title">
-                <Icon.user />My Account
-              </div>
-              <button
-                className="clerk-profile-close"
-                onClick={() => setClerkProfileOpen(false)}
-                aria-label="Close account panel"
-              >
-                <Icon.cross />
-              </button>
-            </div>
-
-            {/* Clerk UserProfile component embedded here */}
-            <div className="clerk-profile-body">
-              <UserProfile
-                routing="hash"
-                appearance={{
-                  variables: {
-                    colorPrimary:    '#00d4ff',
-                    colorBackground: 'transparent',
-                    colorDanger:     '#f43f5e',
-                    borderRadius:    '10px',
-                    fontFamily:      "'JetBrains Mono', monospace",
-                  },
-                  elements: {
-                    rootBox:           { width: '100%' },
-                    card:              { background: 'transparent', border: 'none', boxShadow: 'none', width: '100%' },
-                    navbar:            { background: 'rgba(12,12,36,0.8)', border: '1px solid rgba(0,212,255,0.10)', borderRadius: '12px' },
-                    navbarButton:      { fontFamily: "'JetBrains Mono', monospace", fontSize: '11px' },
-                    headerTitle:       { fontFamily: "'Orbitron', sans-serif", color: '#ffffff' },
-                    headerSubtitle:    { color: '#94a3b8' },
-                    profileSectionTitle: { fontFamily: "'Orbitron', sans-serif", fontSize: '9px', letterSpacing: '2px', textTransform: 'uppercase' },
-                    formButtonPrimary: {
-                      background:   'linear-gradient(135deg, #00d4ff, #7c3aed)',
-                      color:        '#020210',
-                      fontFamily:   "'Orbitron', sans-serif",
-                      fontWeight:   '700',
-                      border:       'none',
-                    },
-                    avatarBox: { border: '2px solid rgba(0,212,255,0.3)' },
-                    badge:     { background: 'rgba(0,212,255,0.08)', color: '#00d4ff', border: '1px solid rgba(0,212,255,0.16)' },
-                    footer:    { display: 'none' },     // hides "Secured by Clerk"
-                  },
-                }}
-              />
-            </div>
-          </div>
-        </div>
+        <ClerkProfileModal onClose={() => setClerkProfileOpen(false)} />
       )}
 
       {/* MOBILE INFO MODAL */}
@@ -1454,8 +1519,6 @@ export default function DashboardPage() {
             <div className="ms-role">{planLabel} Plan · {creditsDisplay} CR</div>
           </div>
         </div>
-
-        {/* MY ACCOUNT — opens Clerk panel inline */}
         <button className="ms-item" onClick={openClerkProfile}>
           <Icon.user />My Account
         </button>
@@ -1489,7 +1552,6 @@ export default function DashboardPage() {
       <main className="dash-main" role="main">
         <header className="page-header">
           <div className="header-left">
-            {/* Avatar — click opens Clerk profile */}
             <div
               className="header-av-wrap"
               style={{ cursor: 'pointer' }}
@@ -1795,10 +1857,7 @@ export default function DashboardPage() {
             <div className="settings-row"><label>Plan</label><span className="s-val cyan">{planLabel}</span></div>
             <div className="settings-row">
               <label>Manage Clerk account (email, password, security)</label>
-              {/* Opens Clerk UserProfile panel inline — no redirect */}
-              <button className="settings-btn" onClick={openClerkProfile}>
-                My Account
-              </button>
+              <button className="settings-btn" onClick={openClerkProfile}>My Account</button>
             </div>
           </div>
 
