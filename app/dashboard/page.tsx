@@ -821,7 +821,6 @@ function ClerkProfileModal({ onClose }: { onClose: () => void }) {
             </div>
           ) : (
             <UserProfile
-              routing="virtual"
               appearance={{
                 variables: {
                   colorPrimary:       '#00d4ff',
