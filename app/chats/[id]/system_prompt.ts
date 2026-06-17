@@ -211,9 +211,9 @@ export function buildSysPrompt(ctx: SysPromptContext = {}): string {
   // ════════════════════════════════════════════════════════════════════════
   const remoteOrder: string =
     '## REMOTE ORDER — MANDATORY SEQUENCE\n' +
-    '1. create_remote\n' +
-    '2. Server Script (create_script type:Script)\n' +
-    '3. Client LocalScript (create_script type:LocalScript)\n' +
+    '1. create_instance (class_name:"RemoteEvent" / "RemoteFunction", parent:"ReplicatedStorage")\n' +
+    '2. Server Script (create_script type:"Script", parent:"ServerScriptService")\n' +
+    '3. Client LocalScript (create_script type:"LocalScript", parent:"StarterPlayerScripts")\n' +
     'Remote parent: always ReplicatedStorage\n' +
     'Client access: RS:WaitForChild("RemoteName", 10)';
 
@@ -321,167 +321,143 @@ export function buildSysPrompt(ctx: SysPromptContext = {}): string {
     'Ambience: Volume=0.3, Looped=true,  parent=Part or SoundService';
 
   // ════════════════════════════════════════════════════════════════════════
-  // 7. ACTIONS REFERENCE
+  // 7. SECURITY RULES (NEW — post-patch)
+  // ════════════════════════════════════════════════════════════════════════
+  const securityRules: string =
+    '## SECURITY RULES — ENFORCED BY PLUGIN\n' +
+    '• Commands older than 30 seconds are automatically rejected (replay attack guard).\n' +
+    '• script_source parent must be one of: ServerScriptService, ReplicatedStorage, StarterGui,\n' +
+    '  StarterPlayer, StarterPack, ReplicatedFirst, ServerStorage — all others are blocked.\n' +
+    '• Direct arbitrary Lua execution (loadstring) is disabled — use RunCode pipeline/expression/query/transform modes instead.\n' +
+    '• Studio Output is NOT automatically forwarded to the backend — use get_output action to explicitly retrieve logs.\n' +
+    '• Session tokens are ephemeral (memory-only) and never written to disk.\n' +
+    '• All mutating actions auto-set a ChangeHistoryService waypoint for undo support.';
+
+  // ════════════════════════════════════════════════════════════════════════
+  // 8. ACTIONS REFERENCE — ground-truth from plugin source
   // ════════════════════════════════════════════════════════════════════════
   const actionsRef: string =
     '## NEXUS ACTIONS — ActionsManager\n' +
-    'Total registered: 22 actions\n\n' +
+    'Total registered: 24 actions (17 module-based + 7 inline handlers)\n\n' +
 
     '# HOW ACTIONS WORK\n' +
-    'Every action is a JSON payload sent to ActionsManager.dispatch().\n' +
+    'Every action is a JSON payload dispatched to ActionsManager.\n' +
     'Single action  : { "action": "action_name", ...fields }\n' +
     'Batch dispatch : { "actions": [ {action,...}, {action,...} ] } — runs sequentially, task.wait(0) between each step\n' +
-    'All actions are wrapped in pcall — one failure never kills the chain.\n' +
+    'All actions wrapped in pcall — one failure never kills the chain.\n' +
     'MAX_QUEUE = 50 actions per batch — larger batches skip excess with a warning.\n' +
-    'ChangeHistoryService waypoints are auto-set before every mutating action.\n\n' +
-
-    '# DEFAULT PARENTS\n' +
-    'RemoteEvent / RemoteFunction / UnreliableRemoteEvent → ReplicatedStorage\n' +
-    'BindableEvent / BindableFunction                     → ServerScriptService\n' +
-    'Script                                               → ServerScriptService\n' +
-    'LocalScript                                          → StarterPlayerScripts\n' +
-    'ModuleScript                                         → ReplicatedStorage\n' +
-    'ScreenGui / BillboardGui / SurfaceGui                → StarterGui\n' +
-    'Sound                                                → SoundService\n' +
-    'Folder / Configuration / Value                       → ReplicatedStorage\n' +
-    'Part / Model                                         → Workspace\n\n' +
+    'ChangeHistoryService waypoints are auto-set before every mutating action.\n' +
+    'Commands with _ts field older than 30 seconds are automatically blocked.\n\n' +
 
     '# INSTANCE SEARCH (deepFind)\n' +
     'All name fields use a 4-pass search: exact → case-insensitive → partial → plugin cache.\n' +
     'Dot-path supported where noted: "StarterGui.MainFrame.Button"\n' +
-    'Service aliases: "sss"→ServerScriptService, "gui"→StarterGui, "ws"→Workspace,\n' +
+    'Service aliases: "sss"→ServerScriptService, "gui"/"sg"→StarterGui, "ws"→Workspace,\n' +
     '                 "rs"→ReplicatedStorage, "rf"→ReplicatedFirst, "ss"→ServerStorage,\n' +
-    '                 "light"→Lighting, "sound"→SoundService, "sg"→StarterGui\n\n' +
+    '                 "light"→Lighting, "sound"→SoundService\n\n' +
 
-    '# HELPER UTILITIES (internal — used by all actions)\n' +
-    'Helpers.resolveInstance(name, deepFind)  → GetService fallback → deepFind\n' +
-    'Helpers.safeInject(script, source)       → Sets script.Source safely (requires Script Injection permission)\n' +
-    'Helpers.coerceVector3(v)                 → Converts {x,y,z} array or "x,y,z" string → Vector3\n' +
-    'Helpers.coerceColor3(v)                  → Converts {r,g,b} array, "r,g,b" string, or "#RRGGBB" hex → Color3\n' +
-    'Helpers.cleanupPlayTestScript()          → Destroys play_test_assistant from ServerScriptService\n\n' +
+    '# DEFAULT PARENTS (when parent field is omitted)\n' +
+    'RemoteEvent / RemoteFunction / UnreliableRemoteEvent → ReplicatedStorage\n' +
+    'Script                                               → ServerScriptService\n' +
+    'LocalScript                                          → StarterPlayerScripts (inside StarterPlayer)\n' +
+    'ModuleScript                                         → ReplicatedStorage\n' +
+    'ScreenGui / BillboardGui / SurfaceGui                → StarterGui\n' +
+    'Part / Model / Terrain operations                    → Workspace\n' +
+    'All other classes                                    → ServerScriptService\n\n' +
 
-    '# BUILT-IN INLINE HANDLERS\n' +
+    '# SMART PROPERTY COERCION (smartSetProp)\n' +
+    'Color3 props     : {r,g,b} array OR "r,g,b" string OR "#RRGGBB" hex\n' +
+    'Vector3 props    : {x,y,z} array OR "x,y,z" string\n' +
+    'UDim2 props      : {xScale,xOffset,yScale,yOffset} array OR "s,o,s,o" string\n' +
+    'Enum props       : string name e.g. "Grass" for Enum.Material.Grass\n' +
+    'BrickColor       : string name e.g. "Bright red"\n' +
+    'CFrame           : Vector3 position (builds CFrame.new(pos))\n\n' +
+
+    '─────────────────────────────────────────\n' +
+    '# [INLINE HANDLERS] — always available\n' +
+    '─────────────────────────────────────────\n\n' +
+
     'ping()\n' +
-    '  → Health check. Returns { status, version, ts }.\n\n' +
+    '  → Health check. Returns { status:"ok", version, ts }.\n\n' +
+
     'get_info()\n' +
     '  → Returns { version, user, connected, cmds, project, placeId }.\n\n' +
+
     'set_project(project_id, project_name)\n' +
     '  → Updates internal project tracking state.\n\n' +
+
     'get_all_actions()\n' +
-    '  → Returns sorted list of all 22 registered action names. Also posts to backend.\n\n' +
-    'none()\n' +
-    '  → No-op sentinel. Always returns true. Used as a safe placeholder in batch chains.\n\n' +
+    '  → Returns sorted list of all registered action names. Also posts list to backend.\n\n' +
+
+    'redo(label?)\n' +
+    '  → Alias for undo with action="redo". Redoes the last undone waypoint.\n\n' +
+
     'run_code(...)\n' +
-    '  → Snake_case alias for RunCode. Identical parameters.\n\n' +
+    '  → Snake_case alias for RunCode module. Identical parameters — see RunCode section.\n\n' +
+
+    'none()\n' +
+    '  → No-op sentinel. Always returns true. Safe placeholder in batch chains.\n\n' +
 
     '─────────────────────────────────────────\n' +
     '# [SCRIPTS]\n' +
     '─────────────────────────────────────────\n\n' +
 
     'create_script(name?, type?, source?, parent?, disabled?)\n' +
-    '  name        : string — script name\n' +
-    '  type        : "Script" | "LocalScript" | "ModuleScript"\n' +
-    '  source      : string — Lua source code to inject (also: code)\n' +
-    '  parent      : string — destination container name or dot-path\n' +
-    '  disabled    : boolean — sets .Disabled=true (default false)\n' +
-    '  Type inference from name keywords when type omitted:\n' +
-    '    LocalScript  → client, local, ui, gui, hud, menu, screen, button, player, controller,\n' +
-    '                   handler, frame, nametag, billboard, overlay, chat, notification, shop,\n' +
-    '                   inventory, leaderboard, coin, badge, pet, cutscene, tween, animate,\n' +
-    '                   mobile, touch, keybind, input, display, loading, effect, cursor, camera\n' +
-    '    ModuleScript → module, library, lib, util, shared, config, constant, enum,\n' +
-    '                   types, interface, helper, mixin\n' +
-    '    Script       → server, service, manager, admin, anti, cheat, datastore, data,\n' +
-    '                   remote, backend, game, round, event, match, session, kill, damage,\n' +
-    '                   spawn, respawn, teleport, currency, purchase, economy, zombie, npc,\n' +
-    '                   bot, pathfind, ai, wave, enemy, combat, weapon, gun, sword, save,\n' +
-    '                   load, leaderstat\n\n' +
+    '  name        : string — script name (default: "Script")\n' +
+    '  type        : "Script" | "LocalScript" | "ModuleScript" (default: "Script")\n' +
+    '  source      : string — Lua source to inject (also accepted as: code)\n' +
+    '  parent      : string — destination container name, service alias, or dot-path\n' +
+    '  disabled    : boolean — sets .Disabled=true on Script/LocalScript (default: false)\n' +
+    '  Note: ModuleScript auto-generates "local Name = {}\\n\\nreturn Name" boilerplate when source is omitted.\n' +
+    '  Script Injection permission must be enabled in Plugin Security settings.\n\n' +
 
     'edit_script(name, source, operation?)\n' +
-    '  name      : string — exact name of existing script\n' +
-    '  source    : string — new code (also: code)\n' +
-    '  operation : "replace" (default) | "append" | "prepend"\n\n' +
+    '  name      : string — exact name of existing Script/LocalScript/ModuleScript\n' +
+    '  source    : string — new Lua code (also accepted as: code)\n' +
+    '  operation : "replace" (default) | "append" | "prepend"\n' +
+    '  Note: Script Injection permission required.\n\n' +
 
     'read_script(name, line_start?, line_end?)\n' +
     '  name       : string — script name to read\n' +
-    '  line_start : number — first line to return\n' +
-    '  line_end   : number — last line to return\n' +
-    '  Returns: { name, class, source, lines, fullPath }\n\n' +
+    '  line_start : number — first line to return (1-based, default: 1)\n' +
+    '  line_end   : number — last line to return (default: all)\n' +
+    '  Returns: { name, class, source, lines, fullPath } — also posts to backend.\n\n' +
 
     '─────────────────────────────────────────\n' +
-    '# [REMOTES] — always create_remote BEFORE scripts that use them\n' +
-    '─────────────────────────────────────────\n\n' +
-
-    'create_remote(name?, type?, parent?)\n' +
-    '  Accepted type aliases (case-insensitive, underscores ignored):\n' +
-    '    RemoteEvent           → remoteevent, remote_event, event\n' +
-    '    RemoteFunction        → remotefunction, remote_function, function, rf\n' +
-    '    BindableEvent         → bindableevent, bindable_event, bevent\n' +
-    '    BindableFunction      → bindablefunction, bindable_function, bfunction\n' +
-    '    UnreliableRemoteEvent → unreliableremoteevent, unreliable_remote_event, unreliable\n\n' +
-
-    '─────────────────────────────────────────\n' +
-    '# [INSTANCES]\n' +
+    '# [INSTANCES] — universal factory\n' +
     '─────────────────────────────────────────\n\n' +
 
     'create_instance(class_name, name?, parent?, properties?)\n' +
-    '  class_name : string — any valid non-abstract Roblox ClassName (REQUIRED)\n' +
-    '  properties : { [propName]: value } — applied before parenting\n' +
-    '  smartSetProp auto-coerces: Color3 ({r,g,b} or "#hex"), UDim2, Vector3, Enum, BrickColor, CFrame.\n\n' +
-
-    'create_folder(name?, parent?, names?)\n' +
-    '  Single: create_folder(name:"FolderName", parent:"ServerScriptService")\n' +
-    '  Batch : create_folder(names:["A","B","C"], parent:"ReplicatedStorage")\n\n' +
-
-    'create_value(name?, type?, value?, parent?)\n' +
-    '  string/str → StringValue | int/integer → IntValue | number/float → NumberValue\n' +
-    '  bool/boolean → BoolValue | vector3 → Vector3Value | color3 → Color3Value | object → ObjectValue\n\n' +
-
-    'create_configuration(name?, parent?, values?)\n' +
-    '  values: { [key]: value } — auto-typed: number→NumberValue | boolean→BoolValue | else→StringValue\n\n' +
-
-    '─────────────────────────────────────────\n' +
-    '# [UI]\n' +
-    '─────────────────────────────────────────\n\n' +
-
-    'create_ui(class?, name?, parent?, enabled?, reset_on_spawn?, ignore_inset?, display_order?, elements?, children?)\n' +
-    '  class : "ScreenGui" (default) | "BillboardGui" | "SurfaceGui"\n' +
-    '  UIElementDef child fields (all optional):\n' +
-    '    class/type, name, visible, z_index, layout_order, active, selectable\n' +
-    '    size, position: UDim2 as pure scale "0.5,0,0.4,0" — NO mixed scale+offset\n' +
-    '    anchor_point: [x,y] | background_color: [r,g,b] or "#hex"\n' +
-    '    corner_radius, stroke_thickness, stroke_color, stroke_transparency\n' +
-    '    padding: number or {top,bottom,left,right}\n' +
-    '    gradient: { color1, color2, rotation? }\n' +
-    '    list_layout: boolean | grid_layout: { cell_size, cell_padding }\n' +
-    '    image: assetid or "rbxassetid://..." | image_color, image_transparency, scale_type\n' +
-    '    canvas_size: UDim2 | scrollbar_thickness | scrolling_direction\n' +
-    '    children: [ UIElementDef, ... ] — unlimited nesting\n\n' +
-
-    '─────────────────────────────────────────\n' +
-    '# [SOUNDS]\n' +
-    '─────────────────────────────────────────\n\n' +
-
-    'create_sound(name?, sound_id?, volume?, looped?, pitch?, roll_off_max?, roll_off_mode?, parent?)\n' +
-    '  sound_id : number or "rbxassetid://..." string\n' +
-    '  volume   : number (default 0.5) | looped: boolean (default false)\n' +
-    '  pitch    : number → PlaybackSpeed | roll_off_mode: Enum.RollOffMode name string\n\n' +
+    '  class_name  : string — any valid non-abstract Roblox ClassName (REQUIRED)\n' +
+    '  name        : string — instance name (default: class_name)\n' +
+    '  parent      : string — destination container (uses service defaults when omitted)\n' +
+    '  properties  : { [propName]: value } — applied before parenting via smartSetProp\n' +
+    '  Examples:\n' +
+    '    create_instance("RemoteEvent", "OnPlayerDied", "ReplicatedStorage")\n' +
+    '    create_instance("Folder", "Systems", "ServerScriptService")\n' +
+    '    create_instance("StringValue", "PlayerName", "ReplicatedStorage", {Value:"Hero"})\n' +
+    '    create_instance("BoolValue", "IsAlive", "ReplicatedStorage", {Value:true})\n' +
+    '    create_instance("NumberValue", "Score", "ReplicatedStorage", {Value:0})\n' +
+    '    create_instance("Configuration", "GameConfig", "ReplicatedStorage")\n' +
+    '    create_instance("ScreenGui", "MainGui", "StarterGui", {IgnoreGuiInset:true})\n' +
+    '    create_instance("Sound", "ButtonClick", "SoundService", {SoundId:"rbxassetid://6895079853", Volume:0.5})\n\n' +
 
     '─────────────────────────────────────────\n' +
     '# [TERRAIN]\n' +
     '─────────────────────────────────────────\n\n' +
 
-    'terrain(operation, material?, position?, size?, radius?, height?, ...)\n' +
-    '  "fill_block"    → material, position:[x,y,z], size:[x,y,z]\n' +
-    '  "fill_ball"     → material, position:[x,y,z], radius:number\n' +
-    '  "fill_cylinder" → material, position:[x,y,z], radius:number, height:number\n' +
-    '  "replace"       → from_material, to_material, position, size\n' +
-    '  "clear"         → clears ALL terrain\n' +
-    '  "flatten"       → material, center_x, center_z, width, depth, height, thickness\n' +
-    '  "hills"         → material, center_x, center_z, count, radius, spread\n' +
-    '  "island"        → material, beach_material, position, radius, water:boolean\n' +
-    '  "mountain"      → material, snow_material, position, radius, peak, steps\n' +
-    '  "river"         → direction:"x|z", start_pos:[x,y,z], length, width, height\n\n' +
+    'terrain(op, material?, position?, size?, radius?, corner1?, corner2?)\n' +
+    '  "fill_block"    → position:[x,y,z], size:[x,y,z], material\n' +
+    '                    Fills a rectangular block of terrain voxels.\n' +
+    '  "fill_ball"     → position:[x,y,z], radius:number, material\n' +
+    '                    Fills a spherical region of terrain voxels.\n' +
+    '  "fill_region"   → corner1:[x,y,z], corner2:[x,y,z], material\n' +
+    '                    Fills terrain between two corner points (auto-snaps to 4-stud grid).\n' +
+    '  "clear"         → (no args) clears ALL terrain\n' +
+    '                    (with corner1+corner2) clears terrain in that region only\n' +
+    '  material values : "Grass" | "Sand" | "Rock" | "Water" | "Snow" | "Mud" | "Ground"\n' +
+    '                    | "WoodPlanks" | "SmoothPlastic" | "Concrete" | "Ice" | "Sandstone"\n' +
+    '                    (any valid Enum.Material name string)\n\n' +
 
     '─────────────────────────────────────────\n' +
     '# [PROPERTIES]\n' +
@@ -489,42 +465,69 @@ export function buildSysPrompt(ctx: SysPromptContext = {}): string {
 
     'set_properties(name, property?, value?, properties?)\n' +
     '  name       : string — instance name, service alias, or dot-path (also: target)\n' +
-    '  properties : { [propName]: value } — bulk mode\n' +
-    '  Shortcut keys: gravity, walk_speed, jump_power, jump_height, clock_time, brightness,\n' +
+    '  property   : string — single property name (also: prop)\n' +
+    '  value      : any — single property value\n' +
+    '  properties : { [propName]: value } — bulk mode (applied all at once)\n' +
+    '  Shortcut keys (mapped automatically):\n' +
+    '    gravity, walk_speed, jump_power, jump_height, clock_time, brightness,\n' +
     '    fog_end, fog_start, global_shadows, camera_max_zoom, camera_min_zoom,\n' +
-    '    streaming_enabled, respawn_time, health_display_distance, etc.\n\n' +
+    '    streaming_enabled, respawn_time, health_display_distance,\n' +
+    '    name_display_distance, character_auto_loads, load_string_enabled,\n' +
+    '    volumetric_audio, ambient_reverb, exposure, technology\n\n' +
 
     '─────────────────────────────────────────\n' +
     '# [OBJECT MANAGEMENT]\n' +
     '─────────────────────────────────────────\n\n' +
 
     'rename(name, new_name, parent?)\n' +
+    '  name     : string — current name, dot-path, or fuzzy search term\n' +
+    '  new_name : string — desired new name\n' +
+    '  parent   : string — optional scope restriction\n' +
+    '  Returns: { success, oldName, newName, fullPath }\n\n' +
+
     'delete(name?, names?, class?, parent?, children_only?)\n' +
-    '  Batch: delete(names:["A","B","C"])\n' +
+    '  Single  : delete(name:"MyScript")\n' +
+    '  Batch   : delete(names:["A","B","C"])\n' +
     '  By class: delete(class:"SpecialMesh", parent:"Workspace")\n' +
-    '  Children only: delete(name:"Container", children_only:true)\n\n' +
+    '  Children only: delete(name:"Container", children_only:true) — destroys all children, keeps container\n\n' +
+
     'parent(name?, names?, parent)\n' +
-    '  Batch: parent(names:["A","B"], parent:"ReplicatedStorage")\n\n' +
+    '  Single : parent(name:"MyScript", parent:"ReplicatedStorage")\n' +
+    '  Batch  : parent(names:["A","B"], parent:"ReplicatedStorage")\n' +
+    '  parent field is REQUIRED\n\n' +
+
     'list(class?, parent?, pattern?)\n' +
-    '  Returns { total, entries:[{name,class,lines,fullPath,service,disabled}], breakdown }\n\n' +
+    '  class   : string — ClassName to filter by (default: all script types when omitted)\n' +
+    '  parent  : string — restrict scan to this container\n' +
+    '  pattern : string — case-insensitive substring filter on instance names\n' +
+    '  Returns: { total, entries:[{name, class, lines, fullPath, service, disabled}], breakdown:{service:count} }\n' +
+    '  Also posts results to backend.\n\n' +
 
     '─────────────────────────────────────────\n' +
     '# [ASSET INSERT]\n' +
     '─────────────────────────────────────────\n\n' +
 
     'insert_asset(asset_id, name?, parent?, position?, anchored?)\n' +
-    '  asset_id : number or string — free/open Roblox catalog asset only\n' +
-    '  anchored : boolean — anchors all BaseParts in loaded model\n\n' +
+    '  asset_id : number or string — free/open Roblox catalog asset ID (also: id)\n' +
+    '  name     : string — override the loaded model name\n' +
+    '  parent   : string — destination container (default: Workspace)\n' +
+    '  position : [x,y,z] — pivot position for Model, or Position for BasePart\n' +
+    '  anchored : boolean — anchors ALL BaseParts inside the loaded model\n' +
+    '  Note: asset must be free and "Insert Place" must be enabled in game settings.\n\n' +
 
     '─────────────────────────────────────────\n' +
     '# [PLAY TEST]\n' +
     '─────────────────────────────────────────\n\n' +
 
     (ptEnabled
-      ? `play_test(action?, duration?)\n` +
-        `  action   : "start" (default) | "stop"\n` +
-        `  duration : number — auto-stop after N seconds (default ${ptDur}s)\n` +
-        `  IMPORTANT: call play_test AFTER all inject/create actions are complete.\n`
+      ? `play_test(action?, duration?, server_script?, local_script?)\n` +
+        `  action        : "start" (default) | "stop"\n` +
+        `  duration      : number — auto-stop after N seconds (default ${ptDur}s, max 60s)\n` +
+        `  server_script : string — optional Lua source injected as __PlaytestUserServer__ in ServerScriptService\n` +
+        `  local_script  : string — optional Lua source injected as __PlaytestUserLocal__ in StarterPlayerScripts\n` +
+        `  Returns: { status:"completed"|"stopped"|"failed", errors:[{scriptPath,lineNumber,message}], messages, logs, duration }\n` +
+        `  IMPORTANT: always call play_test AFTER all create/inject actions are complete.\n` +
+        `  Uses StudioTestService:ExecutePlayModeAsync internally — sandboxed, auto-cleans injected scripts.\n`
       : 'play_test → DISABLED by user settings.\n') + '\n' +
 
     '─────────────────────────────────────────\n' +
@@ -532,69 +535,124 @@ export function buildSysPrompt(ctx: SysPromptContext = {}): string {
     '─────────────────────────────────────────\n\n' +
 
     'resolve_mention(name, mention?)\n' +
-    '  Strips leading "@" automatically. Searches all services via deepFind.\n' +
+    '  name/mention : string — instance name or @mention (leading @ stripped automatically)\n' +
+    '  Searches all services via deepFind (4-pass).\n' +
     '  Returns: { name, class, path, parentName }\n' +
-    '    + Script extras: { source, lineCount, hasSource, disabled }\n' +
-    '    + BasePart extras: { position:[x,y,z], size:[x,y,z], anchored, material, transparency }\n\n' +
+    '    + Script extras  : { source, lineCount, hasSource, disabled }\n' +
+    '    + BasePart extras: { position:[x,y,z], size:[x,y,z], anchored, material, transparency }\n' +
+    '  Also posts result to backend. Posts "mention_not_found" if not resolved.\n\n' +
 
     '─────────────────────────────────────────\n' +
-    '# [GET OUTPUT]\n' +
+    '# [OUTPUT LOG]\n' +
     '─────────────────────────────────────────\n\n' +
 
     'get_output(max_lines?, filter?)\n' +
-    '  max_lines : number — default 50, hard cap 200\n' +
-    '  filter    : string — optional substring filter (case-insensitive)\n' +
-    '  Returns { entries:[{level:"LOG|WARN|ERROR|INFO", message, ts}], count, total }\n\n' +
+    '  max_lines : number — max entries to return (default 50, hard cap 200)\n' +
+    '  filter    : string — optional case-insensitive substring filter on messages\n' +
+    '  Source    : LogService:GetLogHistory() — reads the Studio Output log buffer\n' +
+    '  Returns: { entries:[{level:"LOG"|"WARN"|"ERROR"|"INFO", message, ts}], count, total }\n' +
+    '  Also posts entries to backend.\n' +
+    '  Note: Studio Output is NOT auto-forwarded — this action must be called explicitly.\n\n' +
 
     '─────────────────────────────────────────\n' +
     '# [UNDO / REDO]\n' +
     '─────────────────────────────────────────\n\n' +
 
-    'undo(label?, action?)\n' +
-    '  action : "undo" (default) | "redo"\n\n' +
+    'undo(action?, label?)\n' +
+    '  action : "undo" (default) | "redo"\n' +
+    '  label  : string — optional waypoint label to record before the undo/redo\n' +
+    '  Note: redo() inline handler is an alias for undo(action:"redo")\n\n' +
 
     '─────────────────────────────────────────\n' +
     '# [RunCode — ADVANCED EXECUTION ENGINE]\n' +
     '─────────────────────────────────────────\n\n' +
 
     'RunCode(mode, label?, ...mode-specific fields)\n' +
-    '  Also callable as run_code(...)\n\n' +
+    '  Also callable as: run_code(...)\n' +
+    '  label : string — optional waypoint label (e.g. "MyBatchOp")\n\n' +
 
-    'MODE: "pipeline" — sequential atomic operations\n' +
+    'MODE: "pipeline" — sequential atomic operations on instances\n' +
     '  steps: [ PipelineStep, ... ]\n' +
-    '  ops: set | create | delete | clone | parent | rename | anchor | unanchor | call\n\n' +
+    '  Each step: { op, target?, name?, class?, parent?, property?, value?, properties? }\n' +
+    '  ops:\n' +
+    '    set       → set property/properties on target instance\n' +
+    '    create    → create new instance of class, set properties, parent it\n' +
+    '    delete    → destroy target instance\n' +
+    '    clone     → clone target, rename, reparent\n' +
+    '    parent    → move target to new parent\n' +
+    '    rename    → rename target to name field\n' +
+    '    anchor    → set Anchored=true on all BaseParts in/under target\n' +
+    '    unanchor  → set Anchored=false on all BaseParts in/under target\n' +
+    '    call      → call an allowlisted read-only method on target\n' +
+    '                (allowed: GetFullName, GetChildren, GetDescendants, IsA, FindFirstChild, GetTags, GetAttribute)\n' +
+    '  Yields task.wait(0.01) between steps to keep Studio responsive.\n\n' +
 
-    'MODE: "expression" — read a property chain (read-only)\n' +
-    '  expression: "ServiceOrObject.Prop1.Prop2"\n' +
-    '  Example: { mode:"expression", expression:"Workspace.Baseplate.Size" }\n\n' +
+    'MODE: "expression" — read-only property chain evaluation\n' +
+    '  expression: "ServiceOrObject.Property.SubProperty"\n' +
+    '  Resolves dot-path to an instance, walks remaining segments as property reads.\n' +
+    '  Result posted to backend as { action:"expression_result", expression, result }.\n' +
+    '  Examples:\n' +
+    '    { mode:"expression", expression:"Workspace.Baseplate.Size" }\n' +
+    '    { mode:"expression", expression:"Lighting.ClockTime" }\n\n' +
 
     'MODE: "transform" — apply properties to all matching instances\n' +
-    '  match_class, match_name, match_parent, property, value, properties\n\n' +
+    '  match_class  : string — filter by ClassName (e.g. "BasePart")\n' +
+    '  match_name   : string — case-insensitive substring filter on Name\n' +
+    '  match_parent : string — restrict search root (default: Workspace)\n' +
+    '  property     : string — single property to set on all matched\n' +
+    '  value        : any — value for single property\n' +
+    '  properties   : { [prop]: value } — bulk properties\n' +
+    '  Returns: number of successful property applications.\n\n' +
 
     'MODE: "query" — read structured data from instances\n' +
-    '  target, class, parent, properties:[], recursive (hard cap: 100 results)\n\n' +
+    '  target     : string — specific instance name (single-target mode)\n' +
+    '  class      : string — ClassName filter for search-based mode\n' +
+    '  parent     : string — search root (default: Workspace)\n' +
+    '  properties : string[] — list of property names to read per instance\n' +
+    '  recursive  : boolean — include all descendants (default: true)\n' +
+    '  Hard cap: 100 results. Posts { action:"query_result", results, count } to backend.\n\n' +
 
-    'MODE: "script_source" — inject or create Lua source code\n' +
-    '  target?, name, class, parent, source (REQUIRED), operation:"replace|append|prepend"\n\n' +
+    'MODE: "script_source" — inject or create Lua source into a script\n' +
+    '  target    : string — name of existing script to edit (omit to create new)\n' +
+    '  name      : string — name for new script\n' +
+    '  class     : "Script" | "LocalScript" | "ModuleScript"\n' +
+    '  parent    : string — MUST be a whitelisted service (see SECURITY RULES)\n' +
+    '  source    : string — Lua source code (REQUIRED)\n' +
+    '  operation : "replace" (default) | "append" | "prepend"\n' +
+    '  Note: Script Injection permission required. Parent is validated against whitelist.\n\n' +
 
     '─────────────────────────────────────────\n' +
     '# DISPATCH QUICK REFERENCE\n' +
     '─────────────────────────────────────────\n' +
-    'undo()                                    → Undo last action\n' +
-    'ping()                                    → Health check\n' +
-    'get_info()                                → Plugin metadata\n' +
-    'get_all_actions()                         → List all 22 action names\n' +
-    'resolve_mention(name)                     → Resolve instance by name/@mention\n' +
-    'list(class?, parent?, pattern?)           → Scan and list instances\n' +
-    'read_script(name, line_start?, line_end?) → Read script source\n' +
-    'get_output(max_lines?, filter?)           → Read Studio Output log\n' +
-    'run_code(...) / RunCode(...)              → Advanced execution engine\n\n' +
+    'ping()                                           → Health check\n' +
+    'get_info()                                       → Plugin metadata\n' +
+    'get_all_actions()                                → List all registered action names\n' +
+    'none()                                           → No-op safe placeholder\n' +
+    'undo(action?)                                    → Undo or redo last waypoint\n' +
+    'redo(label?)                                     → Redo alias\n' +
+    'set_project(project_id, project_name)            → Update project tracking\n' +
+    'create_script(name, type, source, parent)        → Create new script\n' +
+    'edit_script(name, source, operation?)            → Edit existing script\n' +
+    'read_script(name, line_start?, line_end?)        → Read script source\n' +
+    'create_instance(class_name, name?, parent?, properties?) → Create any instance\n' +
+    'set_properties(name, property?, value?, properties?) → Set instance properties\n' +
+    'rename(name, new_name)                           → Rename instance\n' +
+    'delete(name?, names?, class?, parent?)           → Delete instance(s)\n' +
+    'parent(name?, names?, parent)                    → Reparent instance(s)\n' +
+    'list(class?, parent?, pattern?)                  → List instances\n' +
+    'insert_asset(asset_id, name?, parent?, position?, anchored?) → Insert catalog asset\n' +
+    'terrain(op, material?, position?, ...)           → Terrain operations\n' +
+    'resolve_mention(name)                            → Resolve instance by name/@mention\n' +
+    'get_output(max_lines?, filter?)                  → Read Studio Output log\n' +
+    'run_code/RunCode(mode, ...)                      → Advanced execution engine\n' +
+    (ptEnabled ? `play_test(action?, duration?, server_script?, local_script?) → Run sandboxed playtest\n` : '') +
 
-    '# ACTION DISPATCH RULES\n' +
-    '• MAX_QUEUE = 50 actions per batch — excess actions skipped with warning\n' +
+    '# BATCH DISPATCH RULES\n' +
+    '• MAX_QUEUE = 50 actions per batch — excess actions skipped with a warning\n' +
     '• task.wait(0) between each batch step — keeps Studio responsive\n' +
     '• All errors captured by ErrorHandler — never crash the dispatch loop\n' +
-    '• ChangeHistoryService waypoint auto-set before every mutating action';
+    '• ChangeHistoryService waypoint auto-set before every mutating action\n' +
+    '• Commands with _ts field older than 30 seconds are automatically rejected';
 
   // ════════════════════════════════════════════════════════════════════════
   // ASSEMBLE ALL SECTIONS
@@ -606,6 +664,7 @@ export function buildSysPrompt(ctx: SysPromptContext = {}): string {
     remoteOrder,
     iconLibrary,
     soundLibrary,
+    securityRules,
     actionsRef,
   ];
 
