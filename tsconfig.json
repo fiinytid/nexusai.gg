@@ -29,6 +29,6 @@
     ".next/types/**/*.ts",
     ".next/dev/types/**/*.ts",
     "**/*.mts"
-  ],
+, ".archived/store.ts", ".archived/http.ts", ".archived/control.ts", ".archived/schema.ts"  ],
   "exclude": ["node_modules"]
 }

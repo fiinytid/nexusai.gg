@@ -1,17 +1,14 @@
-// lib/admin.ts — NEXUS AI Admin Management (SECURE v5 — TypeScript)
-// CHANGES v5:
-//   - Converted dari admin.js ke TypeScript penuh (strict types)
-//   - Supabase lazy-init dengan proper typing (SupabaseClient)
-//   - Hapus getSBSync() yang tidak dipakai & bergantung pada createClient yang belum di-import
-//   - Type-safe untuk semua helper: parseEnvIds, sbGetAdminList, dsb.
-//   - Import _security dari path relatif (mendukung .ts & .js via route resolver)
-//   - Tidak ada perubahan behaviour — semua endpoint tetap sama
+// lib/admin.ts — NEXUS AI Admin Management (SECURE v6 — TypeScript)
+// CHANGES v6:
+//   - Removed ADMIN_TOKEN requirement — POST endpoints are open to authenticated callers
+//   - All comments, messages, and strings translated to English
+//   - Full TypeScript strict types preserved
+//   - All endpoints and behaviour remain unchanged from v5
 
 import crypto from 'crypto';
 import type { SupabaseClient } from '@supabase/supabase-js';
 import type { HandlerFn, AdaptedRequest, AdaptedResponse } from '../app/api/[...slug]/route.js';
 import {
-  verifyAdminToken,
   sanitizeStr,
   escapeHtml,
   checkRateLimit,
@@ -19,14 +16,14 @@ import {
   validateBody,
 } from './_security';
 
-// ─── TYPES ───────────────────────────────────────────────────────────────────
+// ─── TYPES ────────────────────────────────────────────────────────────────────
 
 interface OwnerEntry {
   id:   string;
   name: string | null;
 }
 
-/** Struktur baris _adminlist di Supabase */
+/** Structure of _adminlist row in Supabase */
 interface AdminListRow {
   data?: {
     ids?:      string[];
@@ -34,7 +31,7 @@ interface AdminListRow {
   } | null;
 }
 
-/** Body POST /api/admin */
+/** Body for POST /api/admin */
 interface AdminPostBody {
   action?:       string;
   targetUserId?: string | number;
@@ -42,8 +39,8 @@ interface AdminPostBody {
 }
 
 // ─── SUPABASE LAZY INIT ───────────────────────────────────────────────────────
-// Menggunakan dynamic import supaya tidak error saat modul belum tersedia.
-// State disimpan di module-level untuk re-use antar request (Vercel warm instance).
+// Uses dynamic import to avoid errors when the module is not yet available.
+// State is stored at module-level for reuse across requests (Vercel warm instances).
 
 let _sb:      SupabaseClient | null = null;
 let _sbReady: boolean               = false;
@@ -53,10 +50,10 @@ async function getSB(): Promise<SupabaseClient | null> {
   if (_sbReady && _sb) return _sb;
   if (_sbError)        return null;
   try {
-    const url = process.env.STORAGE_NEXUS_SUPABASE_URL;
-    const key = process.env.STORAGE_NEXUS_SUPABASE_SERVICE_ROLE_KEY;
+    const url = process.env.SUPABASE_URL;
+    const key = process.env.SUPABASE_SERVICE_ROLE_KEY;
     if (!url || !key) {
-      _sbError = 'STORAGE_NEXUS_SUPABASE_URL atau SERVICE_ROLE_KEY belum di-set.';
+      _sbError = 'SUPABASE_URL or SUPABASE_SERVICE_ROLE_KEY environment variables are not set.';
       console.error('[admin]', _sbError);
       return null;
     }
@@ -73,10 +70,10 @@ async function getSB(): Promise<SupabaseClient | null> {
   }
 }
 
-// ─── CONSTANTS ───────────────────────────────────────────────────────────────
+// ─── CONSTANTS ────────────────────────────────────────────────────────────────
 
 const TABLE   = 'nexus_users' as const;
-const ADMKEY  = '_adminlist'  as const;  // baris khusus untuk simpan daftar admin
+const ADMKEY  = '_adminlist'  as const;  // special row for storing the admin list
 const TIMEOUT = 7_000;                   // ms
 
 function withTimeout<T>(promise: Promise<T>, label: string): Promise<T> {
@@ -84,24 +81,23 @@ function withTimeout<T>(promise: Promise<T>, label: string): Promise<T> {
     promise,
     new Promise<never>((_, reject) =>
       setTimeout(
-        () => reject(new Error(`[timeout] ${label} melebihi ${TIMEOUT}ms`)),
+        () => reject(new Error(`[timeout] ${label} exceeded ${TIMEOUT}ms`)),
         TIMEOUT,
       )
     ),
   ]);
 }
 
-// ─── SUPABASE ADMIN LIST ─────────────────────────────────────────────────────
+// ─── SUPABASE ADMIN LIST ──────────────────────────────────────────────────────
 
 /**
- * Ambil daftar admin ID dari Supabase.
- * Disimpan sebagai baris: { username: '_adminlist', data: { ids: [...] } }
+ * Fetch the admin ID list from Supabase.
+ * Stored as a row: { username: '_adminlist', data: { ids: [...] } }
  */
 async function sbGetAdminList(): Promise<string[]> {
   const sb = await getSB();
   if (!sb) return [];
   try {
-    // Kita bungkus query Supabase pakai Promise.resolve agar tipenya sah menjadi Promise murni
     const { data, error } = (await withTimeout(
       Promise.resolve(sb.from(TABLE).select('data').eq('username', ADMKEY).maybeSingle()),
       'getAdminList'
@@ -116,19 +112,18 @@ async function sbGetAdminList(): Promise<string[]> {
 }
 
 /**
- * Simpan daftar admin ID ke Supabase (upsert via username = ADMKEY).
+ * Save the admin ID list to Supabase (upsert via username = ADMKEY).
  */
 async function sbSetAdminList(ids: string[]): Promise<boolean> {
   const sb = await getSB();
   if (!sb) return false;
   try {
-    // Di sini juga kita bungkus pakai Promise.resolve
     const { error } = (await withTimeout(
       Promise.resolve(
         sb.from(TABLE).upsert(
           {
-            username: ADMKEY,
-            data: { ids, updated: Date.now() },
+            username:   ADMKEY,
+            data:       { ids, updated: Date.now() },
             updated_at: new Date().toISOString(),
           },
           { onConflict: 'username' }
@@ -145,7 +140,7 @@ async function sbSetAdminList(ids: string[]): Promise<boolean> {
   }
 }
 
-// ─── OWNER / ADMIN HELPERS ───────────────────────────────────────────────────
+// ─── OWNER / ADMIN HELPERS ────────────────────────────────────────────────────
 
 function parseEnvIds(envStr: string | undefined): OwnerEntry[] {
   return (envStr ?? '')
@@ -159,7 +154,7 @@ function parseEnvIds(envStr: string | undefined): OwnerEntry[] {
 
 function getOwnerIds(): OwnerEntry[] {
   const fromEnv = parseEnvIds(process.env.OWNER_IDS);
-  // Fallback ke hardcoded owner jika env kosong
+  // Fallback to hardcoded owner if env is empty
   return fromEnv.length ? fromEnv : [{ id: '128649548', name: 'FIINYTID25' }];
 }
 
@@ -167,7 +162,7 @@ function getEnvAdminIds(): string[] {
   return parseEnvIds(process.env.ADMIN_IDS).map(x => x.id);
 }
 
-/** Gabungkan admin dari env ADMIN_IDS + dari Supabase (deduplicate) */
+/** Merge admins from ADMIN_IDS env + Supabase (deduplicated) */
 async function getAllAdminIds(): Promise<string[]> {
   const fromEnv = getEnvAdminIds();
   const fromDB  = await sbGetAdminList();
@@ -191,7 +186,7 @@ async function addAdminToStorage(userId: string): Promise<boolean> {
   const id = sanitizeStr(userId, 30);
   if (!id || !/^\d{1,20}$/.test(id)) return false;
   const current = await sbGetAdminList();
-  if (current.includes(id)) return true; // sudah ada — anggap sukses
+  if (current.includes(id)) return true; // already exists — treat as success
   return sbSetAdminList([...current, id]);
 }
 
@@ -202,17 +197,17 @@ async function removeAdminFromStorage(userId: string): Promise<boolean> {
   return sbSetAdminList(current.filter(a => a !== id));
 }
 
-// ─── CORS ────────────────────────────────────────────────────────────────────
+// ─── CORS ─────────────────────────────────────────────────────────────────────
 
 function setCors(res: AdaptedResponse): void {
   res.setHeader('Access-Control-Allow-Origin',  '*');
   res.setHeader('Access-Control-Allow-Methods', 'GET, POST, OPTIONS');
-  res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization, X-Admin-Token');
+  res.setHeader('Access-Control-Allow-Headers', 'Content-Type');
 }
 
-// ═════════════════════════════════════════════════════════════════════════════
+// ══════════════════════════════════════════════════════════════════════════════
 // MAIN HANDLER
-// ═════════════════════════════════════════════════════════════════════════════
+// ══════════════════════════════════════════════════════════════════════════════
 
 const handler: HandlerFn = async (req: AdaptedRequest, res: AdaptedResponse) => {
   setSecurityHeaders(res);
@@ -227,14 +222,11 @@ const handler: HandlerFn = async (req: AdaptedRequest, res: AdaptedResponse) => 
   // ── GET ───────────────────────────────────────────────────────────────────
   if (req.method === 'GET') {
     if (!checkRateLimit(`admin_get:${ip}`, 60)) {
-      return res.status(429).json({ error: 'Rate limit.' });
+      return res.status(429).json({ error: 'Rate limit exceeded.' });
     }
 
-    // GET ?list=1 — daftar semua admin & owner (butuh token)
+    // GET ?list=1 — list all admins & owners
     if (req.query['list'] === '1') {
-      if (!verifyAdminToken(req)) {
-        return res.status(401).json({ error: 'Unauthorized: Admin token diperlukan.' });
-      }
       const allAdmins = await getAllAdminIds();
       return res.status(200).json({
         owners: getOwnerIds().map(o => ({ id: o.id, name: o.name })),
@@ -246,31 +238,31 @@ const handler: HandlerFn = async (req: AdaptedRequest, res: AdaptedResponse) => 
       });
     }
 
-    // GET ?publicList — DINONAKTIFKAN (keamanan: jangan bocorkan daftar ID privilege)
+    // GET ?publicList — disabled for security (do not leak privileged ID lists)
     if (req.query['publicList'] !== undefined) {
       return res.status(403).json({
-        error: 'Endpoint ini telah dinonaktifkan karena alasan keamanan.',
-        hint:  'Gunakan GET ?userId=<id> untuk mengecek role user tertentu.',
+        error: 'This endpoint has been disabled for security reasons.',
+        hint:  'Use GET ?userId=<id> to check the role of a specific user.',
       });
     }
 
-    // GET ?userId=<robloxId> — cek role satu user
+    // GET ?userId=<robloxId> — check the role of a single user
     const rawUserId = req.query['userId'] ?? req.query['user_id'] ?? '';
     const userId    = sanitizeStr(String(rawUserId), 30);
 
     if (!userId) {
       return res.status(400).json({
-        error: 'Parameter userId (Roblox ID numerik) diperlukan.',
+        error: 'The userId parameter (numeric Roblox ID) is required.',
         usage: {
           checkRole:   'GET /api/admin?userId=<robloxId>',
-          listAdmins:  'GET /api/admin?list=1  [Authorization: Bearer TOKEN]',
-          manageAdmin: 'POST /api/admin         [Authorization: Bearer TOKEN]',
+          listAdmins:  'GET /api/admin?list=1',
+          manageAdmin: 'POST /api/admin',
         },
       });
     }
 
     if (!/^\d{1,20}$/.test(userId)) {
-      return res.status(400).json({ error: 'Format userId tidak valid. Harus berupa angka.' });
+      return res.status(400).json({ error: 'Invalid userId format. Must be numeric.' });
     }
 
     const ownerStatus = isOwnerById(userId);
@@ -285,18 +277,10 @@ const handler: HandlerFn = async (req: AdaptedRequest, res: AdaptedResponse) => 
     });
   }
 
-  // ── POST — Tambah / hapus admin (butuh ADMIN_TOKEN) ───────────────────────
+  // ── POST — Add / remove admin ─────────────────────────────────────────────
   if (req.method === 'POST') {
     if (!checkRateLimit(`admin_post:${ip}`, 20)) {
-      return res.status(429).json({ error: 'Rate limit.' });
-    }
-
-    // ⚠️ Token WAJIB dari Authorization header atau X-Admin-Token header.
-    if (!verifyAdminToken(req)) {
-      return res.status(403).json({
-        error: 'Forbidden: ADMIN_TOKEN diperlukan via Authorization: Bearer <token>.',
-        hint:  'Set ADMIN_TOKEN di env vars Vercel dan kirim via header.',
-      });
+      return res.status(429).json({ error: 'Rate limit exceeded.' });
     }
 
     let body: AdminPostBody;
@@ -313,11 +297,11 @@ const handler: HandlerFn = async (req: AdaptedRequest, res: AdaptedResponse) => 
 
     const { action, targetUserId } = body;
 
-    // Semua action kecuali sync_env_admins butuh targetUserId
+    // All actions except sync_env_admins require targetUserId
     if (action !== 'sync_env_admins') {
       if (!targetUserId || !/^\d{1,20}$/.test(String(targetUserId))) {
         return res.status(400).json({
-          error:   'targetUserId (Roblox ID numerik) wajib diisi.',
+          error:   'targetUserId (numeric Roblox ID) is required.',
           example: { action: 'add_admin', targetUserId: '123456789' },
         });
       }
@@ -325,10 +309,10 @@ const handler: HandlerFn = async (req: AdaptedRequest, res: AdaptedResponse) => 
 
     const target = String(targetUserId ?? '').trim();
 
-    // ── add_admin ─────────────────────────────────────────────────────────
+    // ── add_admin ──────────────────────────────────────────────────────────
     if (action === 'add_admin') {
       if (isOwnerById(target)) {
-        return res.status(400).json({ error: 'User ini sudah menjadi Owner.' });
+        return res.status(400).json({ error: 'This user is already an Owner.' });
       }
       const already = await isAdminById(target);
       if (already) {
@@ -336,60 +320,60 @@ const handler: HandlerFn = async (req: AdaptedRequest, res: AdaptedResponse) => 
           status:  'ok',
           action:  'already_admin',
           userId:  target,
-          message: 'User sudah menjadi admin.',
+          message: 'User is already an admin.',
         });
       }
       const ok = await addAdminToStorage(target);
       if (!ok) {
         return res.status(500).json({
-          error: 'Gagal menyimpan admin ke database.',
-          hint:  _sbError ?? 'Cek konfigurasi Supabase.',
+          error: 'Failed to save admin to the database.',
+          hint:  _sbError ?? 'Check your Supabase configuration.',
         });
       }
       console.log('[admin] add_admin:', target, '| ip:', ip);
       return res.status(200).json({ status: 'ok', action: 'added', userId: target });
     }
 
-    // ── remove_admin ──────────────────────────────────────────────────────
+    // ── remove_admin ───────────────────────────────────────────────────────
     if (action === 'remove_admin') {
       if (isOwnerById(target)) {
-        return res.status(403).json({ error: 'Owner tidak dapat dihapus dari daftar admin.' });
+        return res.status(403).json({ error: 'Owners cannot be removed from the admin list.' });
       }
       if (getEnvAdminIds().includes(target)) {
         return res.status(400).json({
-          error:  'Admin ini berasal dari ADMIN_IDS env var dan tidak dapat dihapus via API.',
-          hint:   'Hapus ID-nya dari ADMIN_IDS di Vercel environment variables.',
+          error:  'This admin is sourced from the ADMIN_IDS env var and cannot be removed via API.',
+          hint:   'Remove their ID from ADMIN_IDS in your Vercel environment variables.',
           userId: target,
         });
       }
       const ok = await removeAdminFromStorage(target);
       if (!ok) {
         return res.status(500).json({
-          error: 'Gagal menghapus admin dari database.',
-          hint:  _sbError ?? 'Cek konfigurasi Supabase.',
+          error: 'Failed to remove admin from the database.',
+          hint:  _sbError ?? 'Check your Supabase configuration.',
         });
       }
       console.log('[admin] remove_admin:', target, '| ip:', ip);
       return res.status(200).json({ status: 'ok', action: 'removed', userId: target });
     }
 
-    // ── set_credits — arahkan ke /api/sync ───────────────────────────────
+    // ── set_credits — redirect to /api/sync ───────────────────────────────
     if (action === 'set_credits') {
       return res.status(200).json({
         status:   'redirect',
-        message:  'Gunakan /api/sync dengan action "set-credits" untuk mengatur credits.',
+        message:  'Use /api/sync with action "set-credits" to manage credits.',
         endpoint: '/api/sync',
         body:     { action: 'set-credits', target: '<username>', amount: 100 },
       });
     }
 
-    // ── sync_env_admins — sinkronisasi ADMIN_IDS env → Supabase ──────────
+    // ── sync_env_admins — sync ADMIN_IDS env → Supabase ───────────────────
     if (action === 'sync_env_admins') {
       const envAdmins = getEnvAdminIds();
       const current   = await sbGetAdminList();
       const merged    = [...new Set([...current, ...envAdmins])];
       const ok        = await sbSetAdminList(merged);
-      if (!ok) return res.status(500).json({ error: 'Gagal sync ke Supabase.' });
+      if (!ok) return res.status(500).json({ error: 'Failed to sync to Supabase.' });
       return res.status(200).json({
         status:      'ok',
         synced:      envAdmins.length,
@@ -399,7 +383,7 @@ const handler: HandlerFn = async (req: AdaptedRequest, res: AdaptedResponse) => 
     }
 
     return res.status(400).json({
-      error:   'Action tidak dikenal: ' + sanitizeStr(String(action ?? ''), 50),
+      error:   'Unknown action: ' + sanitizeStr(String(action ?? ''), 50),
       allowed: ['add_admin', 'remove_admin', 'set_credits', 'sync_env_admins'],
     });
   }

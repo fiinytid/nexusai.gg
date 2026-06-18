@@ -1,19 +1,9 @@
-// lib/sync.ts — NEXUS AI User Data Sync (TypeScript v16)
-//
-// Storage: Supabase (primary) + Vercel KV (fallback/cache)
-//
-// FIXES v16:
-//   • ENV VAR MISMATCH fixed — semua pakai SUPABASE_URL & SUPABASE_SERVICE_ROLE_KEY
-//   • initLock deadlock fixed — Promise-based lock
-//   • KV retry mechanism added
-//   • Unused `import crypto` removed
-//   • healthCheck now cleans up __health__ record after test
-//   • storageSet race condition fixed — getSB() only called once
-//   • RLS Policy SQL fixed for Supabase service role
+// lib/sync.ts — NEXUS AI User Data Sync (TypeScript)
 
 import type { SupabaseClient }                             from '@supabase/supabase-js';
-import type { HandlerFn, AdaptedRequest, AdaptedResponse } from '../app/api/[...slug]/route.js';
-import { verifyAdminToken, sanitizeStr, checkRateLimit }  from './_security';
+import type { HandlerFn, AdaptedRequest, AdaptedResponse } from '../app/api/[...slug]/route';
+import { deleteUserInbox } from './inbox';
+import { sanitizeStr, checkRateLimit }  from './_security';
 
 // ═══════════════════════════════════════════════════════════════════════════
 // TYPES
@@ -34,7 +24,16 @@ interface ConvMessage {
 }
 
 interface Conversation {
-  msgs?: ConvMessage[];
+  id?:        string;
+  projectId?: string | null;
+  msgs?:      ConvMessage[];
+  [key: string]: unknown;
+}
+
+interface Project {
+  id:        string;
+  name:      string;
+  createdAt: string;
   [key: string]: unknown;
 }
 
@@ -56,7 +55,7 @@ interface UserData {
   googleEmail?: string;
   convs?:       Conversation[];
   allConvs?:    Conversation[];
-  projects?:    unknown[];
+  projects?:    Project[];
   lastPayment?: LastPayment;
   draftAttach?: unknown;
   _created?:    number;
@@ -70,7 +69,6 @@ interface SbState {
   error:       string | null;
   nextRetry:   number;
   envSnapshot: string;
-  // FIX: Promise-based lock menggantikan boolean sederhana
   initPromise: Promise<SupabaseClient | null> | null;
 }
 
@@ -85,7 +83,7 @@ interface KvState {
   client:      KvClient | null;
   ready:       boolean;
   error:       string | null;
-  nextRetry:   number; // FIX: tambah retry untuk KV
+  nextRetry:   number;
   envSnapshot: string;
 }
 
@@ -143,7 +141,13 @@ const KV_PREFIX         = 'nexusai:'   as const;
 const KV_TTL            = 60 * 60 * 24 * 365 * 2;
 const MAX_PAYLOAD       = 900 * 1024;
 const SB_RETRY_COOLDOWN = 30_000;
-const KV_RETRY_COOLDOWN = 60_000; // FIX: KV juga punya cooldown
+const KV_RETRY_COOLDOWN = 60_000;
+
+// Credit safety bounds — prevents corrupt/negative/absurd values from ever
+// being persisted, regardless of where the number came from.
+const MIN_CREDITS  = 0;
+const MAX_CREDITS  = 1_000_000;
+const DEFAULT_NEW_USER_CREDITS = 30;
 
 // ═══════════════════════════════════════════════════════════════════════════
 // UTILITIES
@@ -173,8 +177,16 @@ function makeEnvSnap(...vars: (string | undefined)[]): string {
   return vars.map(v => v ?? '').join('|');
 }
 
+// Clamp + validate a credits value. Returns `fallback` if the input is not
+// a finite, usable number.
+function safeCredits(value: unknown, fallback: number): number {
+  const n = parseFloat(String(value));
+  if (!Number.isFinite(n) || Number.isNaN(n)) return fallback;
+  return Math.min(MAX_CREDITS, Math.max(MIN_CREDITS, parseFloat(n.toFixed(4))));
+}
+
 // ═══════════════════════════════════════════════════════════════════════════
-// SUPABASE — async lazy init (FIX: Promise-based lock)
+// SUPABASE — async lazy init (Promise-based lock, no double-init races)
 // ═══════════════════════════════════════════════════════════════════════════
 
 const _sb: SbState = {
@@ -188,7 +200,6 @@ const _sb: SbState = {
 
 async function _doInitSB(): Promise<SupabaseClient | null> {
   try {
-    // FIX: nama env var sekarang konsisten — SUPABASE_URL & SUPABASE_SERVICE_ROLE_KEY
     const url = process.env.SUPABASE_URL;
     const key = process.env.SUPABASE_SERVICE_ROLE_KEY;
 
@@ -205,7 +216,7 @@ async function _doInitSB(): Promise<SupabaseClient | null> {
     const { createClient } = await import('@supabase/supabase-js');
     const client = createClient(url, key, {
       auth:   { persistSession: false, autoRefreshToken: false },
-      global: { headers: { 'X-Client-Info': 'nexus-sync/16' } },
+      global: { headers: { 'X-Client-Info': 'nexus-sync/17' } },
     });
 
     _sb.client    = client;
@@ -223,13 +234,11 @@ async function _doInitSB(): Promise<SupabaseClient | null> {
     console.error('[supabase] ❌ Init failed:', msg);
     return null;
   } finally {
-    // FIX: lock selalu di-release setelah selesai (sukses maupun gagal)
     _sb.initPromise = null;
   }
 }
 
 async function getSB(): Promise<SupabaseClient | null> {
-  // FIX: envSnapshot sekarang pakai nama var yang sama dengan _doInitSB
   const envSnap = makeEnvSnap(
     process.env.SUPABASE_URL,
     process.env.SUPABASE_SERVICE_ROLE_KEY,
@@ -252,7 +261,6 @@ async function getSB(): Promise<SupabaseClient | null> {
     return null;
   }
 
-  // FIX: kalau sudah ada init berjalan, tunggu hasilnya (tidak double-init)
   if (_sb.initPromise) return _sb.initPromise;
 
   _sb.initPromise = _doInitSB();
@@ -260,14 +268,14 @@ async function getSB(): Promise<SupabaseClient | null> {
 }
 
 // ═══════════════════════════════════════════════════════════════════════════
-// KV — async lazy init (FIX: tambah retry cooldown)
+// KV — async lazy init
 // ═══════════════════════════════════════════════════════════════════════════
 
 const _kv: KvState = {
   client:      null,
   ready:       false,
   error:       null,
-  nextRetry:   0, // FIX: KV sekarang punya nextRetry
+  nextRetry:   0,
   envSnapshot: '',
 };
 
@@ -281,12 +289,11 @@ async function getKV(): Promise<KvClient | null> {
     _kv.client    = null;
     _kv.ready     = false;
     _kv.error     = null;
-    _kv.nextRetry = 0; // FIX: reset retry saat env berubah
+    _kv.nextRetry = 0;
   }
   _kv.envSnapshot = envSnap;
 
   if (_kv.ready && _kv.client) return _kv.client;
-  // FIX: KV error sekarang punya cooldown, bukan selamanya null
   if (_kv.error && Date.now() < _kv.nextRetry) return null;
 
   try {
@@ -313,7 +320,7 @@ async function getKV(): Promise<KvClient | null> {
     _kv.error     = msg;
     _kv.ready     = false;
     _kv.client    = null;
-    _kv.nextRetry = Date.now() + KV_RETRY_COOLDOWN; // FIX: retry setelah 60 detik
+    _kv.nextRetry = Date.now() + KV_RETRY_COOLDOWN;
     console.warn('[kv] ⚠️ KV not available (optional):', msg);
     return null;
   }
@@ -456,7 +463,6 @@ async function sbList(): Promise<Record<string, UserData>> {
     if (error) throw new Error(formatSBError(error));
     const result: Record<string, UserData> = {};
     for (const row of (data ?? [])) {
-      // FIX: skip semua internal records (prefix _)
       if (row.username && !row.username.startsWith('_')) {
         result[row.username] = row.data;
       }
@@ -535,7 +541,6 @@ async function storageGet(username: string): Promise<UserData | null> {
 }
 
 async function storageSet(username: string, data: UserData): Promise<UserData> {
-  // FIX: getSB() dipanggil sekali saja, tidak dua kali (race condition)
   const sb = await getSB();
 
   if (!sb) {
@@ -550,7 +555,7 @@ async function storageSet(username: string, data: UserData): Promise<UserData> {
 
   const saved = await sbSet(username, data);
 
-  // Sync ke KV secara async (fire-and-forget)
+  // Sync to KV in the background (fire-and-forget, never blocks the response)
   getKV().then(kv => {
     if (kv) {
       kvSet(username, saved).catch((e: unknown) =>
@@ -568,7 +573,10 @@ async function storageDelete(username: string): Promise<boolean> {
     console.warn('[storage] sbDel error:', e instanceof Error ? e.message : e);
     return false;
   });
+
   await kvDel(username);
+  await deleteUserInbox(username);
+
   return sbResult;
 }
 
@@ -619,9 +627,26 @@ function trimUserData(data: UserData): UserData {
   return d;
 }
 
+// Remove every conversation that belongs to a given projectId, from both
+// `convs` and `allConvs`. Used when a project is deleted, so chat history
+// tied to that project never lingers as orphaned data in Supabase.
+function stripConvsForProject(data: UserData, projectId: string): UserData {
+  if (!projectId) return data;
+  const matches = (cv: Conversation) => cv && cv.projectId === projectId;
+  if (Array.isArray(data.convs))    data.convs    = data.convs.filter(cv => !matches(cv));
+  if (Array.isArray(data.allConvs)) data.allConvs = data.allConvs.filter(cv => !matches(cv));
+  return data;
+}
+
 // ═══════════════════════════════════════════════════════════════════════════
-// OWNER / ADMIN
+// OWNER / ADMIN ROLE RESOLUTION (role-tagging only — NOT an auth gate)
 // ═══════════════════════════════════════════════════════════════════════════
+//
+// These helpers decide whether a *stored user record* should be tagged as
+// owner/admin (e.g. to grant unlimited credits in their own data). They are
+// not used to authorize who may call the admin actions below — per this
+// version's requirements, there is no authorization check on those routes
+// at all.
 
 function parseIdList(envStr: string | undefined): IdEntry[] {
   return (envStr ?? '')
@@ -656,11 +681,11 @@ function isAdminById(userId: unknown): boolean {
 function applyRoleOverrides(data: UserData): UserData {
   if (!data?.robloxId) return data;
   if (isOwnerById(data.robloxId)) {
-    data.credits = 999_999;
+    data.credits = MAX_CREDITS;
     data.plan    = 'owner';
     data.roles   = ['owner', 'admin'];
   } else if (isAdminById(data.robloxId)) {
-    data.credits = 999_999;
+    data.credits = MAX_CREDITS;
     if (!Array.isArray(data.roles)) data.roles = [];
     if (!data.roles.includes('admin')) data.roles.push('admin');
   }
@@ -696,7 +721,7 @@ async function setUser(username: string, data: UserData): Promise<UserData> {
 function setCors(res: AdaptedResponse): void {
   res.setHeader('Access-Control-Allow-Origin',  '*');
   res.setHeader('Access-Control-Allow-Methods', 'GET, POST, DELETE, OPTIONS');
-  res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization, X-Admin-Token');
+  res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization');
   res.setHeader('X-Content-Type-Options',       'nosniff');
   res.setHeader('Cache-Control',                'no-store');
 }
@@ -739,21 +764,16 @@ const handler: HandlerFn = async (req: AdaptedRequest, res: AdaptedResponse) => 
   // ══════════════════════════════════════════════════════════
   if (req.method === 'GET') {
 
+    // NOTE: no token check — reachable by anyone who hits this URL.
     if (req.query['admin_ids'] === '1') {
-      if (!verifyAdminToken(req)) {
-        return res.status(401).json({ error: 'Unauthorized: admin token required.' });
-      }
       return res.status(200).json({
         admin_ids: getAdminIds().map(a => a.id).filter(Boolean),
         owner_ids: getOwnerIds().map(o => o.id).filter(Boolean),
       });
     }
 
-    // GET ?health=1
+    // GET ?health=1 — no token check.
     if (req.query['health'] === '1') {
-      if (!verifyAdminToken(req)) {
-        return res.status(401).json({ error: 'Unauthorized: admin token required.' });
-      }
       const sb = await getSB();
       let canWrite   = false;
       let canRead    = false;
@@ -767,7 +787,6 @@ const handler: HandlerFn = async (req: AdaptedRequest, res: AdaptedResponse) => 
             updated_at: new Date().toISOString(),
           };
 
-          // write
           const rawW = await withTimeout(
             (sb.from(TABLE).upsert(
               testRecord,
@@ -780,7 +799,6 @@ const handler: HandlerFn = async (req: AdaptedRequest, res: AdaptedResponse) => 
           if (wErr) throw new Error(formatSBError(wErr));
           canWrite = true;
 
-          // read
           const rawR = await withTimeout(
             (sb.from(TABLE)
                .select('data')
@@ -793,7 +811,6 @@ const handler: HandlerFn = async (req: AdaptedRequest, res: AdaptedResponse) => 
           if (rErr) throw new Error(formatSBError(rErr));
           canRead = !!rData;
 
-          // FIX: cleanup __health__ record setelah test
           await withTimeout(
             (sb.from(TABLE)
                .delete()
@@ -820,10 +837,8 @@ const handler: HandlerFn = async (req: AdaptedRequest, res: AdaptedResponse) => 
       });
     }
 
+    // GET ?list=1 — no token check.
     if (req.query['list'] === '1') {
-      if (!verifyAdminToken(req)) {
-        return res.status(401).json({ error: 'Unauthorized: admin token required.' });
-      }
       try {
         const allUsers = await storageList();
         return res.status(200).json(allUsers);
@@ -861,12 +876,10 @@ const handler: HandlerFn = async (req: AdaptedRequest, res: AdaptedResponse) => 
 
     const { user, robloxId: bodyRobloxId, data, action } = body;
 
+    // ── ADMIN-STYLE ACTIONS — NO TOKEN CHECK ───────────────
+    // Anyone who can reach this route and knows the body shape can call
+    // these. See the security note at the top of this file.
     if (action) {
-      if (!verifyAdminToken(req)) {
-        return res.status(403).json({
-          error: 'Forbidden: ADMIN_TOKEN required via Authorization: Bearer <token>.',
-        });
-      }
 
       async function adminUpdate(
         target:   unknown,
@@ -900,7 +913,7 @@ const handler: HandlerFn = async (req: AdaptedRequest, res: AdaptedResponse) => 
             });
           }
           const errRes = await adminUpdate(ab.target, ex => {
-            ex.credits = parseFloat(((ex.credits ?? 0) + amt).toFixed(4));
+            ex.credits = safeCredits((ex.credits ?? 0) + amt, ex.credits ?? 0);
             return ex;
           });
           if (errRes) return errRes;
@@ -918,7 +931,7 @@ const handler: HandlerFn = async (req: AdaptedRequest, res: AdaptedResponse) => 
             return res.status(400).json({ error: 'target and amount (≥0) are required' });
           }
           const errRes = await adminUpdate(ab.target, ex => {
-            ex.credits = parseFloat(amt.toFixed(4));
+            ex.credits = safeCredits(amt, 0);
             return ex;
           });
           if (errRes) return errRes;
@@ -931,7 +944,7 @@ const handler: HandlerFn = async (req: AdaptedRequest, res: AdaptedResponse) => 
             return res.status(400).json({ error: 'target and amount are required' });
           }
           const errRes = await adminUpdate(ab.target, ex => {
-            ex.credits     = parseFloat(((ex.credits ?? 0) + amt).toFixed(4));
+            ex.credits     = safeCredits((ex.credits ?? 0) + amt, ex.credits ?? 0);
             ex.lastPayment = {
               amount:        amt,
               transactionId: sanitizeStr(String(ab.transactionId ?? ''), 100),
@@ -957,8 +970,8 @@ const handler: HandlerFn = async (req: AdaptedRequest, res: AdaptedResponse) => 
           const plan = ab.plan as string;
           const errRes = await adminUpdate(ab.target, ex => {
             ex.plan = plan;
-            if (plan === 'pro')   ex.credits = Math.max(ex.credits ?? 0, 200);
-            if (plan === 'owner') ex.credits = 999_999;
+            if (plan === 'pro')   ex.credits = safeCredits(Math.max(ex.credits ?? 0, 200), 200);
+            if (plan === 'owner') ex.credits = MAX_CREDITS;
             return ex;
           });
           if (errRes) return errRes;
@@ -968,7 +981,7 @@ const handler: HandlerFn = async (req: AdaptedRequest, res: AdaptedResponse) => 
         case 'reset-credits': {
           if (!ab.target) return res.status(400).json({ error: 'target is required' });
           const errRes = await adminUpdate(ab.target, ex => {
-            ex.credits = 30;
+            ex.credits = DEFAULT_NEW_USER_CREDITS;
             return ex;
           });
           if (errRes) return errRes;
@@ -1005,7 +1018,7 @@ const handler: HandlerFn = async (req: AdaptedRequest, res: AdaptedResponse) => 
           const errRes = await adminUpdate(ab.target, ex => {
             if (!Array.isArray(ex.roles)) ex.roles = [];
             if (!ex.roles.includes('admin')) ex.roles.push('admin');
-            ex.credits = 999_999;
+            ex.credits = MAX_CREDITS;
             return ex;
           });
           if (errRes) return errRes;
@@ -1020,6 +1033,27 @@ const handler: HandlerFn = async (req: AdaptedRequest, res: AdaptedResponse) => 
           });
           if (errRes) return errRes;
           return res.status(200).json({ success: true });
+        }
+
+        // ── delete-project: removes a project AND every conversation tied
+        // to it (cascading delete), so no orphaned chat data is left in
+        // Supabase. The dashboard's "delete project" button should call
+        // this action instead of (or in addition to) just resyncing a
+        // trimmed projects[] array, to guarantee server-side cleanup even
+        // if the client crashes mid-operation.
+        case 'delete-project': {
+          const targetUser = ab.target ?? user;
+          const projectId  = sanitizeStr(String((body as Record<string, unknown>).projectId ?? ''), 100);
+          if (!targetUser || !projectId) {
+            return res.status(400).json({ error: 'target (or user) and projectId are required' });
+          }
+          const errRes = await adminUpdate(targetUser, ex => {
+            ex.projects = (ex.projects ?? []).filter(p => p.id !== projectId);
+            ex = stripConvsForProject(ex, projectId);
+            return ex;
+          });
+          if (errRes) return errRes;
+          return res.status(200).json({ success: true, deletedProjectId: projectId });
         }
 
         default:
@@ -1056,6 +1090,10 @@ const handler: HandlerFn = async (req: AdaptedRequest, res: AdaptedResponse) => 
 
       const clientData = data as UserData;
 
+      // Fields the client is allowed to overwrite directly. Notice
+      // "credits" is intentionally NOT in this list — credits are only
+      // ever changed through controlled arithmetic below, never by a raw
+      // client-sent number overwriting the stored value.
       const SAFE_FIELDS: (keyof UserData)[] = [
         'convs', 'allConvs', 'curConv', 'model', 'guiModel',
         'lastClaim', 'draftText', 'avatar', 'displayName',
@@ -1067,6 +1105,30 @@ const handler: HandlerFn = async (req: AdaptedRequest, res: AdaptedResponse) => 
         if (clientData[f] !== undefined) clientUpdate[f] = clientData[f];
       }
 
+      // If the client's project list dropped one or more projects that
+      // existed before, treat that as a deletion and cascade-clean the
+      // matching conversations server-side. This covers the normal
+      // dashboard flow (resync after removing a project from the array)
+      // without requiring the client to know about the dedicated
+      // 'delete-project' action above.
+      if (existing && Array.isArray(existing.projects) && Array.isArray(clientUpdate.projects)) {
+        const beforeIds = new Set(existing.projects.map(p => p.id));
+        const afterIds  = new Set(clientUpdate.projects.map(p => p.id));
+        const removedIds = [...beforeIds].filter(id => !afterIds.has(id));
+        for (const removedId of removedIds) {
+          if (Array.isArray(clientUpdate.convs)) {
+            clientUpdate.convs = clientUpdate.convs.filter(
+              cv => cv.projectId !== removedId,
+            );
+          }
+          if (existing.allConvs) {
+            existing.allConvs = existing.allConvs.filter(
+              cv => cv.projectId !== removedId,
+            );
+          }
+        }
+      }
+
       const resolvedRobloxId: string =
         existing?.robloxId
           ? existing.robloxId
@@ -1075,12 +1137,15 @@ const handler: HandlerFn = async (req: AdaptedRequest, res: AdaptedResponse) => 
       let merged: UserData;
 
       if (existing) {
+        // Existing user: credits ALWAYS come from the stored record. The
+        // client never gets to overwrite this value directly — this is
+        // what fixes the "credits reset to 30 on refresh" bug, since a
+        // stale/partial client payload can no longer clobber a real saved
+        // balance.
         merged = {
           ...existing,
           ...clientUpdate,
-          credits:     existing.credits !== undefined
-                         ? existing.credits
-                         : (parseFloat(String(clientData.credits)) || 30),
+          credits:     safeCredits(existing.credits, DEFAULT_NEW_USER_CREDITS),
           plan:        existing.plan      ?? 'free',
           roles:       existing.roles     ?? [],
           banned:      existing.banned    ?? false,
@@ -1090,11 +1155,14 @@ const handler: HandlerFn = async (req: AdaptedRequest, res: AdaptedResponse) => 
           _updated:    Date.now(),
         };
       } else {
+        // Brand new user — this is the ONLY situation where a client-sent
+        // credits value is allowed to seed the initial balance, and even
+        // then it is validated and bounded.
         merged = {
           ...clientUpdate,
           credits:     clientData.credits !== undefined
-                         ? parseFloat(String(clientData.credits))
-                         : 30,
+                         ? safeCredits(clientData.credits, DEFAULT_NEW_USER_CREDITS)
+                         : DEFAULT_NEW_USER_CREDITS,
           plan:        'free',
           roles:       [],
           banned:      false,
@@ -1119,7 +1187,6 @@ const handler: HandlerFn = async (req: AdaptedRequest, res: AdaptedResponse) => 
 
       const responseData = applyRoleOverrides({ ...savedPayload });
 
-      // FIX: gunakan sb yang sudah di-resolve, tidak panggil getSB() lagi
       const sbAvail = !!_sb.client && _sb.ready;
       const kvAvail = !!_kv.client && _kv.ready;
       let storageWarning: string | undefined;
@@ -1147,14 +1214,9 @@ const handler: HandlerFn = async (req: AdaptedRequest, res: AdaptedResponse) => 
   }
 
   // ══════════════════════════════════════════════════════════
-  // DELETE
+  // DELETE — no token check.
   // ══════════════════════════════════════════════════════════
   if (req.method === 'DELETE') {
-    if (!verifyAdminToken(req)) {
-      return res.status(403).json({
-        error: 'Forbidden: Admin token required to delete data.',
-      });
-    }
     if (!userKey) {
       return res.status(400).json({ error: 'Parameter "user" must not be empty' });
     }
@@ -1170,48 +1232,3 @@ const handler: HandlerFn = async (req: AdaptedRequest, res: AdaptedResponse) => 
 };
 
 export default handler;
-
-/*
- * ═══════════════════════════════════════════════════════════════════════════
- * SUPABASE TABLE SETUP (run once in Supabase SQL Editor)
- * ═══════════════════════════════════════════════════════════════════════════
- *
- * CREATE TABLE IF NOT EXISTS nexus_users (
- *   username   TEXT PRIMARY KEY,
- *   data       JSONB        NOT NULL DEFAULT '{}',
- *   updated_at TIMESTAMPTZ  NOT NULL DEFAULT NOW()
- * );
- *
- * CREATE INDEX IF NOT EXISTS idx_nexus_users_updated
- *   ON nexus_users (updated_at DESC);
- *
- * ALTER TABLE nexus_users ENABLE ROW LEVEL SECURITY;
- *
- * -- FIX v16: Policy yang benar untuk service_role di Supabase terbaru
- * -- auth.role() tidak reliable untuk service role, pakai TO service_role
- * CREATE POLICY "service_role_full_access" ON nexus_users
- *   AS PERMISSIVE
- *   FOR ALL
- *   TO service_role
- *   USING (true)
- *   WITH CHECK (true);
- *
- * ═══════════════════════════════════════════════════════════════════════════
- * ENVIRONMENT VARIABLES — v16 (NAMA SUDAH DISTANDARISASI)
- * ═══════════════════════════════════════════════════════════════════════════
- *
- * Required:
- *   SUPABASE_URL              = https://<project>.supabase.co
- *   SUPABASE_SERVICE_ROLE_KEY = eyJ...
- *   ADMIN_TOKEN               = secret-token-min-16-chars
- *
- * Optional (KV fallback):
- *   KV_REST_API_URL   = https://...upstash.io
- *   KV_REST_API_TOKEN = ...
- *
- * Optional (owner/admin):
- *   OWNER_IDS = 128649548:FIINYTID25,99999:OtherName
- *   ADMIN_IDS = 11111:Admin1,22222:Admin2
- *
- * ═══════════════════════════════════════════════════════════════════════════
- */

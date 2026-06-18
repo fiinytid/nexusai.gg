@@ -4,6 +4,6 @@ git commit -m "fix: Update All Components And Fix Error"
 git push origin main --force
 =================================================================
 ## Note
-"tolong kerjakan nya betahap part 1, 2 dan seterusnya dengan lengkap, tolong hapus model migration, dan perbaiki karena tombol new chat nya bisa di spam dan banya chat conv !! dan juga daily reward nya ke ambil sendiri tiap 24 jam tanpa harus online dan masuk web nya dan juga loadAdminIds nya error tolong perbaiki, dan ini kalo mau liat control.ts nya !!!"
+"tolong kerjakan nya betahap-tahap part 1, 2 dan seterusnya dengan lengkap, tolong hapus model migration, dan perbaiki karena tombol new chat nya bisa di spam dan banya chat conv !! dan juga daily reward nya ke ambil sendiri tiap 24 jam tanpa harus online dan masuk web nya dan juga loadAdminIds nya error tolong perbaiki, dan ini kalo mau liat control.ts nya !!!"
 
 =================================================================
