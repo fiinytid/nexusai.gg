@@ -428,25 +428,25 @@ function T() { return LANG_EN }
 // ── MODEL LIST (no migration needed — clean IDs only) ─────────────────────────
 const MODEL_LIST: ModelEntry[] = [
   { grp: 'Google' },
-  { id: 'gemini-2.5-flash', prov: 'gemini', cost: 3, label: 'Gemini 2.5 Flash', icon: '/images/gemini.png', badge: 'FAST' },
-  { id: 'gemini-2.5-flash-lite', prov: 'gemini', cost: 2, label: 'Gemini 2.5 Flash Lite', icon: '/images/gemini.png', badge: 'FAST' },
-  { id: 'gemini-2.5-pro', prov: 'gemini', cost: 12, label: 'Gemini 2.5 Pro', icon: '/images/gemini.png', badge: 'BEST' },
+  { id: 'gemini-3.5-flash', prov: 'gemini', cost: 3, label: 'Gemini 3.5 Flash', icon: '/images/gemini.png', badge: 'FAST' },
+  { id: 'gemini-3.1-flash-lite', prov: 'gemini', cost: 2, label: 'Gemini 3.1 Flash Lite', icon: '/images/gemini.png', badge: 'FAST' },
+  { id: 'gemini-3.1-pro', prov: 'gemini', cost: 12, label: 'Gemini 3.1 Pro', icon: '/images/gemini.png', badge: 'BEST' },
   { grp: 'ChatGPT' },
-  { id: 'openai/gpt-4o-mini:free', prov: 'openrouter', cost: 0, label: 'ChatGPT 4o Mini', icon: '/images/chatgpt.png', badge: 'FREE' },
+  { id: 'openai/gpt-oss-120b:free', prov: 'openrouter', cost: 0, label: 'ChatGPT 4o', icon: '/images/chatgpt.png', badge: 'FREE' },
   { grp: 'DeepSeek' },
-  { id: 'deepseek/deepseek-chat', prov: 'openrouter', cost: 15, label: 'DeepSeek V3', icon: '/images/deepseek.svg', badge: 'BEST' },
+  { id: 'deepseek/deepseek-v4-flash', prov: 'openrouter', cost: 15, label: 'DeepSeek V3', icon: '/images/deepseek.svg', badge: 'BEST' },
 ]
 
 function getFreeModel(): ModelEntry {
   for (let i = 0; i < MODEL_LIST.length; i++) { if (MODEL_LIST[i].id && !MODEL_LIST[i].grp) return MODEL_LIST[i] }
-  return { id: 'gemini-2.5-flash', prov: 'gemini', cost: 3, label: 'Gemini 2.5 Flash' }
+  return { id: 'gemini-3.5-flash', prov: 'gemini', cost: 3, label: 'Gemini 3.5 Flash' }
 }
 
 const S: AppState = {
   credits: 30, allConvs: [], convs: [], curConv: null,
   gen: false, cancelCtrl: null,
-  model: { id: 'gemini-2.5-flash', prov: 'gemini', cost: 3, label: 'Gemini 2.5 Flash' },
-  guiModel: { id: 'gemini-2.5-flash', prov: 'gemini', cost: 3, label: 'Gemini 2.5 Flash' },
+  model: { id: 'gemini-3.5-flash', prov: 'gemini', cost: 3, label: 'Gemini 3.5 Flash' },
+  guiModel: { id: 'gemini-3.5-flash', prov: 'gemini', cost: 3, label: 'Gemini 3.5 Flash' },
   plan: 'free', draftText: {}, attachments: [], lastClaim: null, unreadInbox: 0,
   currentProjectId: null, currentProjectName: null, projects: [],
   playTestEnabled: typeof window !== 'undefined' ? localStorage.getItem('nexus_play_test') !== 'false' : false,
