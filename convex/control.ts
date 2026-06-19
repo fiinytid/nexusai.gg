@@ -33,6 +33,7 @@ const ALLOWED_ORIGINS = new Set<string>([
   "https://nexusai-rbx.vercel.app",
   "https://nexusai.gg",
   "http://localhost:3000",
+  "https://fine-setter-131.convex.site",
   "https://brazen-lapwing-697.convex.site",
 ]);
 

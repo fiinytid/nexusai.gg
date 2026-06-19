@@ -177,7 +177,7 @@ function checkClientRateLimit(key: string, maxPerMin = 30): boolean {
 let SESSION: NexusSession | null = null
 let studioConnected = false
 let studioPollTimer: ReturnType<typeof setInterval> | null = null
-const API_URL = 'https://brazen-lapwing-697.convex.site'
+const API_URL = 'https://fine-setter-131.convex.site'
 
 function esc(s: unknown): string {
   return String(s || '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;')
@@ -1490,7 +1490,7 @@ function makeStepLabel(cmd: Cmd): string | null {
 
 async function fetchRetry(url: string, opts: RequestInit, tries = 3): Promise<Response | null> {
   const headers = opts.headers as Record<string, string>
-  if (headers && url.indexOf('https://brazen-lapwing-697.convex.site') !== -1) {
+  if (headers && url.indexOf('https://fine-setter-131.convex.site') !== -1) {
     headers['X-Nexus-Nonce'] = _csrfNonce
     if (isAdmin() || isOwner()) headers['X-Admin-Token'] = _adminToken || generateAdminToken()
   }
