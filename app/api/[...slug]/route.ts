@@ -1,6 +1,6 @@
 // app/api/[...slug]/route.ts
 // Catch-all router — single Vercel function for all endpoints
-// v7: Full English, enhanced security, body limit, timeout, origin validation
+// v8: Removed 'control' endpoint
 
 import { NextResponse, type NextRequest } from 'next/server';
 
@@ -73,7 +73,6 @@ const KNOWN_ENDPOINTS = [
   'admin',
   'ai',
   'auth',
-  'control',
   'discord',
   'google-callback',
   'inbox',
@@ -394,7 +393,7 @@ async function runHandler(
     await Promise.race([Promise.resolve(fn(req, res)), timeout]);
   } catch (err: unknown) {
     // Propagate infrastructure errors up to the main dispatcher
-    if (err instanceof BodyTooLargeError)  throw err;
+    if (err instanceof BodyTooLargeError)   throw err;
     if (err instanceof HandlerTimeoutError) throw err;
 
     // All other errors are handler-level bugs — return 500 with details

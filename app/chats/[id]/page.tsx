@@ -4,15 +4,12 @@ import React, { useEffect, useRef } from 'react'
 import Script from 'next/script'
 
 /* ─────────────────────────────────────────────────────────────────────────────
-   CSS — NEXUS AI · v9
-   Changes:
-   - Input UI: Claude-style (circle send btn, no bar top-border, bigger font)
-   - Sidebar: overlay drawer on mobile (fixed position, slides in from left)
-   - Hamburger menu button in header (mobile only)
-   - Better touch targets (min 38px on mobile)
-   - Improved tablet & mobile breakpoints
-   - Language toggle removed from main UI (Settings only)
-   - Overall polish & cleanup
+   CSS — NEXUS AI · v10
+   Changes from v9:
+   - All text → English
+   - UI Editor tab removed entirely
+   - Header: NEXUS AI + BETA badge inline, project name below title (single location)
+   - Cleaner input area & overall polish
 ─────────────────────────────────────────────────────────────────────────────── */
 const PAGE_CSS = `
 /* ══════════════════════════════════════════════
@@ -219,12 +216,7 @@ body::before {
   font-size: var(--fs-2xs); font-weight: 700; padding: 2px 6px;
   border-radius: 10px; min-width: 18px; text-align: center; flex-shrink: 0;
 }
-.proj-chip {
-  margin: 4px 12px; padding: 5px 10px;
-  background: rgba(255,170,50,.05); border: 1px solid rgba(255,170,50,.2);
-  border-radius: var(--r-s); font-size: var(--fs-2xs);
-  color: rgba(255,170,50,.8); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; flex-shrink: 0;
-}
+
 .sec-lbl {
   padding: 8px 14px 3px; font-size: var(--fs-2xs);
   color: var(--dim); text-transform: uppercase; letter-spacing: 2px; flex-shrink: 0;
@@ -281,34 +273,38 @@ body::before {
 
 /* ══════════════════════════════════════════════
    HEADER
+   - Title row: logo · NEXUS AI · BETA badge
+   - Sub-row (optional): project name pill
 ══════════════════════════════════════════════ */
 .chat-hdr {
   padding: 0 12px 0 14px; border-bottom: 1px solid var(--b); background: var(--bg2);
   display: flex; align-items: center; gap: 8px;
-  flex-shrink: 0; height: 48px; min-width: 0;
+  flex-shrink: 0; height: 52px; min-width: 0;
 }
 
-/* Hamburger — hidden on desktop, shown on mobile via media query */
+/* Hamburger — hidden on desktop */
 #menuBtn { display: none; }
 
+/* Left group: title + BETA + project pill stacked */
 .chat-title-group {
-  display: flex; align-items: center; gap: 6px;
-  flex: 1 1 0; min-width: 0; overflow: hidden;
+  display: flex; flex-direction: column; justify-content: center;
+  flex: 1 1 0; min-width: 0; overflow: hidden; gap: 2px;
+}
+
+/* Top line: wordmark + BETA badge */
+.chat-title-row {
+  display: flex; align-items: center; gap: 6px; min-width: 0;
 }
 .chat-title {
-  font-family: 'Orbitron', sans-serif; font-size: 11px; font-weight: 700;
+  font-family: 'Orbitron', sans-serif; font-size: 12px; font-weight: 700;
   color: white; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
-  flex-shrink: 1; min-width: 0;
+  flex-shrink: 1; min-width: 0; line-height: 1;
 }
-.proj-badge-hdr {
-  font-size: var(--fs-2xs); padding: 2px 8px; border-radius: 10px; height: 20px; line-height: 16px;
-  background: rgba(255,170,50,.07); border: 1px solid rgba(255,170,50,.2);
-  color: rgba(255,170,50,.85); white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
-  max-width: 120px; flex-shrink: 0; display: flex; align-items: center;
-}
+
+/* BETA badge — inline with title */
 .ver-badge {
   display: inline-flex; align-items: center;
-  padding: 0 6px; height: 18px; border-radius: 9px;
+  padding: 0 6px; height: 16px; border-radius: 8px;
   font-family: 'Orbitron', sans-serif; font-size: 7px; font-weight: 700;
   border: 1px solid; flex-shrink: 0; white-space: nowrap; letter-spacing: .6px;
   cursor: default; user-select: none; line-height: 1;
@@ -317,6 +313,21 @@ body::before {
 .ver-badge.beta    { color: var(--yellow); border-color: rgba(255,214,0,.35); background: rgba(255,214,0,.06); }
 .ver-badge.release { color: var(--green);  border-color: rgba(0,255,170,.35); background: rgba(0,255,170,.06); }
 
+/* Bottom line: project name — single location, compact pill */
+.proj-name-pill {
+  display: none; /* shown by JS when project exists */
+  align-items: center; gap: 4px;
+  font-size: var(--fs-2xs); color: rgba(255,170,50,.8);
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+  max-width: 200px; line-height: 1;
+}
+.proj-name-pill.visible { display: flex; }
+.proj-name-dot {
+  width: 4px; height: 4px; border-radius: 50%;
+  background: rgba(255,170,50,.7); flex-shrink: 0;
+}
+
+/* Status badge */
 .status-badge {
   display: flex; align-items: center; gap: 4px; padding: 0 8px;
   border-radius: 20px; border: 1px solid; height: 22px;
@@ -328,28 +339,6 @@ body::before {
 .sdot { width: 5px; height: 5px; border-radius: 50%; background: currentColor; flex-shrink: 0; }
 .sdot.pulse { animation: pd 1.8s infinite; }
 @keyframes pd { 0%,100%{opacity:1} 50%{opacity:.25} }
-
-
-/* ══════════════════════════════════════════════
-   TABS
-══════════════════════════════════════════════ */
-.chat-tabs {
-  display: flex; gap: 4px; padding: 5px 14px; border-bottom: 1px solid var(--b);
-  background: var(--bg2); flex-shrink: 0; align-items: center;
-  overflow-x: auto; overflow-y: hidden; scrollbar-width: none; height: 42px;
-}
-.chat-tabs::-webkit-scrollbar { display: none; }
-.tab-btn {
-  display: flex; align-items: center; gap: 5px;
-  height: var(--h-sm); padding: 0 13px;
-  border-radius: var(--r-s); border: 1px solid transparent;
-  font-family: 'JetBrains Mono', monospace; font-size: var(--fs-sm);
-  cursor: pointer; color: var(--dim); background: none; transition: .1s;
-  white-space: nowrap; flex-shrink: 0;
-}
-.tab-btn svg { width: 11px; height: 11px; stroke: currentColor; fill: none; stroke-width: 2; flex-shrink: 0; }
-.tab-btn.act          { background: rgba(0,229,255,.08); border-color: var(--b); color: var(--cyan); }
-.tab-btn:hover:not(.act) { color: var(--text); }
 
 
 /* ══════════════════════════════════════════════
@@ -458,15 +447,9 @@ body::before {
 }
 
 
-/* ══════════════════════════════════════════════════════════════════════════
+/* ══════════════════════════════════════════════
    INPUT AREA — CLAUDE-STYLE
-   Desain bersih seperti Claude AI:
-   - Box rounded dengan border subtle
-   - Textarea dengan font lebih besar
-   - Bar bawah tanpa separator garis
-   - Send button lingkaran gradient
-   - Attach button ikon bersih tanpa border
-══════════════════════════════════════════════════════════════════════════ */
+══════════════════════════════════════════════ */
 .inp-area {
   padding: 10px 14px 14px;
   border-top: 1px solid var(--b);
@@ -505,7 +488,6 @@ body::before {
 }
 #inp::placeholder { color: rgba(58,74,122,.75); font-size: 13px; }
 
-/* ─── Input bar — no top border, Claude-style ─── */
 .inp-bar {
   display: flex;
   align-items: center;
@@ -522,72 +504,40 @@ body::before {
   overflow: hidden;
 }
 
-/* ─── Universal icon button ─── */
+/* Universal icon button */
 .ib {
-  width: 32px;
-  height: 32px;
-  min-width: 32px;
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  flex-shrink: 0;
-  vertical-align: middle;
-  border: none;
-  border-radius: 8px;
-  background: transparent;
-  color: rgba(58,74,122,.9);
-  cursor: pointer;
-  transition: color .14s, background .14s;
-  padding: 0;
-  line-height: 1;
-  box-sizing: border-box;
-  user-select: none;
-  outline: none;
-  text-decoration: none;
+  width: 32px; height: 32px; min-width: 32px;
+  display: inline-flex; align-items: center; justify-content: center;
+  flex-shrink: 0; vertical-align: middle;
+  border: none; border-radius: 8px;
+  background: transparent; color: rgba(58,74,122,.9);
+  cursor: pointer; transition: color .14s, background .14s;
+  padding: 0; line-height: 1; box-sizing: border-box;
+  user-select: none; outline: none;
   -webkit-tap-highlight-color: transparent;
 }
 .ib:hover  { color: var(--text); background: rgba(0,229,255,.07); }
 .ib:active { background: rgba(0,229,255,.12); }
-.ib svg {
-  width: 16px; height: 16px;
-  stroke: currentColor; fill: none; stroke-width: 1.6;
-  flex-shrink: 0;
-  display: block;
-  pointer-events: none;
-}
+.ib svg { width: 16px; height: 16px; stroke: currentColor; fill: none; stroke-width: 1.6; flex-shrink: 0; display: block; pointer-events: none; }
 
-/* ─── File input — truly off-screen ─── */
+/* File input — truly off-screen */
 #fi {
-  position: fixed !important;
-  top: -9999px !important;
-  left: -9999px !important;
-  width: 1px !important;
-  height: 1px !important;
-  opacity: 0 !important;
-  overflow: hidden !important;
-  pointer-events: none !important;
-  visibility: hidden !important;
+  position: fixed !important; top: -9999px !important; left: -9999px !important;
+  width: 1px !important; height: 1px !important; opacity: 0 !important;
+  overflow: hidden !important; pointer-events: none !important; visibility: hidden !important;
 }
 
-.inp-divider {
-  width: 1px; height: 16px;
-  background: rgba(0,229,255,.1);
-  flex-shrink: 0; border-radius: 1px;
-  margin: 0 2px;
-}
+.inp-divider { width: 1px; height: 16px; background: rgba(0,229,255,.1); flex-shrink: 0; border-radius: 1px; margin: 0 2px; }
 
 /* Model selector pill */
 .inp-model {
   display: flex; align-items: center; gap: 5px;
   height: 26px; padding: 0 8px;
   border-radius: 8px;
-  background: rgba(255,255,255,.03);
-  border: 1px solid rgba(255,255,255,.06);
+  background: rgba(255,255,255,.03); border: 1px solid rgba(255,255,255,.06);
   cursor: pointer; transition: .14s;
-  font-family: 'JetBrains Mono', monospace;
-  font-size: 10px; color: var(--dim);
-  max-width: clamp(110px, 180px, 32vw);
-  min-width: 0; overflow: hidden; flex-shrink: 1;
+  font-family: 'JetBrains Mono', monospace; font-size: 10px; color: var(--dim);
+  max-width: clamp(110px, 180px, 32vw); min-width: 0; overflow: hidden; flex-shrink: 1;
   -webkit-tap-highlight-color: transparent;
 }
 .inp-model:hover { border-color: var(--b); color: var(--text); background: rgba(0,229,255,.04); }
@@ -601,17 +551,13 @@ body::before {
 .inp-model-badge[data-tier="pro"]   { color: #cc55ff;       border-color: rgba(136,0,255,.35);  background: rgba(136,0,255,.07); }
 .inp-model-badge[data-tier="think"] { color: var(--yellow); border-color: rgba(255,214,0,.3);   background: rgba(255,214,0,.06); }
 
-/* ─── Send button — circle, Claude-style ─── */
+/* Send button — circle */
 .btn-send {
-  width: 34px; height: 34px;
-  border-radius: 50%;
-  border: none;
+  width: 34px; height: 34px; border-radius: 50%; border: none;
   background: linear-gradient(135deg, var(--cyan), var(--purple));
   color: white;
   display: inline-flex; align-items: center; justify-content: center;
-  cursor: pointer;
-  transition: opacity .18s, transform .14s;
-  flex-shrink: 0;
+  cursor: pointer; transition: opacity .18s, transform .14s; flex-shrink: 0;
   -webkit-tap-highlight-color: transparent;
 }
 .btn-send:hover  { opacity: .85; transform: scale(1.07); }
@@ -619,10 +565,8 @@ body::before {
 .btn-send svg { width: 15px; height: 15px; stroke: currentColor; fill: none; stroke-width: 2.2; }
 
 .btn-cancel {
-  width: 30px; height: 30px;
-  border-radius: 50%;
-  border: 1px solid rgba(255,45,107,.3);
-  background: rgba(255,45,107,.08);
+  width: 30px; height: 30px; border-radius: 50%;
+  border: 1px solid rgba(255,45,107,.3); background: rgba(255,45,107,.08);
   color: var(--pink);
   display: inline-flex; align-items: center; justify-content: center;
   cursor: pointer; transition: .14s; flex-shrink: 0;
@@ -700,60 +644,47 @@ body::before {
 
 
 /* ══════════════════════════════════════════════
-   GUI EDITOR TAB
+   MENTION DROPDOWN
 ══════════════════════════════════════════════ */
-#guiTab { flex: 1; overflow: hidden; display: none; flex-direction: column; min-height: 0; }
-.gui-toolbar {
-  padding: 5px 12px; border-bottom: 1px solid var(--b); background: var(--bg2);
-  display: flex; align-items: center; gap: 5px; flex-shrink: 0;
-  overflow-x: auto; overflow-y: hidden; scrollbar-width: none; height: 44px;
+.mention-dd {
+  position: fixed; background: var(--bg3); border: 1px solid var(--bb); border-radius: var(--r);
+  z-index: 8000; max-height: min(260px, 50vh); overflow-y: auto;
+  box-shadow: 0 -10px 40px rgba(0,0,0,.97); min-width: 290px; display: none;
 }
-.gui-toolbar::-webkit-scrollbar { display: none; }
-.gui-add-label { font-size: var(--fs-xs); color: var(--dim); flex-shrink: 0; white-space: nowrap; }
-.gui-btn {
-  display: inline-flex; align-items: center; gap: 4px;
-  height: var(--h-sm); padding: 0 9px;
-  border-radius: var(--r-s); border: 1px solid var(--b); background: var(--card); color: var(--text);
-  font-family: 'JetBrains Mono', monospace; font-size: var(--fs-xs); cursor: pointer; transition: .15s; white-space: nowrap; flex-shrink: 0;
+.mention-dd.open { display: block; }
+.mention-hdr  { padding: 5px 12px 4px; font-size: var(--fs-2xs); color: var(--dim); text-transform: uppercase; letter-spacing: 2px; border-bottom: 1px solid var(--b); display: flex; align-items: center; gap: 5px; }
+.mention-item { padding: 7px 12px; display: flex; align-items: center; gap: 8px; cursor: pointer; transition: .1s; }
+.mention-item:hover, .mention-item.sel { background: var(--hover); }
+.mention-ic   { width: 20px; height: 20px; border-radius: 4px; display: flex; align-items: center; justify-content: center; font-size: var(--fs-2xs); font-weight: 700; flex-shrink: 0; }
+.mention-ic.script { background: rgba(0,229,255,.1);  color: var(--cyan); }
+.mention-ic.local  { background: rgba(0,255,170,.1);  color: var(--green); }
+.mention-ic.module { background: rgba(136,0,255,.1);  color: #cc55ff; }
+.mention-ic.obj    { background: rgba(255,214,0,.1);  color: var(--yellow); }
+.mention-name { font-size: var(--fs-md); color: white; flex: 1; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; min-width: 0; }
+.mention-path { font-size: var(--fs-2xs); color: var(--dim); }
+.mention-empty{ padding: 12px; font-size: var(--fs-sm); color: var(--dim); text-align: center; }
+
+
+/* ══════════════════════════════════════════════
+   SUGGESTION CHIPS
+══════════════════════════════════════════════ */
+.suggestion-chips { display: flex; flex-direction: column; gap: 5px; margin-top: 10px; margin-bottom: 2px; }
+.suggestion-chip {
+  display: flex; align-items: center; gap: 8px; padding: 7px 12px 7px 10px;
+  background: rgba(0,229,255,.05); border: 1px solid rgba(0,229,255,.16); border-radius: 8px;
+  color: var(--text); font-size: 11.5px; cursor: pointer; text-align: left;
+  transition: background .14s, border-color .14s, color .14s, transform .1s;
+  font-family: 'JetBrains Mono', monospace; width: fit-content; max-width: 100%; line-height: 1.4;
 }
-.gui-btn:hover { border-color: var(--cyan2); color: var(--cyan); }
-.gui-btn svg   { width: 11px; height: 11px; stroke: currentColor; fill: none; stroke-width: 1.8; flex-shrink: 0; }
-.gui-ai-btn {
-  display: inline-flex; align-items: center; gap: 4px;
-  height: var(--h-sm); padding: 0 11px;
-  background: rgba(136,0,255,.15); border: 1px solid rgba(136,0,255,.4); border-radius: var(--r-s); color: #cc55ff;
-  font-family: 'JetBrains Mono', monospace; font-size: var(--fs-xs); cursor: pointer; white-space: nowrap; flex-shrink: 0; transition: .15s;
+.suggestion-chip::before {
+  content: ''; display: inline-flex; width: 0; height: 0;
+  border-top: 4.5px solid transparent; border-bottom: 4.5px solid transparent;
+  border-left: 7px solid var(--cyan); flex-shrink: 0; opacity: .55; transition: opacity .14s, transform .14s;
 }
-.gui-ai-btn:hover { background: rgba(136,0,255,.25); }
-.gui-ai-btn svg   { width: 11px; height: 11px; stroke: currentColor; fill: none; stroke-width: 2; flex-shrink: 0; }
-.gui-gen-btn {
-  display: inline-flex; align-items: center; gap: 4px;
-  height: var(--h-sm); padding: 0 11px;
-  background: linear-gradient(135deg, var(--cyan), var(--purple)); border: none; border-radius: var(--r-s);
-  color: white; font-family: 'Orbitron', sans-serif; font-size: var(--fs-xs); font-weight: 700; cursor: pointer; white-space: nowrap; flex-shrink: 0;
-}
-.gui-gen-btn svg { width: 11px; height: 11px; stroke: currentColor; fill: none; stroke-width: 2; flex-shrink: 0; }
-.gui-main    { flex: 1; display: flex; overflow: hidden; position: relative; min-height: 0; }
-.gui-layers  { width: 145px; background: var(--bg2); border-right: 1px solid var(--b); overflow-y: auto; padding: 6px; flex-shrink: 0; min-height: 0; }
-.gui-layer-title { font-size: var(--fs-2xs); color: var(--dim); text-transform: uppercase; letter-spacing: 1.5px; margin-bottom: 6px; padding: 0 2px; }
-.gui-layer-item  { padding: 4px 7px; border-radius: 4px; font-size: var(--fs-sm); color: var(--text); cursor: pointer; display: flex; align-items: center; gap: 5px; transition: .1s; }
-.gui-layer-item:hover { background: var(--hover); }
-.gui-layer-item.sel   { background: rgba(0,229,255,.06); color: var(--cyan); }
-.gui-layer-dot  { width: 6px; height: 6px; border-radius: 50%; flex-shrink: 0; }
-.gui-canvas { flex: 1; position: relative; background: rgba(0,0,0,.3); overflow: auto; min-height: 0; min-width: 0; }
-.gui-canvas-inner { width: 800px; height: 600px; position: relative; background: rgba(15,20,50,.85); border: 1px solid var(--b); margin: 20px auto; min-width: 400px; }
-.gui-el { position: absolute; border: 1px solid transparent; cursor: move; user-select: none; display: flex; align-items: center; justify-content: center; font-family: 'JetBrains Mono', monospace; overflow: hidden; }
-.gui-el.selected { outline: 1.5px solid var(--cyan) !important; outline-offset: 1px; }
-.gui-resize { position: absolute; bottom: -4px; right: -4px; width: 9px; height: 9px; background: var(--cyan); border-radius: 2px; cursor: se-resize; }
-.gui-props      { width: 210px; background: var(--bg2); border-left: 1px solid var(--b); overflow-y: auto; padding: 8px; flex-shrink: 0; min-height: 0; }
-.gui-prop-label { font-size: var(--fs-2xs); color: var(--dim); margin-bottom: 2px; margin-top: 6px; }
-.gui-prop-input { width: 100%; background: var(--bg3); border: 1px solid var(--b); border-radius: 4px; padding: 4px 7px; color: white; font-family: 'JetBrains Mono', monospace; font-size: var(--fs-md); outline: none; }
-.gui-prop-input:focus { border-color: var(--cyan2); }
-.gui-loading  { position: absolute; inset: 0; background: rgba(3,3,18,.85); display: none; align-items: center; justify-content: center; flex-direction: column; gap: 10px; font-size: var(--fs-md); color: var(--cyan); }
-.gui-loading.show { display: flex; }
-.gui-empty-hint { position: absolute; inset: 0; display: flex; align-items: center; justify-content: center; flex-direction: column; gap: 8px; color: rgba(0,229,255,.12); font-size: var(--fs-md); pointer-events: none; }
-.gui-empty-hint svg { width: 30px; height: 30px; stroke: currentColor; fill: none; stroke-width: 1.5; }
-.gui-right { margin-left: auto; display: flex; align-items: center; gap: 5px; flex-shrink: 0; flex-wrap: nowrap; }
+.suggestion-chip:hover { background: rgba(0,229,255,.12); border-color: rgba(0,229,255,.38); color: var(--cyan); }
+.suggestion-chip:hover::before { opacity: 1; transform: translateX(2px); }
+.suggestion-chip:active { transform: scale(.97); }
+.suggestion-chip.sending { opacity: .5; pointer-events: none; }
 
 
 /* ══════════════════════════════════════════════
@@ -834,162 +765,72 @@ body::before {
 
 
 /* ══════════════════════════════════════════════
-   MENTION DROPDOWN
-══════════════════════════════════════════════ */
-.mention-dd {
-  position: fixed; background: var(--bg3); border: 1px solid var(--bb); border-radius: var(--r);
-  z-index: 8000; max-height: min(260px, 50vh); overflow-y: auto;
-  box-shadow: 0 -10px 40px rgba(0,0,0,.97); min-width: 290px; display: none;
-}
-.mention-dd.open { display: block; }
-.mention-hdr  { padding: 5px 12px 4px; font-size: var(--fs-2xs); color: var(--dim); text-transform: uppercase; letter-spacing: 2px; border-bottom: 1px solid var(--b); display: flex; align-items: center; gap: 5px; }
-.mention-item { padding: 7px 12px; display: flex; align-items: center; gap: 8px; cursor: pointer; transition: .1s; }
-.mention-item:hover, .mention-item.sel { background: var(--hover); }
-.mention-ic   { width: 20px; height: 20px; border-radius: 4px; display: flex; align-items: center; justify-content: center; font-size: var(--fs-2xs); font-weight: 700; flex-shrink: 0; }
-.mention-ic.script { background: rgba(0,229,255,.1);  color: var(--cyan); }
-.mention-ic.local  { background: rgba(0,255,170,.1);  color: var(--green); }
-.mention-ic.module { background: rgba(136,0,255,.1);  color: #cc55ff; }
-.mention-ic.obj    { background: rgba(255,214,0,.1);  color: var(--yellow); }
-.mention-name { font-size: var(--fs-md); color: white; flex: 1; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; min-width: 0; }
-.mention-path { font-size: var(--fs-2xs); color: var(--dim); }
-.mention-empty{ padding: 12px; font-size: var(--fs-sm); color: var(--dim); text-align: center; }
-
-
-/* ══════════════════════════════════════════════
-   SUGGESTION CHIPS
-══════════════════════════════════════════════ */
-.suggestion-chips { display: flex; flex-direction: column; gap: 5px; margin-top: 10px; margin-bottom: 2px; }
-.suggestion-chip {
-  display: flex; align-items: center; gap: 8px; padding: 7px 12px 7px 10px;
-  background: rgba(0,229,255,.05); border: 1px solid rgba(0,229,255,.16); border-radius: 8px;
-  color: var(--text); font-size: 11.5px; cursor: pointer; text-align: left;
-  transition: background .14s, border-color .14s, color .14s, transform .1s;
-  font-family: 'JetBrains Mono', monospace; width: fit-content; max-width: 100%; line-height: 1.4;
-}
-.suggestion-chip::before {
-  content: ''; display: inline-flex; width: 0; height: 0;
-  border-top: 4.5px solid transparent; border-bottom: 4.5px solid transparent;
-  border-left: 7px solid var(--cyan); flex-shrink: 0; opacity: .55; transition: opacity .14s, transform .14s;
-}
-.suggestion-chip:hover { background: rgba(0,229,255,.12); border-color: rgba(0,229,255,.38); color: var(--cyan); }
-.suggestion-chip:hover::before { opacity: 1; transform: translateX(2px); }
-.suggestion-chip:active { transform: scale(.97); }
-.suggestion-chip.sending { opacity: .5; pointer-events: none; }
-@keyframes toastIn { from{opacity:0;transform:translateX(12px)} to{opacity:1;transform:none} }
-
-
-/* ══════════════════════════════════════════════
-   RESPONSIVE — TABLET & MOBILE
+   RESPONSIVE
 ══════════════════════════════════════════════ */
 @media (max-width: 1100px) { :root { --sb-w: 230px; } }
 @media (max-width: 900px) {
   :root { --sb-w: 210px; }
   .inp-model { max-width: 140px; }
-  .proj-badge-hdr { max-width: 90px; }
 }
 
-/* ── TABLET (768px–1024px) ── */
-@media (max-width: 1024px) and (min-width: 769px) {
-  :root { --sb-w: 220px; }
-  .bubble { font-size: 12.5px; }
-  .mb-wrap { max-width: 86%; }
-}
-
-/* ── MOBILE (≤768px) — Overlay Drawer Sidebar ── */
+/* ── MOBILE (≤768px) ── */
 @media (max-width: 768px) {
-  /* App: flex column, full height */
   #app {
-    display: flex !important;
-    flex-direction: column !important;
-    height: 100vh !important;
-    height: 100dvh !important;
-    grid-template-columns: none !important;
-    overflow: hidden !important;
+    display: flex !important; flex-direction: column !important;
+    height: 100vh !important; height: 100dvh !important;
+    grid-template-columns: none !important; overflow: hidden !important;
   }
-  /* sb-hidden has no effect on mobile (sidebar is fixed overlay) */
   #app.sb-hidden { grid-template-columns: none !important; }
 
-  /* Sidebar: fixed overlay drawer from left */
   #sb {
-    position: fixed !important;
-    left: -100% !important;
-    top: 0 !important;
-    width: min(285px, 88vw) !important;
-    height: 100% !important;
-    height: 100dvh !important;
-    max-height: none !important;
-    z-index: 100 !important;
-    border-right: 1px solid var(--b) !important;
-    border-bottom: none !important;
-    overflow-y: auto !important;
-    box-shadow: 6px 0 40px rgba(0,0,0,.75) !important;
+    position: fixed !important; left: -100% !important; top: 0 !important;
+    width: min(285px, 88vw) !important; height: 100% !important; height: 100dvh !important;
+    max-height: none !important; z-index: 100 !important;
+    border-right: 1px solid var(--b) !important; border-bottom: none !important;
+    overflow-y: auto !important; box-shadow: 6px 0 40px rgba(0,0,0,.75) !important;
     transition: left .28s cubic-bezier(.4,0,.2,1) !important;
   }
   #sb.mobile-open { left: 0 !important; }
 
-  /* Show hamburger button */
   #menuBtn { display: inline-flex !important; }
   .collapse-sb { display: none !important; }
 
-  /* Restore sidebar content visibility in drawer */
-  .convs     { display: flex !important; flex-direction: column; }
-  .sec-lbl   { display: block !important; }
+  .convs { display: flex !important; flex-direction: column; }
+  .sec-lbl { display: block !important; }
   .sb-footer { display: block !important; }
   .sb-btn-group { flex-direction: column !important; }
 
-  /* Chat: takes full remaining space */
   #chat { flex: 1 !important; min-height: 0 !important; width: 100% !important; }
 
-  /* Better touch targets */
   .ib { width: 38px !important; height: 38px !important; min-width: 38px !important; }
   .ib svg { width: 18px !important; height: 18px !important; }
   .btn-send { width: 40px !important; height: 40px !important; }
   .btn-send svg { width: 17px !important; height: 17px !important; }
   .btn-cancel { width: 36px !important; height: 36px !important; }
 
-  /* Input */
   .inp-area { padding: 8px 10px 14px; }
-  #inp {
-    font-size: 16px !important; /* prevents iOS zoom */
-    padding: 13px 14px 5px;
-    min-height: 52px;
-    max-height: 160px;
-  }
+  #inp { font-size: 16px !important; padding: 13px 14px 5px; min-height: 52px; max-height: 160px; }
   .inp-bar { padding: 4px 8px 9px; gap: 5px; }
   .inp-box { border-radius: 16px; }
   .inp-model { max-width: 120px; }
 
-  /* Messages */
   .mb-wrap { max-width: 92%; }
   .bubble  { font-size: 13px; padding: 9px 11px; }
   #msgs    { padding: 12px 10px 6px; gap: 8px; }
 
-  /* Header */
   .chat-hdr { padding: 0 10px; gap: 6px; height: 48px; }
   .chat-title { font-size: var(--fs-sm); }
-  .proj-badge-hdr { display: none !important; }
+  .proj-name-pill { max-width: 140px; }
   .status-badge { max-width: 88px; font-size: 8px; padding: 0 6px; height: 20px; }
 
-  /* Tabs */
-  .chat-tabs { padding: 4px 10px; gap: 3px; height: 40px; }
-  .tab-btn   { padding: 0 11px; font-size: var(--fs-sm); }
-
-  /* Welcome screen */
   .suggs { grid-template-columns: 1fr; }
   .wt { font-size: 20px; }
   .ws { font-size: var(--fs-md); }
 
-  /* GUI */
-  .gui-toolbar { flex-wrap: nowrap; padding: 5px 8px; -webkit-overflow-scrolling: touch; scrollbar-width: none; }
-  .gui-toolbar::-webkit-scrollbar { display: none; }
-  .gui-layers, .gui-props { display: none; }
-
-  /* Modal */
   .ov { padding: 12px 10px; }
   .modal { padding: 16px; border-radius: 12px; }
   .modal-t { font-size: 12px; }
 
-  /* Plugin banner */
   .plug-banner { font-size: 9px; padding: 0 10px; gap: 5px; height: 28px; }
 }
 
@@ -1003,7 +844,7 @@ body::before {
 
 @media (max-width: 360px) {
   .status-badge { display: none; }
-  .ver-badge { display: none; }
+  .proj-name-pill { display: none !important; }
 }
 `
 
@@ -1028,7 +869,7 @@ function wCall(name: string, ...args: unknown[]): void {
   setTimeout(() => {
     const fn2 = (window as unknown as Record<string, unknown>)[name]
     if (typeof fn2 === 'function') { ;(fn2 as AnyFn)(...args) }
-    else console.warn('[NEXUS] wCall: fungsi tidak ditemukan →', name)
+    else console.warn('[NEXUS] wCall: function not found →', name)
   }, 80)
 }
 
@@ -1038,16 +879,9 @@ function _flushPendingCalls(): void {
   queued.forEach(({ name, args }) => {
     const fn = (window as unknown as Record<string, unknown>)[name]
     if (typeof fn === 'function') { ;(fn as AnyFn)(...args) }
-    else console.warn('[NEXUS] Flush: fungsi tidak ditemukan →', name)
+    else console.warn('[NEXUS] Flush: function not found →', name)
   })
 }
-
-/* ─────────────────────────────────────────────────────────────────────────────
-   TYPES
-─────────────────────────────────────────────────────────────────────────────── */
-type GuiType = 'Frame' | 'TextLabel' | 'TextButton' | 'TextBox' | 'ImageLabel' | 'ScrollingFrame'
-interface GuiTypeConfig { type: GuiType; label: string; icon: React.ReactNode }
-interface ThemeOption   { value: string; label: string }
 
 /* ─────────────────────────────────────────────────────────────────────────────
    ICONS
@@ -1060,15 +894,11 @@ const Icon: Record<string, React.ReactElement> = {
     </svg>
   ),
   menu: (<svg viewBox="0 0 24 24" width={18} height={18} stroke="currentColor" fill="none" strokeWidth={2}><line x1="3" y1="6" x2="21" y2="6"/><line x1="3" y1="12" x2="21" y2="12"/><line x1="3" y1="18" x2="21" y2="18"/></svg>),
-  chat: (<svg viewBox="0 0 24 24" width={11} height={11} stroke="currentColor" fill="none" strokeWidth={2}><path d="M21 15a2 2 0 01-2 2H7l-4 4V5a2 2 0 012-2h14a2 2 0 012 2z"/></svg>),
-  code: (<svg viewBox="0 0 24 24" width={11} height={11} stroke="currentColor" fill="none" strokeWidth={2}><polyline points="16 18 22 12 16 6"/><polyline points="8 6 2 12 8 18"/></svg>),
-  grid: (<svg viewBox="0 0 24 24" width={11} height={11} stroke="currentColor" fill="none" strokeWidth={2}><rect x="3" y="3" width="18" height="18" rx="2"/><path d="M3 9h18M9 21V9"/></svg>),
   send: (<svg viewBox="0 0 24 24" width={14} height={14} stroke="currentColor" fill="none" strokeWidth={2.2}><line x1="12" y1="19" x2="12" y2="5"/><polyline points="5 12 12 5 19 12"/></svg>),
   x:    (<svg viewBox="0 0 24 24" width={14} height={14} stroke="currentColor" fill="none" strokeWidth={2}><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>),
   chevronDown: (<svg width={8} height={8} viewBox="0 0 24 24" stroke="currentColor" fill="none" strokeWidth={2} style={{ color: 'var(--dim)', flexShrink: 0 }}><polyline points="6 9 12 15 18 9"/></svg>),
   attach: (<svg viewBox="0 0 24 24" width={16} height={16} stroke="currentColor" fill="none" strokeWidth={1.6}><path d="M21.44 11.05l-9.19 9.19a6 6 0 01-8.49-8.49l9.19-9.19a4 4 0 015.66 5.66l-9.2 9.19a2 2 0 01-2.83-2.83l8.49-8.48"/></svg>),
   trash: (<svg viewBox="0 0 24 24" width={16} height={16} stroke="currentColor" fill="none" strokeWidth={1.6}><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 01-2 2H7a2 2 0 01-2-2V6m3 0V4a2 2 0 012-2h4a2 2 0 012 2v2"/></svg>),
-  bulb: (<svg viewBox="0 0 24 24" width={11} height={11} stroke="currentColor" fill="none" strokeWidth={2}><path d="M9 18h6M12 2a7 7 0 017 7c0 2.38-1.19 4.47-3 5.74V17H8v-2.26C6.19 13.47 5 11.38 5 9a7 7 0 017-7z"/></svg>),
   download: (<svg viewBox="0 0 24 24" width={16} height={16} stroke="currentColor" fill="none" strokeWidth={2}><path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>),
   share: (<svg viewBox="0 0 24 24" width={16} height={16} stroke="currentColor" fill="none" strokeWidth={2}><circle cx="18" cy="5" r="3"/><circle cx="6" cy="12" r="3"/><circle cx="18" cy="19" r="3"/><line x1="8.59" y1="13.51" x2="15.42" y2="17.49"/><line x1="15.41" y1="6.51" x2="8.59" y2="10.49"/></svg>),
   info: (<svg viewBox="0 0 24 24" width={11} height={11} stroke="currentColor" fill="none" strokeWidth={2}><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>),
@@ -1077,7 +907,7 @@ const Icon: Record<string, React.ReactElement> = {
   plus: (<svg viewBox="0 0 24 24" width={13} height={13} stroke="currentColor" fill="none" strokeWidth={2}><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>),
   help: (<svg viewBox="0 0 24 24" width={13} height={13} stroke="currentColor" fill="none" strokeWidth={2}><circle cx="12" cy="12" r="10"/><path d="M9.09 9a3 3 0 015.83 1c0 2-3 3-3 3"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>),
   inbox: (<svg viewBox="0 0 24 24" width={13} height={13} stroke="currentColor" fill="none" strokeWidth={2}><polyline points="22 12 16 12 14 15 10 15 8 12 2 12"/><path d="M5.45 5.11L2 12v6a2 2 0 002 2h16a2 2 0 002-2v-6l-3.45-6.89A2 2 0 0016.76 4H7.24a2 2 0 00-1.79 1.11z"/></svg>),
-  tag: (<svg viewBox="0 0 24 24" width={11} height={11} stroke="currentColor" fill="none" strokeWidth={2}><path d="M20.59 13.41l-7.17 7.17a2 2 0 01-2.83 0L2 12V2h10l8.59 8.59a2 2 0 010 2.82z"/><line x1="7" y1="7" x2="7.01" y2="7"/></svg>),
+  code: (<svg viewBox="0 0 24 24" width={11} height={11} stroke="currentColor" fill="none" strokeWidth={2}><polyline points="16 18 22 12 16 6"/><polyline points="8 6 2 12 8 18"/></svg>),
 }
 
 /* ─────────────────────────────────────────────────────────────────────────────
@@ -1086,7 +916,7 @@ const Icon: Record<string, React.ReactElement> = {
 export default function ChatsPage() {
   const scriptsLoadedRef = useRef(false)
 
-  /* Mobile sidebar toggle — pure DOM, no wCall needed */
+  /* Mobile sidebar toggle — pure DOM */
   const handleMobileMenuToggle = () => {
     const sb      = document.getElementById('sb')
     const overlay = document.getElementById('sbOverlay')
@@ -1145,9 +975,6 @@ export default function ChatsPage() {
   const handleClickWithEvent = (fn: string, ...args: unknown[]) =>
     (e: React.MouseEvent<HTMLElement>): void => { e.stopPropagation(); wCall(fn, e, ...args) }
 
-  const handleTabClick = (tab: string) =>
-    (e: React.MouseEvent<HTMLButtonElement>): void => wCall('switchTab', tab, e.currentTarget)
-
   const handleImgErr = (e: React.SyntheticEvent<HTMLImageElement>): void => {
     e.currentTarget.style.display = 'none'
   }
@@ -1159,28 +986,6 @@ export default function ChatsPage() {
   const handleFileChange        = (e: React.ChangeEvent<HTMLInputElement>): void  => wCall('handleFile', e)
   const handlePlayTestDurChange = (e: React.ChangeEvent<HTMLInputElement>): void  => wCall('setPlayTestDur', e.target.value)
   const handleLangChange        = (e: React.ChangeEvent<HTMLSelectElement>): void => wCall('changeLang', e.target.value)
-  const handleGuiThemeChange    = (e: React.ChangeEvent<HTMLSelectElement>): void => wCall('applyGuiTheme', e.target.value)
-
-  /* GUI element types */
-  const guiTypes: GuiTypeConfig[] = [
-    { type: 'Frame',          label: 'Frame',  icon: <rect x="3" y="3" width="18" height="18" rx="2"/> },
-    { type: 'TextLabel',      label: 'Label',  icon: <><polyline points="4 7 4 4 20 4 20 7"/><line x1="9" y1="20" x2="15" y2="20"/><line x1="12" y1="4" x2="12" y2="20"/></> },
-    { type: 'TextButton',     label: 'Tombol', icon: <rect x="2" y="7" width="20" height="10" rx="3"/> },
-    { type: 'TextBox',        label: 'Input',  icon: <><rect x="3" y="5" width="18" height="14" rx="2"/><line x1="7" y1="12" x2="17" y2="12"/></> },
-    { type: 'ImageLabel',     label: 'Gambar', icon: <><rect x="3" y="3" width="18" height="18" rx="2"/><circle cx="8.5" cy="8.5" r="1.5"/><polyline points="21 15 16 10 5 21"/></> },
-    { type: 'ScrollingFrame', label: 'Scroll', icon: <><rect x="3" y="3" width="18" height="18" rx="2"/><path d="M3 9h18"/></> },
-  ]
-
-  const guiThemeOptions: ThemeOption[] = [
-    { value: 'nexus_ai', label: 'NEXUS AI' },
-    { value: 'aurora',   label: 'Aurora'   },
-    { value: 'candy',    label: 'Candy'    },
-    { value: 'dark',     label: 'Dark'     },
-    { value: 'default',  label: 'Default'  },
-    { value: 'midnight', label: 'Midnight' },
-    { value: 'studs',    label: 'Studs'    },
-    { value: 'custom',   label: 'Custom'   },
-  ]
 
   /* ════════════════════════════════════════════════════════════════════════
      RENDER
@@ -1205,7 +1010,7 @@ export default function ChatsPage() {
         </div>
         <div className="pl-title">NEXUS AI</div>
         <div className="pl-bar-wrap"><div className="pl-bar" id="plBar"/></div>
-        <div className="pl-txt" id="plTxt">Menginisialisasi...</div>
+        <div className="pl-txt" id="plTxt">Initializing...</div>
       </div>
 
       {/* ── MOBILE SIDEBAR OVERLAY ── */}
@@ -1217,7 +1022,7 @@ export default function ChatsPage() {
           <svg viewBox="0 0 24 24" width={10} height={10} stroke="currentColor" fill="none" strokeWidth={2}>
             <circle cx="12" cy="8" r="4"/><path d="M20 21a8 8 0 10-16 0"/>
           </svg>
-          <span id="mentionHdrTxt">Scripts &amp; Objek di Place</span>
+          <span id="mentionHdrTxt">Scripts &amp; Objects in Place</span>
         </div>
         <div id="mentionList"/>
       </div>
@@ -1255,7 +1060,7 @@ export default function ChatsPage() {
             <button
               className="sb-gear" type="button"
               onClick={handleClick('openSettings')}
-              aria-label="Pengaturan"
+              aria-label="Settings"
             >
               {Icon.settings}
             </button>
@@ -1270,7 +1075,7 @@ export default function ChatsPage() {
           >
             <div>
               <div className="cred-l"    id="credLabel">Credits</div>
-              <div className="cred-hint" id="credHint">Klik untuk beli lebih</div>
+              <div className="cred-hint" id="credHint">Click to buy more</div>
             </div>
             <div style={{ textAlign: 'right' }}>
               <div className="cred-v" id="credDisp">30</div>
@@ -1284,10 +1089,10 @@ export default function ChatsPage() {
               {Icon.home}<span id="dashLbl">Dashboard</span>
             </button>
             <button className="sb-nav-btn cyan"   type="button" onClick={handleClick('newChat')}>
-              {Icon.plus}<span id="newChatLbl">Percakapan Baru</span>
+              {Icon.plus}<span id="newChatLbl">New Conversation</span>
             </button>
             <button className="sb-nav-btn yellow" type="button" onClick={() => { window.location.href = '/agent' }}>
-              {Icon.help}<span id="helpBtnText">Butuh Bantuan?</span>
+              {Icon.help}<span id="helpBtnText">Need Help?</span>
             </button>
             <button className="sb-nav-btn purple" type="button" onClick={() => { window.location.href = '/inbox' }}>
               {Icon.inbox}<span id="inboxBtnText">Inbox</span>
@@ -1295,18 +1100,13 @@ export default function ChatsPage() {
             </button>
           </div>
 
-          {/* Project chip */}
-          <div className="proj-chip" id="sbProjChip" style={{ display: 'none' }}>
-            <span id="sbProjName">-</span>
-          </div>
-
-          <div className="sec-lbl" id="recentLbl">Riwayat Chat</div>
+          <div className="sec-lbl" id="recentLbl">Chat History</div>
           <div className="convs" id="convList">
-            <div className="conv-empty" id="noConvLbl">Belum ada percakapan</div>
+            <div className="conv-empty" id="noConvLbl">No conversations yet</div>
           </div>
 
           <div className="sb-footer">
-            Dibuat oleh <span style={{ color: 'var(--cyan)' }}>NEXUS STUDIO</span><br/>
+            Built by <span style={{ color: 'var(--cyan)' }}>NEXUS STUDIO</span><br/>
             YouTube: <span style={{ color: 'rgba(0,229,255,.6)' }}>NEXUS STUDIO</span>
           </div>
 
@@ -1330,13 +1130,13 @@ export default function ChatsPage() {
           {/* Plugin banner */}
           <div className="plug-banner" id="plugBanner">
             {Icon.info}
-            <span id="plugBannerTxt">Plugin belum terhubung —</span>
+            <span id="plugBannerTxt">Plugin not connected —</span>
             <a
               onClick={handleClick('showInstall')} id="plugInstallLink"
               role="button" tabIndex={0} style={{ cursor: 'pointer' }}
               onKeyDown={(e) => { if (e.key === 'Enter') wCall('showInstall') }}
             >
-              Cara connect
+              How to connect
             </a>
             <a
               onClick={handleClick('retryStudio')} id="plugReconnectLink"
@@ -1348,25 +1148,38 @@ export default function ChatsPage() {
             </a>
           </div>
 
-          {/* Header */}
+          {/* ── HEADER ──
+              Layout:  [☰] [NEXUS AI · BETA]          [Studio: OFF]
+                            [● My Project Name]
+          ── */}
           <div className="chat-hdr">
-            {/* Hamburger — mobile only (hidden via CSS on desktop) */}
+            {/* Hamburger (mobile only) */}
             <button
               id="menuBtn"
               type="button"
               className="ib"
               onClick={handleMobileMenuToggle}
-              aria-label="Buka menu"
+              aria-label="Open menu"
               style={{ flexShrink: 0 }}
             >
               {Icon.menu}
             </button>
 
+            {/* Title group — stacked */}
             <div className="chat-title-group">
-              <div className="chat-title" id="chatTitle">NEXUS AI</div>
-              <div className="proj-badge-hdr" id="hdrProjBadge" style={{ display: 'none' }}/>
-              <span className="ver-badge beta" id="verBadge">BETA</span>
+              {/* Row 1: wordmark + BETA badge */}
+              <div className="chat-title-row">
+                <div className="chat-title" id="chatTitle">NEXUS AI</div>
+                <span className="ver-badge beta" id="verBadge">BETA</span>
+              </div>
+              {/* Row 2: project name — single location, shown by JS */}
+              <div className="proj-name-pill" id="projNamePill">
+                <span className="proj-name-dot"/>
+                <span id="projNameText"/>
+              </div>
             </div>
+
+            {/* Studio status */}
             <div
               className="status-badge off" id="studioBadge"
               onClick={handleClick('retryStudio')}
@@ -1378,19 +1191,11 @@ export default function ChatsPage() {
             </div>
           </div>
 
-          {/* Tabs */}
-          <div className="chat-tabs">
-            <button className="tab-btn act" id="tabChat" type="button" onClick={handleTabClick('chat')}>
-              {Icon.chat}<span id="tabChatLbl">Chat</span>
-            </button>
-            <button className="tab-btn" id="tabGui" type="button" onClick={handleTabClick('gui')}>
-              {Icon.grid}<span id="tabGuiLbl">UI Editor</span>
-            </button>
-          </div>
-
-          {/* ── TAB CHAT ── */}
-          <div id="chatTab" style={{ flex: 1, overflow: 'hidden', display: 'flex', flexDirection: 'column', minHeight: 0 }}>
-
+          {/* ── CHAT CONTENT ── */}
+          <div
+            id="chatTab"
+            style={{ flex: 1, overflow: 'hidden', display: 'flex', flexDirection: 'column', minHeight: 0 }}
+          >
             {/* Messages */}
             <div id="msgs">
               <div className="welcome" id="welcome">
@@ -1399,25 +1204,13 @@ export default function ChatsPage() {
                 </div>
                 <div className="wt">NEXUS AI</div>
                 <div className="ws" id="welcomeText">
-                  AI Roblox cerdas — tulis Lua, debug script, buat GUI. Connect plugin untuk inject langsung ke Studio!
+                  Smart Roblox AI — write Lua, debug scripts, build GUIs. Connect the plugin to inject directly into Studio!
                 </div>
                 <div className="suggs" id="suggGrid"/>
               </div>
             </div>
 
-            {/* ══════════════════════════════════════════════════
-                INPUT AREA — CLAUDE-STYLE
-                Layout:
-                  .inp-area
-                    .attach-row      ← preview lampiran
-                    .inp-box         ← rounded box (Claude-like)
-                      #inp           ← textarea (font 14px, no border)
-                      .inp-bar       ← baris bawah (no top border)
-                        .inp-l       ← kiri: attach + trash + divider + model
-                        btn-cancel   ← tersembunyi saat idle
-                        btn-send     ← lingkaran gradient (kanan)
-                    .model-dd        ← dropdown model
-            ══════════════════════════════════════════════════ */}
+            {/* ── INPUT AREA ── */}
             <div className="inp-area">
               <div className="attach-row" id="attachRow"/>
 
@@ -1425,20 +1218,19 @@ export default function ChatsPage() {
                 {/* Textarea */}
                 <textarea
                   id="inp"
-                  placeholder="Tanya NEXUS AI tentang Roblox... (ketik @ untuk mention)"
+                  placeholder="Ask NEXUS AI about Roblox... (type @ to mention)"
                   rows={1}
                 />
 
                 {/* Bottom bar */}
                 <div className="inp-bar">
-                  {/* ── Kiri ── */}
+                  {/* Left controls */}
                   <div className="inp-l">
-
-                    {/* Attach button — label styled as .ib */}
+                    {/* Attach */}
                     <label
                       htmlFor="fi"
                       className="ib"
-                      title="Lampirkan gambar / file"
+                      title="Attach image / file"
                       role="button"
                       tabIndex={0}
                       onKeyDown={(e) => {
@@ -1451,7 +1243,7 @@ export default function ChatsPage() {
                       {Icon.attach}
                     </label>
 
-                    {/* File input — truly offscreen */}
+                    {/* File input — off-screen */}
                     <input
                       type="file"
                       id="fi"
@@ -1466,7 +1258,7 @@ export default function ChatsPage() {
                     <button
                       className="ib" type="button"
                       onClick={handleClick('clearChat')}
-                      title="Hapus chat"
+                      title="Clear chat"
                     >
                       {Icon.trash}
                     </button>
@@ -1491,12 +1283,12 @@ export default function ChatsPage() {
                     </div>
                   </div>
 
-                  {/* ── Kanan ── */}
+                  {/* Right controls */}
                   <button
                     className="btn-cancel hidden" id="cancelBtn"
                     type="button"
                     onClick={handleClick('cancelGen')}
-                    title="Batalkan"
+                    title="Cancel"
                   >
                     {Icon.x}
                   </button>
@@ -1504,7 +1296,7 @@ export default function ChatsPage() {
                     className="btn-send" id="sendBtn"
                     type="button"
                     onClick={handleClick('send')}
-                    title="Kirim pesan"
+                    title="Send message"
                   >
                     {Icon.send}
                   </button>
@@ -1516,84 +1308,6 @@ export default function ChatsPage() {
             </div>
           </div>
           {/* end #chatTab */}
-
-          {/* ── TAB GUI EDITOR ── */}
-          <div id="guiTab">
-            <div className="gui-toolbar">
-              <span className="gui-add-label" id="guiAddLabel">Tambah:</span>
-              {guiTypes.map(({ type, label, icon }) => (
-                <button key={type} className="gui-btn" type="button" onClick={handleClick('addEl', type)}>
-                  <svg viewBox="0 0 24 24" width={11} height={11} stroke="currentColor" fill="none" strokeWidth={1.8}>{icon}</svg>
-                  {label}
-                </button>
-              ))}
-
-              <div className="gui-right">
-                <div
-                  className="inp-model" id="guiModelBtn"
-                  onClick={handleClickWithEvent('toggleGuiMDD')}
-                  role="button" tabIndex={0}
-                  onKeyDown={(e) => { if (e.key === 'Enter') wCall('toggleGuiMDD', e) }}
-                  style={{ maxWidth: 150 }}
-                >
-                  <img id="guiMIcon" src="" alt="" onError={handleImgErr}
-                    style={{ width: 13, height: 13, borderRadius: 2, flexShrink: 0 }}/>
-                  <span className="inp-model-name"  id="guiMName">Gemini 3.5 Flash</span>
-                  <span className="inp-model-badge" id="guiMBadge" data-tier="fast">FAST</span>
-                  {Icon.chevronDown}
-                </div>
-                <div className="model-dd" id="guiMDD"/>
-
-                <button className="gui-ai-btn" type="button" onClick={handleClick('openGuiAIChat')}>
-                  {Icon.bulb}<span id="guiAiBuildLbl">AI Build</span>
-                </button>
-                <button className="gui-btn" type="button" onClick={handleClick('clearCanvas')}>
-                  <svg viewBox="0 0 24 24" width={11} height={11} stroke="currentColor" fill="none" strokeWidth={1.8}>
-                    <polyline points="3 6 5 6 21 6"/>
-                    <path d="M19 6v14a2 2 0 01-2 2H7a2 2 0 01-2-2V6m3 0V4a2 2 0 012-2h4a2 2 0 012 2v2"/>
-                  </svg>
-                  <span id="guiClearLbl">Hapus</span>
-                </button>
-                <button className="gui-gen-btn" type="button" onClick={handleClick('generateGuiCode')}>
-                  {Icon.code}<span id="guiExportLbl">Export</span>
-                </button>
-                <button
-                  className="gui-gen-btn" type="button"
-                  onClick={handleClick('sendGuiToPlace')}
-                  style={{ background: 'linear-gradient(135deg,var(--green),var(--cyan))' }}
-                >
-                  {Icon.send}<span id="guiToPlaceText">Kirim ke Place</span>
-                </button>
-              </div>
-            </div>
-
-            <div className="gui-main">
-              <div className="gui-layers" id="guiLayers">
-                <div className="gui-layer-title" id="guiLayerTitle">Layer</div>
-                <div id="guiLayerList"/>
-              </div>
-              <div className="gui-canvas">
-                <div className="gui-canvas-inner" id="guiCanvasInner">
-                  <div className="gui-empty-hint" id="guiEmpty">
-                    <svg viewBox="0 0 24 24" width={30} height={30} stroke="currentColor" fill="none" strokeWidth={1.5}>
-                      <rect x="3" y="3" width="18" height="18" rx="2"/><path d="M3 9h18M9 21V9"/>
-                    </svg>
-                    <span id="guiEmptyText">Tambah elemen atau klik AI Build</span>
-                  </div>
-                </div>
-                <div className="gui-loading" id="guiLoading">
-                  <div style={{ width: 20, height: 20, border: '2px solid rgba(0,229,255,.2)', borderTopColor: 'var(--cyan)', borderRadius: '50%', animation: 'spin .7s linear infinite' }}/>
-                  <span id="guiLoadingText">AI sedang membangun UI...</span>
-                </div>
-              </div>
-              <div className="gui-props" id="guiProps">
-                <div style={{ fontSize: 'var(--fs-sm)', color: 'var(--dim)', textAlign: 'center', padding: '20px 0' }} id="guiPropsEmpty">
-                  Pilih elemen
-                </div>
-              </div>
-            </div>
-          </div>
-          {/* end #guiTab */}
 
         </div>
         {/* end #chat */}
@@ -1616,25 +1330,25 @@ export default function ChatsPage() {
           <div style={{ fontSize: 'var(--fs-md)', color: 'var(--dim)', marginBottom: 3 }} id="avatarModalRole">Developer</div>
           <div style={{ fontSize: 'var(--fs-sm)', color: 'var(--dim)' }} id="avatarModalId">Roblox ID: -</div>
           <div className="modal-footer" style={{ justifyContent: 'center', marginTop: 14 }}>
-            <button className="btn-modal primary" type="button" onClick={handleClick('closeModal', 'avatarModal')} id="avatarCloseBtn">TUTUP</button>
+            <button className="btn-modal primary" type="button" onClick={handleClick('closeModal', 'avatarModal')} id="avatarCloseBtn">CLOSE</button>
           </div>
         </div>
       </div>
 
-      {/* Install */}
+      {/* Install Plugin */}
       <div className="ov" id="installModal">
         <div className="modal">
-          <div className="modal-t">{Icon.download}<span id="installTitle">Cara Install Plugin NEXUS AI</span></div>
+          <div className="modal-t">{Icon.download}<span id="installTitle">How to Install NEXUS AI Plugin</span></div>
           <div className="modal-b">
             {[1,2,3,4,5].map((n) => (
               <div key={n} className="install-step">
                 <div className="install-num">{n}</div>
-                <div className="install-txt" id={`installStep${n}`}>Langkah {n}</div>
+                <div className="install-txt" id={`installStep${n}`}>Step {n}</div>
               </div>
             ))}
           </div>
           <div className="modal-footer">
-            <button className="btn-modal primary" type="button" onClick={handleClick('closeModal', 'installModal')} id="installCloseBtn">MENGERTI</button>
+            <button className="btn-modal primary" type="button" onClick={handleClick('closeModal', 'installModal')} id="installCloseBtn">GOT IT</button>
           </div>
         </div>
       </div>
@@ -1642,10 +1356,10 @@ export default function ChatsPage() {
       {/* Settings */}
       <div className="ov" id="settingsModal">
         <div className="modal" style={{ width: 520 }}>
-          <div className="modal-t">{Icon.settings}<span id="settingsTitle">Pengaturan</span></div>
+          <div className="modal-t">{Icon.settings}<span id="settingsTitle">Settings</span></div>
 
           <div className="settings-section">
-            <div className="settings-title" id="settingsAccountTitle">Akun</div>
+            <div className="settings-title" id="settingsAccountTitle">Account</div>
             <div className="settings-row">
               <span style={{ color: 'white', fontWeight: 600 }} id="settingsUsername">@-</span>
               <span id="settingsBadge"/>
@@ -1666,11 +1380,11 @@ export default function ChatsPage() {
 
           <div className="settings-section">
             <div className="settings-title" id="dailyCreditsTitle">Daily Credits</div>
-            <div className="settings-row"><span id="freePlanLabel">Free Plan</span><span style={{ color: 'var(--green)' }}>+2 CR / hari</span></div>
-            <div className="settings-row"><span id="proPlanLabel">Pro Plan</span><span style={{ color: 'var(--cyan)' }}>+25 CR / hari</span></div>
+            <div className="settings-row"><span id="freePlanLabel">Free Plan</span><span style={{ color: 'var(--green)' }}>+2 CR / day</span></div>
+            <div className="settings-row"><span id="proPlanLabel">Pro Plan</span><span style={{ color: 'var(--cyan)' }}>+25 CR / day</span></div>
             <div className="settings-row">
               <span id="lastClaimInfo" style={{ fontSize: 'var(--fs-sm)', color: 'var(--dim)' }}/>
-              <button className="settings-btn" type="button" id="claimDailyBtn" onClick={handleClick('claimDaily')}>Klaim Harian</button>
+              <button className="settings-btn" type="button" id="claimDailyBtn" onClick={handleClick('claimDaily')}>Claim Daily</button>
             </div>
           </div>
 
@@ -1678,13 +1392,13 @@ export default function ChatsPage() {
             <div className="settings-title" id="playTestTitle">Auto Play Test</div>
             <div className="settings-row">
               <div>
-                <div id="playTestLabel">Jalankan play_test setelah inject</div>
-                <div className="settings-hint" id="playTestHint">Nonaktifkan jika laptop crash saat play_test</div>
+                <div id="playTestLabel">Run play test after inject</div>
+                <div className="settings-hint" id="playTestHint">Disable if your PC crashes during play test</div>
               </div>
               <button className="toggle-sw on" id="playTestToggle" type="button" onClick={handleClick('togglePlayTest')}/>
             </div>
             <div className="settings-row">
-              <span id="playTestDurLabel">Durasi (detik)</span>
+              <span id="playTestDurLabel">Duration (seconds)</span>
               <input
                 type="number" id="playTestDurInput" className="settings-select"
                 style={{ width: 70 }} min={5} max={120} defaultValue={15}
@@ -1694,10 +1408,10 @@ export default function ChatsPage() {
           </div>
 
           <div className="settings-section">
-            <div className="settings-title" id="langTitle">Bahasa</div>
+            <div className="settings-title" id="langTitle">Language</div>
             <div className="settings-row">
-              <span id="langLabel">Bahasa Interface &amp; AI</span>
-              <select className="settings-select" id="langSelector" onChange={handleLangChange} defaultValue="id">
+              <span id="langLabel">Interface &amp; AI Language</span>
+              <select className="settings-select" id="langSelector" onChange={handleLangChange} defaultValue="en">
                 <option value="id">Bahasa Indonesia</option>
                 <option value="en">English</option>
               </select>
@@ -1705,34 +1419,34 @@ export default function ChatsPage() {
           </div>
 
           <div className="settings-section">
-            <div className="settings-title" id="reportTitle">Laporkan Masalah</div>
-            <textarea className="report-ta" id="reportTa" placeholder="Deskripsikan masalahnya..."/>
+            <div className="settings-title" id="reportTitle">Report an Issue</div>
+            <textarea className="report-ta" id="reportTa" placeholder="Describe the problem..."/>
             <div id="cf-turnstile-wrap" style={{ marginTop: 8, minHeight: 65, display: 'none' }}>
               <div id="cf-turnstile-report" style={{ transform: 'scale(0.85)', transformOrigin: 'left' }}/>
             </div>
             <input type="hidden" id="_tsToken" value=""/>
             <div style={{ marginTop: 8, display: 'flex', alignItems: 'center', gap: 8 }}>
-              <button className="settings-btn" type="button" onClick={handleClick('sendReport')} id="reportBtn">Kirim Report</button>
+              <button className="settings-btn" type="button" onClick={handleClick('sendReport')} id="reportBtn">Send Report</button>
               <span id="reportStatus" style={{ fontSize: 'var(--fs-sm)', color: 'var(--green)' }}/>
             </div>
           </div>
 
           <div className="settings-section" id="adminSection" style={{ display: 'none' }}>
-            <div className="settings-title">Panel Admin</div>
+            <div className="settings-title">Admin Panel</div>
             <div style={{ marginTop: 6 }}>
-              <a href="/admin-panel" className="settings-btn" style={{ textDecoration: 'none' }}>Buka Panel Admin</a>
+              <a href="/admin-panel" className="settings-btn" style={{ textDecoration: 'none' }}>Open Admin Panel</a>
             </div>
           </div>
 
           <div className="settings-section">
             <div className="settings-title" id="redeemTitle">Redeem Code</div>
             <div className="settings-row" style={{ flexDirection: 'column', alignItems: 'flex-start', gap: 6 }}>
-              <div style={{ fontSize: 'var(--fs-sm)', color: 'var(--dim)' }} id="redeemHint">Dapatkan code di Discord NEXUS STUDIO</div>
+              <div style={{ fontSize: 'var(--fs-sm)', color: 'var(--dim)' }} id="redeemHint">Get codes from the NEXUS STUDIO Discord</div>
               <div style={{ display: 'flex', gap: 8, width: '100%' }}>
                 <input
                   type="text" id="redeemInput" className="settings-select"
                   style={{ flex: 1, padding: '0 10px', height: 'var(--h-sm)' }}
-                  placeholder="Masukkan kode..."
+                  placeholder="Enter code..."
                 />
                 <button className="settings-btn" type="button" onClick={handleClick('redeemCode')} id="redeemBtn">Redeem</button>
               </div>
@@ -1743,71 +1457,26 @@ export default function ChatsPage() {
           <div className="settings-section">
             <div className="settings-title" id="downloadTitle">Download Plugin</div>
             <div className="settings-row" style={{ flexDirection: 'column', gap: 5, alignItems: 'flex-start' }}>
-              <div style={{ fontSize: 'var(--fs-sm)', color: 'var(--dim)' }} id="downloadHint">Install NEXUS AI Plugin di Roblox Studio</div>
+              <div style={{ fontSize: 'var(--fs-sm)', color: 'var(--dim)' }} id="downloadHint">Install the NEXUS AI Plugin in Roblox Studio</div>
               <button
                 className="settings-btn" type="button" id="downloadPluginBtn"
                 onClick={() => window.open('https://create.roblox.com/store/asset/91870814099475/NEXUS-AI', '_blank')}
               >
-                Download dari Creator Store
+                Download from Creator Store
               </button>
             </div>
           </div>
 
           <div className="settings-section">
-            <div className="settings-title" id="accountTitle">Akun</div>
+            <div className="settings-title" id="accountTitle">Account</div>
             <div className="settings-row">
-              <span id="logoutLabel">Logout</span>
-              <button className="settings-btn danger" type="button" onClick={handleClick('logout')}>Logout</button>
+              <span id="logoutLabel">Sign out</span>
+              <button className="settings-btn danger" type="button" onClick={handleClick('logout')}>Sign Out</button>
             </div>
           </div>
 
           <div className="modal-footer">
-            <button className="btn-modal primary" type="button" onClick={handleClick('closeModal', 'settingsModal')} id="settingsCloseBtn">TUTUP</button>
-          </div>
-        </div>
-      </div>
-
-      {/* Export GUI Code */}
-      <div className="ov" id="guiCodeModal">
-        <div className="modal" style={{ width: 640 }}>
-          <div className="modal-t">{Icon.code}<span id="guiCodeTitle">Script GUI yang Dihasilkan</span></div>
-          <div className="modal-b">
-            <pre
-              id="guiCodeOutput"
-              style={{ maxHeight: 380, overflowY: 'auto', whiteSpace: 'pre-wrap', wordBreak: 'break-all', fontSize: 10.5, color: 'var(--text)', background: 'rgba(0,0,0,.4)', padding: 12, borderRadius: 6, border: '1px solid var(--b)' }}
-            />
-          </div>
-          <div className="modal-footer">
-            <button className="btn-modal primary"   type="button" onClick={handleClick('copyGuiCode')}               id="guiCodeCopyBtn">Salin</button>
-            <button className="btn-modal secondary" type="button" onClick={handleClick('downloadGuiCode')}           id="guiCodeDlBtn">Download .lua</button>
-            <button className="btn-modal secondary" type="button" onClick={handleClick('closeModal', 'guiCodeModal')} id="guiCodeCloseBtn">Tutup</button>
-          </div>
-        </div>
-      </div>
-
-      {/* AI GUI Builder */}
-      <div className="ov" id="guiAIChatModal">
-        <div className="modal" style={{ width: 500 }}>
-          <div className="modal-t">{Icon.bulb}<span id="guiAiTitle">AI UI Builder</span></div>
-          <div className="modal-b" style={{ marginBottom: 8 }}>
-            <p style={{ marginBottom: 8, fontSize: 'var(--fs-md)' }} id="guiAiDesc">Deskripsikan UI yang kamu inginkan:</p>
-            <select
-              id="guiAiThemeSelect" className="settings-select"
-              style={{ width: '100%', marginBottom: 8, height: 'var(--h-sm)' }}
-              defaultValue="nexus_ai"
-              onChange={handleGuiThemeChange}
-            >
-              {guiThemeOptions.map(({ value, label }) => <option key={value} value={value}>{label}</option>)}
-            </select>
-            <textarea
-              id="guiAIPrompt"
-              style={{ width: '100%', background: 'var(--bg3)', border: '1px solid var(--b)', borderRadius: 6, padding: 10, color: 'white', fontFamily: "'JetBrains Mono',monospace", fontSize: 12, outline: 'none', resize: 'vertical', minHeight: 90 }}
-              placeholder="contoh: Shop GUI 3 item, scroll list, tombol beli, animasi smooth..."
-            />
-          </div>
-          <div className="modal-footer">
-            <button className="btn-modal primary"   type="button" onClick={handleClick('generateGuiFromAI')}          id="guiAiBuildBtn">Bangun dengan AI</button>
-            <button className="btn-modal secondary" type="button" onClick={handleClick('closeModal', 'guiAIChatModal')} id="guiAiCancelBtn">Batal</button>
+            <button className="btn-modal primary" type="button" onClick={handleClick('closeModal', 'settingsModal')} id="settingsCloseBtn">CLOSE</button>
           </div>
         </div>
       </div>
@@ -1817,7 +1486,7 @@ export default function ChatsPage() {
         <div className="modal" style={{ width: 700 }}>
           <div className="modal-t">
             {Icon.code}
-            <span id="codePreviewTitle">Preview Script</span>
+            <span id="codePreviewTitle">Script Preview</span>
             <span style={{ marginLeft: 'auto', fontSize: 'var(--fs-2xs)', color: 'var(--dim)' }} id="codePreviewPath"/>
           </div>
           <div className="modal-b" style={{ margin: 0 }}>
@@ -1826,7 +1495,7 @@ export default function ChatsPage() {
                 <span>Lua</span>
                 <div className="code-btns">
                   <button className="cbtn" type="button" onClick={handleClick('copyPreviewCode')}>
-                    {Icon.copy} Salin
+                    {Icon.copy} Copy
                   </button>
                 </div>
               </div>
@@ -1836,7 +1505,7 @@ export default function ChatsPage() {
             </div>
           </div>
           <div className="modal-footer" style={{ marginTop: 12 }}>
-            <button className="btn-modal secondary" type="button" onClick={handleClick('closeModal', 'codePreviewModal')}>Tutup</button>
+            <button className="btn-modal secondary" type="button" onClick={handleClick('closeModal', 'codePreviewModal')}>Close</button>
           </div>
         </div>
       </div>
@@ -1844,14 +1513,14 @@ export default function ChatsPage() {
       {/* Share */}
       <div className="ov" id="shareModal">
         <div className="modal" style={{ width: 520 }}>
-          <div className="modal-t">{Icon.share}<span id="shareModalTitle">Bagikan Chat</span></div>
+          <div className="modal-t">{Icon.share}<span id="shareModalTitle">Share Chat</span></div>
           <div className="modal-b" style={{ marginBottom: 8 }}>
-            <p style={{ fontSize: 'var(--fs-md)', color: 'var(--dim)', marginBottom: 6 }} id="shareModalDesc">Salin teks percakapan ini:</p>
+            <p style={{ fontSize: 'var(--fs-md)', color: 'var(--dim)', marginBottom: 6 }} id="shareModalDesc">Copy this conversation:</p>
             <textarea className="share-modal-ta" id="shareModalTa" readOnly/>
           </div>
           <div className="modal-footer">
-            <button className="btn-modal primary"   type="button" onClick={handleClick('copyShareText')}           id="shareModalCopyBtn">Salin Teks</button>
-            <button className="btn-modal secondary" type="button" onClick={handleClick('closeModal', 'shareModal')} id="shareModalCloseBtn">Tutup</button>
+            <button className="btn-modal primary"   type="button" onClick={handleClick('copyShareText')}           id="shareModalCopyBtn">Copy Text</button>
+            <button className="btn-modal secondary" type="button" onClick={handleClick('closeModal', 'shareModal')} id="shareModalCloseBtn">Close</button>
           </div>
         </div>
       </div>
