@@ -4,13 +4,15 @@ import React, { useEffect, useRef } from 'react'
 import Script from 'next/script'
 
 /* ─────────────────────────────────────────────────────────────────────────────
-   CSS — NEXUS AI · v8 CLEAN
-   Perbaikan:
-   - Input bar sepenuhnya dirombak: semua tombol sejajar sempurna
-   - File input benar-benar keluar dari layout flow (position:fixed)
-   - Label attach = tombol .ib biasa, tidak ada wrapper aneh
-   - CSS dirapikan: hapus duplikat, variabel konsisten
-   - Responsive diperbaiki
+   CSS — NEXUS AI · v9
+   Changes:
+   - Input UI: Claude-style (circle send btn, no bar top-border, bigger font)
+   - Sidebar: overlay drawer on mobile (fixed position, slides in from left)
+   - Hamburger menu button in header (mobile only)
+   - Better touch targets (min 38px on mobile)
+   - Improved tablet & mobile breakpoints
+   - Language toggle removed from main UI (Settings only)
+   - Overall polish & cleanup
 ─────────────────────────────────────────────────────────────────────────────── */
 const PAGE_CSS = `
 /* ══════════════════════════════════════════════
@@ -19,7 +21,6 @@ const PAGE_CSS = `
 *, *::before, *::after { margin: 0; padding: 0; box-sizing: border-box; }
 
 :root {
-  /* Colors */
   --bg:     #030312;
   --bg2:    #06071a;
   --bg3:    #0a0b22;
@@ -36,23 +37,15 @@ const PAGE_CSS = `
   --dim:    #3a4a7a;
   --b:      rgba(0, 229, 255, 0.12);
   --bb:     rgba(0, 229, 255, 0.30);
-
-  /* Radii */
   --r:   8px;
   --r-s: 6px;
-
-  /* Heights */
   --h-xs:  22px;
   --h-sm:  28px;
   --h-md:  32px;
   --h-lg:  36px;
   --h-xl:  40px;
   --h-inp: 44px;
-
-  /* Sidebar */
-  --sb-w: 252px;
-
-  /* Font sizes */
+  --sb-w:  252px;
   --fs-2xs: 8px;
   --fs-xs:  9px;
   --fs-sm:  10px;
@@ -70,7 +63,6 @@ html {
 }
 body { height: 100%; overflow: hidden; min-height: 0; }
 
-/* Grid background */
 body::before {
   content: '';
   position: fixed; inset: 0;
@@ -81,7 +73,6 @@ body::before {
   background-size: 40px 40px;
 }
 
-/* Scrollbar */
 ::-webkit-scrollbar { width: 3px; height: 3px; }
 ::-webkit-scrollbar-thumb { background: var(--b); border-radius: 2px; }
 ::-webkit-scrollbar-track { background: transparent; }
@@ -98,11 +89,7 @@ body::before {
   transition: opacity .5s ease;
 }
 #pageLoader.hide { opacity: 0; pointer-events: none; }
-.pl-logo {
-  width: 72px; height: 72px;
-  border-radius: 18px; overflow: hidden;
-  border: 2px solid rgba(0,229,255,.4);
-}
+.pl-logo { width: 72px; height: 72px; border-radius: 18px; overflow: hidden; border: 2px solid rgba(0,229,255,.4); }
 .pl-logo img { width: 100%; height: 100%; object-fit: cover; display: block; }
 .pl-title {
   font-family: 'Orbitron', sans-serif;
@@ -110,19 +97,9 @@ body::before {
   background: linear-gradient(135deg, var(--cyan), var(--purple));
   -webkit-background-clip: text; -webkit-text-fill-color: transparent; background-clip: text;
 }
-.pl-bar-wrap {
-  width: 220px; height: 3px;
-  background: rgba(0,229,255,.1); border-radius: 3px; overflow: hidden;
-}
-.pl-bar {
-  height: 100%; width: 0%;
-  background: linear-gradient(90deg, var(--cyan), var(--purple));
-  border-radius: 3px; transition: width .35s ease;
-}
-.pl-txt {
-  font-size: var(--fs-2xs); color: rgba(0,229,255,.5);
-  letter-spacing: 1px; min-height: 16px; text-align: center;
-}
+.pl-bar-wrap { width: 220px; height: 3px; background: rgba(0,229,255,.1); border-radius: 3px; overflow: hidden; }
+.pl-bar { height: 100%; width: 0%; background: linear-gradient(90deg, var(--cyan), var(--purple)); border-radius: 3px; transition: width .35s ease; }
+.pl-txt { font-size: var(--fs-2xs); color: rgba(0,229,255,.5); letter-spacing: 1px; min-height: 16px; text-align: center; }
 
 
 /* ══════════════════════════════════════════════
@@ -139,6 +116,18 @@ body::before {
 #app.sb-hidden { grid-template-columns: 0 1fr; }
 .hidden { display: none !important; }
 
+/* ── Mobile sidebar overlay backdrop ── */
+#sbOverlay {
+  display: none;
+  position: fixed; inset: 0;
+  background: rgba(0,0,0,.65);
+  z-index: 90;
+  backdrop-filter: blur(2px);
+  -webkit-backdrop-filter: blur(2px);
+  transition: opacity .22s ease;
+}
+#sbOverlay.show { display: block; }
+
 
 /* ══════════════════════════════════════════════
    SIDEBAR
@@ -151,16 +140,12 @@ body::before {
   width: var(--sb-w); min-width: 0; min-height: 0;
 }
 
-/* Sidebar head */
 .sb-head {
   padding: 11px 14px 10px; border-bottom: 1px solid var(--b);
   display: flex; align-items: center; gap: 9px;
   flex-shrink: 0; height: 52px;
 }
-.sb-logo {
-  width: 30px; height: 30px;
-  border-radius: 7px; overflow: hidden; flex-shrink: 0;
-}
+.sb-logo { width: 30px; height: 30px; border-radius: 7px; overflow: hidden; flex-shrink: 0; }
 .sb-logo img { width: 100%; height: 100%; object-fit: cover; display: block; }
 .sb-logo-text {
   font-family: 'Orbitron', sans-serif; font-weight: 900; font-size: 12px; line-height: 1.15;
@@ -169,7 +154,6 @@ body::before {
 }
 .sb-logo-sub { font-size: var(--fs-2xs); color: var(--dim); line-height: 1; }
 
-/* Sidebar user */
 .sb-user {
   padding: 8px 12px; display: flex; align-items: center; gap: 8px;
   border-bottom: 1px solid var(--b); flex-shrink: 0; height: 52px;
@@ -193,7 +177,6 @@ body::before {
 .sb-gear:hover { color: var(--cyan); border-color: var(--b); background: var(--hover); }
 .sb-gear svg { width: 15px; height: 15px; stroke: currentColor; fill: none; stroke-width: 2; }
 
-/* Credits */
 .creds {
   margin: 8px 12px 2px; padding: 8px 12px; border-radius: var(--r);
   background: linear-gradient(135deg, rgba(255,214,0,.06), rgba(255,119,0,.06));
@@ -203,12 +186,11 @@ body::before {
 }
 .creds:hover { border-color: rgba(255,214,0,.35); }
 .creds.low   { border-color: rgba(255,45,107,.4); background: rgba(255,45,107,.06); }
-.cred-v      { font-family: 'Orbitron', sans-serif; font-size: 20px; color: var(--yellow); font-weight: 700; line-height: 1; }
+.cred-v   { font-family: 'Orbitron', sans-serif; font-size: 20px; color: var(--yellow); font-weight: 700; line-height: 1; }
 .creds.low .cred-v { color: var(--pink); }
 .cred-l   { font-size: var(--fs-2xs); color: rgba(255,214,0,.6); text-transform: uppercase; letter-spacing: 1.5px; }
 .cred-hint{ font-size: var(--fs-2xs); color: rgba(255,214,0,.45); margin-top: 2px; }
 
-/* Sidebar nav buttons */
 .sb-btn-group {
   display: flex; flex-direction: column; gap: 3px;
   padding: 8px 12px 4px; flex-shrink: 0;
@@ -247,8 +229,6 @@ body::before {
   padding: 8px 14px 3px; font-size: var(--fs-2xs);
   color: var(--dim); text-transform: uppercase; letter-spacing: 2px; flex-shrink: 0;
 }
-
-/* Conversation list */
 .convs { flex: 1; overflow-y: auto; padding: 3px 8px; min-height: 0; }
 .ci {
   padding: 6px 9px; border-radius: var(--r-s);
@@ -268,7 +248,6 @@ body::before {
   text-align: center; border-top: 1px solid var(--b); flex-shrink: 0; line-height: 1.9;
 }
 
-/* Sidebar collapse toggle */
 .collapse-sb {
   position: absolute; right: -18px; top: 50%; transform: translateY(-50%);
   width: 18px; height: 40px;
@@ -289,7 +268,6 @@ body::before {
   overflow: hidden; position: relative; min-height: 0; min-width: 0;
 }
 
-/* Plugin banner */
 .plug-banner {
   padding: 0 14px; flex-shrink: 0;
   background: rgba(255,45,107,.08); border-bottom: 1px solid rgba(255,45,107,.2);
@@ -305,10 +283,14 @@ body::before {
    HEADER
 ══════════════════════════════════════════════ */
 .chat-hdr {
-  padding: 0 12px 0 16px; border-bottom: 1px solid var(--b); background: var(--bg2);
+  padding: 0 12px 0 14px; border-bottom: 1px solid var(--b); background: var(--bg2);
   display: flex; align-items: center; gap: 8px;
   flex-shrink: 0; height: 48px; min-width: 0;
 }
+
+/* Hamburger — hidden on desktop, shown on mobile via media query */
+#menuBtn { display: none; }
+
 .chat-title-group {
   display: flex; align-items: center; gap: 6px;
   flex: 1 1 0; min-width: 0; overflow: hidden;
@@ -335,7 +317,6 @@ body::before {
 .ver-badge.beta    { color: var(--yellow); border-color: rgba(255,214,0,.35); background: rgba(255,214,0,.06); }
 .ver-badge.release { color: var(--green);  border-color: rgba(0,255,170,.35); background: rgba(0,255,170,.06); }
 
-/* Studio badge */
 .status-badge {
   display: flex; align-items: center; gap: 4px; padding: 0 8px;
   border-radius: 20px; border: 1px solid; height: 22px;
@@ -375,11 +356,10 @@ body::before {
    MESSAGES
 ══════════════════════════════════════════════ */
 #msgs {
-  flex: 1; overflow-y: auto; padding: 14px 16px;
+  flex: 1; overflow-y: auto; padding: 16px 16px 8px;
   display: flex; flex-direction: column; gap: 10px; min-height: 0;
 }
 
-/* Welcome screen */
 .welcome {
   display: flex; flex-direction: column; align-items: center; justify-content: center;
   flex: 1; text-align: center; gap: 12px; padding: 30px 16px; color: var(--dim);
@@ -403,7 +383,6 @@ body::before {
 }
 .sugg-title svg { width: 12px; height: 12px; stroke: currentColor; fill: none; stroke-width: 2; flex-shrink: 0; }
 
-/* Message bubbles */
 .msg       { display: flex; gap: 9px; animation: mi .22s ease; }
 .msg.user  { flex-direction: row-reverse; }
 @keyframes mi { from{opacity:0;transform:translateY(5px)} to{opacity:1;transform:none} }
@@ -425,7 +404,6 @@ body::before {
 }
 .msg-img:hover { border-color: var(--cyan); transform: scale(1.02); }
 
-/* Code blocks */
 .code-block-wrap   { position: relative; margin: 8px 0; border-radius: 7px; overflow: hidden; border: 1px solid rgba(0,229,255,.1); }
 .code-lang-bar     { display: flex; align-items: center; justify-content: space-between; padding: 4px 10px; background: rgba(0,229,255,.06); border-bottom: 1px solid rgba(0,229,255,.1); font-size: var(--fs-2xs); color: var(--cyan); height: 28px; }
 .code-block-wrap pre { margin: 0; }
@@ -450,7 +428,6 @@ body::before {
 .bubble th, .bubble td { padding: 5px 9px; border: 1px solid var(--b); }
 .bubble th  { background: rgba(0,229,255,.06); color: var(--cyan); }
 
-/* Message actions */
 .msg-acts { display: flex; gap: 2px; padding: 2px; flex-wrap: wrap; }
 .mab {
   font-size: var(--fs-2xs); color: var(--dim); background: none; border: 1px solid transparent;
@@ -463,8 +440,7 @@ body::before {
 .mab.disliked { color: var(--pink);  border-color: rgba(255,45,107,.3); }
 .mab svg      { width: 11px; height: 11px; stroke: currentColor; fill: none; stroke-width: 2; }
 
-/* Attachments */
-.attach-row { display: flex; gap: 6px; margin-bottom: 6px; flex-wrap: wrap; padding: 0 2px; }
+.attach-row { display: flex; gap: 6px; margin-bottom: 8px; flex-wrap: wrap; padding: 0 2px; }
 .attach-row:empty { display: none; }
 .attach-item { position: relative; }
 .attach-item img { width: 52px; height: 52px; border-radius: 5px; object-fit: cover; border: 1px solid var(--b); }
@@ -482,106 +458,109 @@ body::before {
 }
 
 
-/* ══════════════════════════════════════════════════════════════════════════════
-   INPUT AREA — FULLY FIXED
-   Semua elemen di input bar pakai height & alignment yang sama persis.
-   Tombol attach = label yang dibuat identik dengan .ib.
-   File input di-offscreen agar tidak mempengaruhi layout sama sekali.
-══════════════════════════════════════════════════════════════════════════════ */
+/* ══════════════════════════════════════════════════════════════════════════
+   INPUT AREA — CLAUDE-STYLE
+   Desain bersih seperti Claude AI:
+   - Box rounded dengan border subtle
+   - Textarea dengan font lebih besar
+   - Bar bawah tanpa separator garis
+   - Send button lingkaran gradient
+   - Attach button ikon bersih tanpa border
+══════════════════════════════════════════════════════════════════════════ */
 .inp-area {
-  padding: 8px 14px 10px; border-top: 1px solid var(--b);
-  background: var(--bg2); flex-shrink: 0; position: relative; z-index: 2;
+  padding: 10px 14px 14px;
+  border-top: 1px solid var(--b);
+  background: var(--bg2);
+  flex-shrink: 0;
+  position: relative;
+  z-index: 2;
 }
+
 .inp-box {
-  background: var(--bg3); border: 1px solid var(--b);
-  border-radius: 12px; transition: border-color .2s; overflow: hidden;
+  background: var(--bg3);
+  border: 1.5px solid rgba(0, 229, 255, 0.18);
+  border-radius: 18px;
+  transition: border-color .22s, box-shadow .22s;
+  overflow: hidden;
 }
-.inp-box.drag-over    { border-color: var(--cyan); box-shadow: 0 0 0 2px rgba(0,229,255,.1); }
-.inp-box:focus-within { border-color: var(--cyan2); box-shadow: 0 0 0 2px rgba(0,229,255,.04); }
+.inp-box.drag-over    { border-color: var(--cyan); box-shadow: 0 0 0 3px rgba(0,229,255,.08); }
+.inp-box:focus-within { border-color: rgba(0,229,255,.42); box-shadow: 0 0 0 3px rgba(0,229,255,.05); }
 
 #inp {
-  width: 100%; background: transparent; border: none; outline: none;
-  color: white; font-family: 'JetBrains Mono', monospace; font-size: var(--fs-base);
-  padding: 11px 14px; resize: none;
-  min-height: 44px; max-height: 130px;
-  line-height: 1.55; display: block;
+  width: 100%;
+  background: transparent;
+  border: none;
+  outline: none;
+  color: rgba(255,255,255,.92);
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 14px;
+  padding: 14px 16px 6px;
+  resize: none;
+  min-height: 56px;
+  max-height: 200px;
+  line-height: 1.65;
+  display: block;
+  scrollbar-width: thin;
+  scrollbar-color: var(--b) transparent;
 }
-#inp::placeholder { color: var(--dim); }
+#inp::placeholder { color: rgba(58,74,122,.75); font-size: 13px; }
 
-/* ─── INPUT BAR ─────────────────────────────────────
-   Satu baris flex. Semua anak pakai align-items:center.
-   Tidak ada absolute/relative positioning di dalam bar.
-─────────────────────────────────────────────────────── */
+/* ─── Input bar — no top border, Claude-style ─── */
 .inp-bar {
   display: flex;
   align-items: center;
-  height: var(--h-inp);          /* 44px */
-  padding: 0 10px;
-  border-top: 1px solid var(--b);
-  gap: 5px;
+  padding: 6px 10px 10px;
+  gap: 6px;
 }
 
-/* Left group: icon buttons + divider + model pill */
 .inp-l {
   display: flex;
   align-items: center;
-  gap: 5px;
+  gap: 4px;
   flex: 1;
   min-width: 0;
   overflow: hidden;
 }
 
-/* ─── UNIVERSAL ICON BUTTON ─────────────────────────
-   .ib — pakai di semua tombol icon, TERMASUK label attach.
-   width & height pasti sama = var(--h-sm) = 28px.
-   display:inline-flex + align-items:center = tidak ada offset.
-─────────────────────────────────────────────────────── */
+/* ─── Universal icon button ─── */
 .ib {
-  /* sizing */
-  width: var(--h-sm);           /* 28px */
-  height: var(--h-sm);          /* 28px */
-  min-width: var(--h-sm);
-
-  /* layout */
+  width: 32px;
+  height: 32px;
+  min-width: 32px;
   display: inline-flex;
   align-items: center;
   justify-content: center;
   flex-shrink: 0;
   vertical-align: middle;
-
-  /* appearance */
-  border: 1px solid var(--b);
-  border-radius: var(--r-s);
+  border: none;
+  border-radius: 8px;
   background: transparent;
-  color: var(--dim);
+  color: rgba(58,74,122,.9);
   cursor: pointer;
-  transition: color .12s, border-color .12s, background .12s;
-
-  /* prevent text/font quirks */
+  transition: color .14s, background .14s;
   padding: 0;
   line-height: 1;
   box-sizing: border-box;
   user-select: none;
   outline: none;
-  text-decoration: none;  /* untuk label */
-  font-family: 'JetBrains Mono', monospace;
+  text-decoration: none;
+  -webkit-tap-highlight-color: transparent;
 }
-.ib:hover { color: var(--cyan); border-color: var(--cyan2); }
+.ib:hover  { color: var(--text); background: rgba(0,229,255,.07); }
+.ib:active { background: rgba(0,229,255,.12); }
 .ib svg {
-  width: 14px; height: 14px;
-  stroke: currentColor; fill: none; stroke-width: 1.5;
+  width: 16px; height: 16px;
+  stroke: currentColor; fill: none; stroke-width: 1.6;
   flex-shrink: 0;
-  display: block;           /* hapus inline-baseline gap */
+  display: block;
   pointer-events: none;
 }
 
-/* ─── FILE INPUT ────────────────────────────────────
-   Benar-benar OFF-SCREEN. Tidak makan space, tidak geser layout.
-─────────────────────────────────────────────────────── */
+/* ─── File input — truly off-screen ─── */
 #fi {
   position: fixed !important;
-  top: -999px !important;
-  left: -999px !important;
+  top: -9999px !important;
+  left: -9999px !important;
   width: 1px !important;
   height: 1px !important;
   opacity: 0 !important;
@@ -590,44 +569,66 @@ body::before {
   visibility: hidden !important;
 }
 
-/* Divider */
 .inp-divider {
-  width: 1px; height: 18px;
-  background: var(--b); flex-shrink: 0; border-radius: 1px;
+  width: 1px; height: 16px;
+  background: rgba(0,229,255,.1);
+  flex-shrink: 0; border-radius: 1px;
+  margin: 0 2px;
 }
 
 /* Model selector pill */
 .inp-model {
   display: flex; align-items: center; gap: 5px;
-  height: var(--h-sm); padding: 0 9px;
-  border-radius: var(--r-s); background: var(--card); border: 1px solid var(--b);
-  cursor: pointer; transition: .12s;
-  font-family: 'JetBrains Mono', monospace; font-size: var(--fs-2xs); color: var(--dim);
-  max-width: clamp(110px, 180px, 32vw); min-width: 0; overflow: hidden; flex-shrink: 1;
+  height: 26px; padding: 0 8px;
+  border-radius: 8px;
+  background: rgba(255,255,255,.03);
+  border: 1px solid rgba(255,255,255,.06);
+  cursor: pointer; transition: .14s;
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 10px; color: var(--dim);
+  max-width: clamp(110px, 180px, 32vw);
+  min-width: 0; overflow: hidden; flex-shrink: 1;
+  -webkit-tap-highlight-color: transparent;
 }
-.inp-model:hover { border-color: var(--cyan2); color: var(--cyan); }
+.inp-model:hover { border-color: var(--b); color: var(--text); background: rgba(0,229,255,.04); }
 .inp-model img   { width: 13px; height: 13px; border-radius: 2px; object-fit: contain; flex-shrink: 0; }
-.inp-model-name  { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; flex: 1; font-size: var(--fs-2xs); min-width: 0; }
+.inp-model-name  { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; flex: 1; font-size: 10px; min-width: 0; }
 .inp-model-badge {
-  font-size: var(--fs-2xs); font-weight: 700; flex-shrink: 0;
-  padding: 1px 5px; border-radius: 4px; border: 1px solid;
+  font-size: 8px; font-weight: 700; flex-shrink: 0;
+  padding: 1px 4px; border-radius: 3px; border: 1px solid;
 }
 .inp-model-badge[data-tier="fast"]  { color: var(--cyan);   border-color: rgba(0,229,255,.3);   background: rgba(0,229,255,.07); }
 .inp-model-badge[data-tier="pro"]   { color: #cc55ff;       border-color: rgba(136,0,255,.35);  background: rgba(136,0,255,.07); }
 .inp-model-badge[data-tier="think"] { color: var(--yellow); border-color: rgba(255,214,0,.3);   background: rgba(255,214,0,.06); }
 
-/* Send & Cancel */
-.btn-send, .btn-cancel {
-  border: none; border-radius: var(--r);
-  width: var(--h-md); height: var(--h-md);   /* 32px */
+/* ─── Send button — circle, Claude-style ─── */
+.btn-send {
+  width: 34px; height: 34px;
+  border-radius: 50%;
+  border: none;
+  background: linear-gradient(135deg, var(--cyan), var(--purple));
+  color: white;
   display: inline-flex; align-items: center; justify-content: center;
-  cursor: pointer; transition: .18s; flex-shrink: 0;
+  cursor: pointer;
+  transition: opacity .18s, transform .14s;
+  flex-shrink: 0;
+  -webkit-tap-highlight-color: transparent;
 }
-.btn-send { background: linear-gradient(135deg, var(--cyan), var(--purple)); color: white; }
-.btn-send:hover { opacity: .82; transform: scale(1.05); }
-.btn-send svg, .btn-cancel svg { width: 14px; height: 14px; stroke: currentColor; fill: none; stroke-width: 2; }
-.btn-cancel { background: rgba(255,45,107,.15); border: 1px solid rgba(255,45,107,.3); color: var(--pink); }
-.btn-cancel:hover { background: rgba(255,45,107,.25); }
+.btn-send:hover  { opacity: .85; transform: scale(1.07); }
+.btn-send:active { transform: scale(.94); opacity: 1; }
+.btn-send svg { width: 15px; height: 15px; stroke: currentColor; fill: none; stroke-width: 2.2; }
+
+.btn-cancel {
+  width: 30px; height: 30px;
+  border-radius: 50%;
+  border: 1px solid rgba(255,45,107,.3);
+  background: rgba(255,45,107,.08);
+  color: var(--pink);
+  display: inline-flex; align-items: center; justify-content: center;
+  cursor: pointer; transition: .14s; flex-shrink: 0;
+}
+.btn-cancel:hover { background: rgba(255,45,107,.18); }
+.btn-cancel svg { width: 14px; height: 14px; stroke: currentColor; fill: none; stroke-width: 2; }
 
 
 /* ══════════════════════════════════════════════
@@ -691,12 +692,11 @@ body::before {
 .steps-cancel-btn:hover { background: rgba(255,45,107,.16); }
 @keyframes spin { to{transform:rotate(360deg)} }
 
-/* Studio summary */
-.studio-summary-box       { margin-top: 8px; padding: 8px 10px; background: rgba(0,255,170,.04); border: 1px solid rgba(0,255,170,.15); border-radius: 6px; font-size: 10.5px; }
-.studio-summary-title     { color: var(--green); font-size: var(--fs-2xs); font-weight: 700; margin-bottom: 4px; display: flex; align-items: center; gap: 4px; flex-wrap: wrap; }
-.studio-summary-item      { color: var(--text); padding: 1px 0; display: flex; align-items: center; gap: 5px; }
-.studio-summary-dot       { display: inline-block; width: 6px; height: 6px; border-radius: 50%; background: var(--green); flex-shrink: 0; }
-.studio-summary-items     { transition: all .2s ease; }
+.studio-summary-box   { margin-top: 8px; padding: 8px 10px; background: rgba(0,255,170,.04); border: 1px solid rgba(0,255,170,.15); border-radius: 6px; font-size: 10.5px; }
+.studio-summary-title { color: var(--green); font-size: var(--fs-2xs); font-weight: 700; margin-bottom: 4px; display: flex; align-items: center; gap: 4px; flex-wrap: wrap; }
+.studio-summary-item  { color: var(--text); padding: 1px 0; display: flex; align-items: center; gap: 5px; }
+.studio-summary-dot   { display: inline-block; width: 6px; height: 6px; border-radius: 50%; background: var(--green); flex-shrink: 0; }
+.studio-summary-items { transition: all .2s ease; }
 
 
 /* ══════════════════════════════════════════════
@@ -762,7 +762,8 @@ body::before {
 .ov {
   position: fixed; inset: 0; background: rgba(3,3,18,.93); z-index: 500;
   display: none; align-items: flex-start; justify-content: center;
-  backdrop-filter: blur(5px); padding: 20px 16px; overflow-y: auto;
+  backdrop-filter: blur(5px); -webkit-backdrop-filter: blur(5px);
+  padding: 20px 16px; overflow-y: auto;
 }
 .ov.show { display: flex; }
 .modal {
@@ -784,7 +785,6 @@ body::before {
 .btn-modal.secondary { background: rgba(255,255,255,.06); color: var(--text); border: 1px solid var(--b); }
 .btn-modal:hover     { opacity: .84; }
 
-/* Settings */
 .settings-section { margin-bottom: 16px; padding-bottom: 16px; border-bottom: 1px solid var(--b); }
 .settings-section:last-child { border-bottom: none; margin-bottom: 0; padding-bottom: 0; }
 .settings-title   { font-size: var(--fs-xs); color: var(--cyan); text-transform: uppercase; letter-spacing: 1.5px; margin-bottom: 10px; font-family: 'Orbitron', sans-serif; }
@@ -821,19 +821,15 @@ body::before {
   font-size: var(--fs-md); outline: none; resize: vertical; min-height: 80px; margin-top: 6px;
 }
 
-/* Install steps */
 .install-step { display: flex; gap: 10px; padding: 9px 0; border-bottom: 1px solid var(--b); align-items: flex-start; }
 .install-step:last-child { border-bottom: none; }
 .install-num  { width: 22px; height: 22px; border-radius: 50%; background: linear-gradient(135deg, var(--cyan), var(--purple)); display: flex; align-items: center; justify-content: center; font-size: var(--fs-sm); font-weight: 700; color: white; flex-shrink: 0; margin-top: 1px; }
 .install-txt  { font-size: var(--fs-md); color: var(--text); line-height: 1.65; flex: 1; }
 .install-txt code { color: var(--cyan); background: rgba(0,229,255,.08); padding: 1px 4px; border-radius: 3px; font-size: var(--fs-sm); }
 
-/* Badges */
 .badge-owner { background: linear-gradient(135deg, rgba(255,214,0,.2), rgba(255,140,0,.2)); color: var(--yellow); border: 1px solid rgba(255,214,0,.3); padding: 2px 8px; border-radius: 10px; font-size: var(--fs-2xs); font-weight: 700; font-family: 'Orbitron', sans-serif; }
 .badge-admin { background: rgba(0,229,255,.1);  color: var(--cyan); border: 1px solid rgba(0,229,255,.3);  padding: 2px 8px; border-radius: 10px; font-size: var(--fs-2xs); font-weight: 700; }
 .badge-pro   { background: rgba(136,0,255,.12); color: #cc55ff;    border: 1px solid rgba(136,0,255,.3);  padding: 2px 8px; border-radius: 10px; font-size: var(--fs-2xs); font-weight: 700; }
-
-/* Share modal */
 .share-modal-ta { width: 100%; background: var(--bg3); border: 1px solid var(--b); border-radius: 6px; padding: 8px 10px; color: var(--text); font-family: 'JetBrains Mono', monospace; font-size: var(--fs-sm); outline: none; resize: none; height: 200px; margin-top: 8px; }
 
 
@@ -879,60 +875,135 @@ body::before {
 .suggestion-chip:hover::before { opacity: 1; transform: translateX(2px); }
 .suggestion-chip:active { transform: scale(.97); }
 .suggestion-chip.sending { opacity: .5; pointer-events: none; }
-.sum-toggle-btn:hover { opacity: 1 !important; text-decoration: underline; }
 @keyframes toastIn { from{opacity:0;transform:translateX(12px)} to{opacity:1;transform:none} }
 
 
 /* ══════════════════════════════════════════════
-   RESPONSIVE
+   RESPONSIVE — TABLET & MOBILE
 ══════════════════════════════════════════════ */
 @media (max-width: 1100px) { :root { --sb-w: 230px; } }
 @media (max-width: 900px) {
   :root { --sb-w: 210px; }
-  .inp-model       { max-width: 140px; }
-  .proj-badge-hdr  { max-width: 90px; }
+  .inp-model { max-width: 140px; }
+  .proj-badge-hdr { max-width: 90px; }
 }
+
+/* ── TABLET (768px–1024px) ── */
+@media (max-width: 1024px) and (min-width: 769px) {
+  :root { --sb-w: 220px; }
+  .bubble { font-size: 12.5px; }
+  .mb-wrap { max-width: 86%; }
+}
+
+/* ── MOBILE (≤768px) — Overlay Drawer Sidebar ── */
 @media (max-width: 768px) {
-  #app { display: flex !important; flex-direction: column; height: 100vh; height: 100dvh; grid-template-columns: none !important; overflow: hidden; }
-  #app.sb-hidden #sb { display: none; }
-  #sb { width: 100% !important; border-right: none; border-bottom: 1px solid var(--b); flex-shrink: 0; max-height: 45vh; overflow-y: auto; }
-  .convs, .sb-footer, .sec-lbl { display: none; }
-  .sb-btn-group { flex-direction: row; overflow-x: auto; gap: 5px; padding: 6px 10px; -webkit-overflow-scrolling: touch; scrollbar-width: none; }
-  .sb-btn-group::-webkit-scrollbar { display: none; }
-  .sb-nav-btn { width: auto; flex-shrink: 0; padding: 0 10px; font-size: var(--fs-2xs); }
-  #chat { flex: 1; min-height: 0; }
+  /* App: flex column, full height */
+  #app {
+    display: flex !important;
+    flex-direction: column !important;
+    height: 100vh !important;
+    height: 100dvh !important;
+    grid-template-columns: none !important;
+    overflow: hidden !important;
+  }
+  /* sb-hidden has no effect on mobile (sidebar is fixed overlay) */
+  #app.sb-hidden { grid-template-columns: none !important; }
+
+  /* Sidebar: fixed overlay drawer from left */
+  #sb {
+    position: fixed !important;
+    left: -100% !important;
+    top: 0 !important;
+    width: min(285px, 88vw) !important;
+    height: 100% !important;
+    height: 100dvh !important;
+    max-height: none !important;
+    z-index: 100 !important;
+    border-right: 1px solid var(--b) !important;
+    border-bottom: none !important;
+    overflow-y: auto !important;
+    box-shadow: 6px 0 40px rgba(0,0,0,.75) !important;
+    transition: left .28s cubic-bezier(.4,0,.2,1) !important;
+  }
+  #sb.mobile-open { left: 0 !important; }
+
+  /* Show hamburger button */
+  #menuBtn { display: inline-flex !important; }
+  .collapse-sb { display: none !important; }
+
+  /* Restore sidebar content visibility in drawer */
+  .convs     { display: flex !important; flex-direction: column; }
+  .sec-lbl   { display: block !important; }
+  .sb-footer { display: block !important; }
+  .sb-btn-group { flex-direction: column !important; }
+
+  /* Chat: takes full remaining space */
+  #chat { flex: 1 !important; min-height: 0 !important; width: 100% !important; }
+
+  /* Better touch targets */
+  .ib { width: 38px !important; height: 38px !important; min-width: 38px !important; }
+  .ib svg { width: 18px !important; height: 18px !important; }
+  .btn-send { width: 40px !important; height: 40px !important; }
+  .btn-send svg { width: 17px !important; height: 17px !important; }
+  .btn-cancel { width: 36px !important; height: 36px !important; }
+
+  /* Input */
+  .inp-area { padding: 8px 10px 14px; }
+  #inp {
+    font-size: 16px !important; /* prevents iOS zoom */
+    padding: 13px 14px 5px;
+    min-height: 52px;
+    max-height: 160px;
+  }
+  .inp-bar { padding: 4px 8px 9px; gap: 5px; }
+  .inp-box { border-radius: 16px; }
+  .inp-model { max-width: 120px; }
+
+  /* Messages */
   .mb-wrap { max-width: 92%; }
-  .bubble  { font-size: 12px; padding: 8px 10px; }
-  .inp-area { padding: 6px 8px 8px; }
-  #inp { font-size: 12px; padding: 8px 10px; min-height: 38px; }
-  .inp-bar { gap: 4px; padding: 0 8px; }
-  .inp-model { max-width: 130px; }
-  .chat-hdr { padding: 0 10px; gap: 6px; height: 44px; }
-  .chat-title { font-size: var(--fs-xs); }
-  .proj-badge-hdr { display: none; }
-  .ver-badge { font-size: 6px; height: 15px; padding: 0 5px; }
-  .chat-tabs { padding: 4px 8px; gap: 3px; height: 38px; }
-  .tab-btn   { padding: 0 10px; font-size: var(--fs-2xs); height: var(--h-xs); }
+  .bubble  { font-size: 13px; padding: 9px 11px; }
+  #msgs    { padding: 12px 10px 6px; gap: 8px; }
+
+  /* Header */
+  .chat-hdr { padding: 0 10px; gap: 6px; height: 48px; }
+  .chat-title { font-size: var(--fs-sm); }
+  .proj-badge-hdr { display: none !important; }
+  .status-badge { max-width: 88px; font-size: 8px; padding: 0 6px; height: 20px; }
+
+  /* Tabs */
+  .chat-tabs { padding: 4px 10px; gap: 3px; height: 40px; }
+  .tab-btn   { padding: 0 11px; font-size: var(--fs-sm); }
+
+  /* Welcome screen */
+  .suggs { grid-template-columns: 1fr; }
+  .wt { font-size: 20px; }
+  .ws { font-size: var(--fs-md); }
+
+  /* GUI */
   .gui-toolbar { flex-wrap: nowrap; padding: 5px 8px; -webkit-overflow-scrolling: touch; scrollbar-width: none; }
   .gui-toolbar::-webkit-scrollbar { display: none; }
   .gui-layers, .gui-props { display: none; }
-  .collapse-sb { display: none; }
-  .modal { padding: 16px; border-radius: 10px; }
+
+  /* Modal */
+  .ov { padding: 12px 10px; }
+  .modal { padding: 16px; border-radius: 12px; }
   .modal-t { font-size: 12px; }
-  .suggs { grid-template-columns: 1fr; }
+
+  /* Plugin banner */
+  .plug-banner { font-size: 9px; padding: 0 10px; gap: 5px; height: 28px; }
+}
+
+@media (max-width: 480px) {
+  .inp-model { max-width: 100px; }
+  .chat-title { font-size: var(--fs-2xs); }
+  .status-badge { max-width: 75px; }
+  .modal { padding: 14px; }
   .wt { font-size: 18px; }
 }
-@media (max-width: 550px) {
-  .sb-nav-btn { font-size: var(--fs-2xs); padding: 0 8px; height: var(--h-sm); }
-  .inp-model  { max-width: 110px; }
-  .wt { font-size: 16px; }
-  .ws { font-size: 10.5px; }
-}
-@media (max-width: 390px) {
-  .sb-nav-btn { font-size: var(--fs-2xs); padding: 0 8px; height: var(--h-sm); }
-  .inp-model  { max-width: 100px; }
-  .chat-title { font-size: var(--fs-2xs); }
-  .modal      { padding: 12px; }
+
+@media (max-width: 360px) {
+  .status-badge { display: none; }
+  .ver-badge { display: none; }
 }
 `
 
@@ -988,14 +1059,15 @@ const Icon: Record<string, React.ReactElement> = {
       <path d="M19.4 15a1.65 1.65 0 00.33 1.82l.06.06a2 2 0 010 2.83 2 2 0 01-2.83 0l-.06-.06a1.65 1.65 0 00-1.82-.33 1.65 1.65 0 00-1 1.51V21a2 2 0 01-4 0v-.09A1.65 1.65 0 009 19.4a1.65 1.65 0 00-1.82.33l-.06.06a2 2 0 01-2.83-2.83l.06-.06A1.65 1.65 0 004.68 15a1.65 1.65 0 00-1.51-1H3a2 2 0 010-4h.09A1.65 1.65 0 004.6 9a1.65 1.65 0 00-.33-1.82l-.06-.06a2 2 0 012.83-2.83l.06.06A1.65 1.65 0 009 4.68a1.65 1.65 0 001-1.51V3a2 2 0 014 0v.09a1.65 1.65 0 001 1.51 1.65 1.65 0 001.82-.33l.06-.06a2 2 0 012.83 2.83l-.06.06A1.65 1.65 0 0019.4 9a1.65 1.65 0 001.51 1H21a2 2 0 010 4h-.09a1.65 1.65 0 00-1.51 1z"/>
     </svg>
   ),
+  menu: (<svg viewBox="0 0 24 24" width={18} height={18} stroke="currentColor" fill="none" strokeWidth={2}><line x1="3" y1="6" x2="21" y2="6"/><line x1="3" y1="12" x2="21" y2="12"/><line x1="3" y1="18" x2="21" y2="18"/></svg>),
   chat: (<svg viewBox="0 0 24 24" width={11} height={11} stroke="currentColor" fill="none" strokeWidth={2}><path d="M21 15a2 2 0 01-2 2H7l-4 4V5a2 2 0 012-2h14a2 2 0 012 2z"/></svg>),
   code: (<svg viewBox="0 0 24 24" width={11} height={11} stroke="currentColor" fill="none" strokeWidth={2}><polyline points="16 18 22 12 16 6"/><polyline points="8 6 2 12 8 18"/></svg>),
   grid: (<svg viewBox="0 0 24 24" width={11} height={11} stroke="currentColor" fill="none" strokeWidth={2}><rect x="3" y="3" width="18" height="18" rx="2"/><path d="M3 9h18M9 21V9"/></svg>),
-  send: (<svg viewBox="0 0 24 24" width={14} height={14} stroke="currentColor" fill="none" strokeWidth={2}><line x1="22" y1="2" x2="11" y2="13"/><polygon points="22 2 15 22 11 13 2 9 22 2"/></svg>),
+  send: (<svg viewBox="0 0 24 24" width={14} height={14} stroke="currentColor" fill="none" strokeWidth={2.2}><line x1="12" y1="19" x2="12" y2="5"/><polyline points="5 12 12 5 19 12"/></svg>),
   x:    (<svg viewBox="0 0 24 24" width={14} height={14} stroke="currentColor" fill="none" strokeWidth={2}><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>),
   chevronDown: (<svg width={8} height={8} viewBox="0 0 24 24" stroke="currentColor" fill="none" strokeWidth={2} style={{ color: 'var(--dim)', flexShrink: 0 }}><polyline points="6 9 12 15 18 9"/></svg>),
-  attach: (<svg viewBox="0 0 24 24" width={14} height={14} stroke="currentColor" fill="none" strokeWidth={1.5}><path d="M21.44 11.05l-9.19 9.19a6 6 0 01-8.49-8.49l9.19-9.19a4 4 0 015.66 5.66l-9.2 9.19a2 2 0 01-2.83-2.83l8.49-8.48"/></svg>),
-  trash: (<svg viewBox="0 0 24 24" width={14} height={14} stroke="currentColor" fill="none" strokeWidth={1.5}><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 01-2 2H7a2 2 0 01-2-2V6m3 0V4a2 2 0 012-2h4a2 2 0 012 2v2"/></svg>),
+  attach: (<svg viewBox="0 0 24 24" width={16} height={16} stroke="currentColor" fill="none" strokeWidth={1.6}><path d="M21.44 11.05l-9.19 9.19a6 6 0 01-8.49-8.49l9.19-9.19a4 4 0 015.66 5.66l-9.2 9.19a2 2 0 01-2.83-2.83l8.49-8.48"/></svg>),
+  trash: (<svg viewBox="0 0 24 24" width={16} height={16} stroke="currentColor" fill="none" strokeWidth={1.6}><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 01-2 2H7a2 2 0 01-2-2V6m3 0V4a2 2 0 012-2h4a2 2 0 012 2v2"/></svg>),
   bulb: (<svg viewBox="0 0 24 24" width={11} height={11} stroke="currentColor" fill="none" strokeWidth={2}><path d="M9 18h6M12 2a7 7 0 017 7c0 2.38-1.19 4.47-3 5.74V17H8v-2.26C6.19 13.47 5 11.38 5 9a7 7 0 017-7z"/></svg>),
   download: (<svg viewBox="0 0 24 24" width={16} height={16} stroke="currentColor" fill="none" strokeWidth={2}><path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>),
   share: (<svg viewBox="0 0 24 24" width={16} height={16} stroke="currentColor" fill="none" strokeWidth={2}><circle cx="18" cy="5" r="3"/><circle cx="6" cy="12" r="3"/><circle cx="18" cy="19" r="3"/><line x1="8.59" y1="13.51" x2="15.42" y2="17.49"/><line x1="15.41" y1="6.51" x2="8.59" y2="10.49"/></svg>),
@@ -1013,6 +1085,25 @@ const Icon: Record<string, React.ReactElement> = {
 ─────────────────────────────────────────────────────────────────────────────── */
 export default function ChatsPage() {
   const scriptsLoadedRef = useRef(false)
+
+  /* Mobile sidebar toggle — pure DOM, no wCall needed */
+  const handleMobileMenuToggle = () => {
+    const sb      = document.getElementById('sb')
+    const overlay = document.getElementById('sbOverlay')
+    const isOpen  = sb?.classList.contains('mobile-open')
+    if (isOpen) {
+      sb?.classList.remove('mobile-open')
+      overlay?.classList.remove('show')
+    } else {
+      sb?.classList.add('mobile-open')
+      overlay?.classList.add('show')
+    }
+  }
+
+  const closeMobileSidebar = () => {
+    document.getElementById('sb')?.classList.remove('mobile-open')
+    document.getElementById('sbOverlay')?.classList.remove('show')
+  }
 
   useEffect(() => {
     document.title = 'NEXUS AI - Roblox Dev Intelligence'
@@ -1117,6 +1208,9 @@ export default function ChatsPage() {
         <div className="pl-txt" id="plTxt">Menginisialisasi...</div>
       </div>
 
+      {/* ── MOBILE SIDEBAR OVERLAY ── */}
+      <div id="sbOverlay" onClick={closeMobileSidebar}/>
+
       {/* ── MENTION DROPDOWN ── */}
       <div className="mention-dd" id="mentionDD">
         <div className="mention-hdr">
@@ -1216,6 +1310,7 @@ export default function ChatsPage() {
             YouTube: <span style={{ color: 'rgba(0,229,255,.6)' }}>NEXUS STUDIO</span>
           </div>
 
+          {/* Desktop collapse toggle */}
           <div
             className="collapse-sb"
             onClick={handleClick('toggleSidebar')}
@@ -1255,6 +1350,18 @@ export default function ChatsPage() {
 
           {/* Header */}
           <div className="chat-hdr">
+            {/* Hamburger — mobile only (hidden via CSS on desktop) */}
+            <button
+              id="menuBtn"
+              type="button"
+              className="ib"
+              onClick={handleMobileMenuToggle}
+              aria-label="Buka menu"
+              style={{ flexShrink: 0 }}
+            >
+              {Icon.menu}
+            </button>
+
             <div className="chat-title-group">
               <div className="chat-title" id="chatTitle">NEXUS AI</div>
               <div className="proj-badge-hdr" id="hdrProjBadge" style={{ display: 'none' }}/>
@@ -1298,48 +1405,40 @@ export default function ChatsPage() {
               </div>
             </div>
 
-            {/* ══════════════════════════════════════════════════════
-                INPUT AREA
-                Struktur:
+            {/* ══════════════════════════════════════════════════
+                INPUT AREA — CLAUDE-STYLE
+                Layout:
                   .inp-area
-                    .attach-row          ← preview lampiran
-                    .inp-box
-                      #inp               ← textarea
-                      .inp-bar           ← baris tombol
-                        .inp-l           ← kiri: attach + trash + divider + model
-                          label.ib[for=fi] ← tombol attach (SAMA persis dgn .ib)
-                          #fi              ← file input (position:fixed, offscreen)
-                          button.ib        ← trash
-                          .inp-divider
-                          .inp-model
-                        button.btn-cancel  ← cancel (hidden by default)
-                        button.btn-send    ← send
-                    .model-dd            ← dropdown model
-            ══════════════════════════════════════════════════════ */}
+                    .attach-row      ← preview lampiran
+                    .inp-box         ← rounded box (Claude-like)
+                      #inp           ← textarea (font 14px, no border)
+                      .inp-bar       ← baris bawah (no top border)
+                        .inp-l       ← kiri: attach + trash + divider + model
+                        btn-cancel   ← tersembunyi saat idle
+                        btn-send     ← lingkaran gradient (kanan)
+                    .model-dd        ← dropdown model
+            ══════════════════════════════════════════════════ */}
             <div className="inp-area">
               <div className="attach-row" id="attachRow"/>
 
               <div className="inp-box" id="inpBox">
+                {/* Textarea */}
                 <textarea
                   id="inp"
                   placeholder="Tanya NEXUS AI tentang Roblox... (ketik @ untuk mention)"
                   rows={1}
                 />
 
+                {/* Bottom bar */}
                 <div className="inp-bar">
                   {/* ── Kiri ── */}
                   <div className="inp-l">
 
-                    {/*
-                      TOMBOL ATTACH — label yang berfungsi sebagai button.
-                      Pakai className="ib" persis sama dgn tombol lain.
-                      htmlFor="fi" → klik label = klik file input.
-                      TIDAK ada wrapper div, tidak ada position:relative.
-                    */}
+                    {/* Attach button — label styled as .ib */}
                     <label
                       htmlFor="fi"
                       className="ib"
-                      title="Lampirkan file"
+                      title="Lampirkan gambar / file"
                       role="button"
                       tabIndex={0}
                       onKeyDown={(e) => {
@@ -1352,10 +1451,7 @@ export default function ChatsPage() {
                       {Icon.attach}
                     </label>
 
-                    {/*
-                      FILE INPUT — position:fixed, offscreen sepenuhnya.
-                      Tidak ada dalam flow layout, tidak geser elemen lain.
-                    */}
+                    {/* File input — truly offscreen */}
                     <input
                       type="file"
                       id="fi"
@@ -1366,7 +1462,7 @@ export default function ChatsPage() {
                       aria-hidden="true"
                     />
 
-                    {/* Trash / clear chat */}
+                    {/* Clear chat */}
                     <button
                       className="ib" type="button"
                       onClick={handleClick('clearChat')}
@@ -1400,6 +1496,7 @@ export default function ChatsPage() {
                     className="btn-cancel hidden" id="cancelBtn"
                     type="button"
                     onClick={handleClick('cancelGen')}
+                    title="Batalkan"
                   >
                     {Icon.x}
                   </button>
@@ -1407,6 +1504,7 @@ export default function ChatsPage() {
                     className="btn-send" id="sendBtn"
                     type="button"
                     onClick={handleClick('send')}
+                    title="Kirim pesan"
                   >
                     {Icon.send}
                   </button>

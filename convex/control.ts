@@ -3,8 +3,6 @@ import { internal } from "./_generated/api";
 
 // ── VERSION ────────────────────────────────────────────────────────────────────
 const REQUIRED_PLUGIN_VERSION = "V1.3.29";
-const WEB_VERSION             = "V14.2";
-const API_VERSION             = "v14";
 
 // ── TUNABLES ───────────────────────────────────────────────────────────────────
 const SESSION_TTL         = 24 * 60 * 60 * 1_000;
@@ -35,7 +33,7 @@ const ALLOWED_ORIGINS = new Set<string>([
   "https://nexusai-rbx.vercel.app",
   "https://nexusai.gg",
   "http://localhost:3000",
-  "http://localhost:5173",
+  "https://brazen-lapwing-697.convex.site",
 ]);
 
 const DEDUP_ACTIONS = new Set<string>([
@@ -390,8 +388,6 @@ function buildCorsHeaders(request: Request): Record<string, string> {
     "X-Content-Type-Options":       "nosniff",
     "X-Frame-Options":              "DENY",
     "Referrer-Policy":              "strict-origin-when-cross-origin",
-    "X-Nexus-Version":              WEB_VERSION,
-    "X-Api-Version":                API_VERSION,
   };
 }
 
@@ -418,8 +414,6 @@ function errResp(
       ok: false,
       status: "error",
       error,
-      web_version: WEB_VERSION,
-      api_version: API_VERSION,
       ...extra,
     },
     status,
@@ -438,27 +432,6 @@ function rateLimitResp(
   );
 }
 
-function versionPayload(): Record<string, unknown> {
-  return {
-    ok: true,
-    required_plugin_version: REQUIRED_PLUGIN_VERSION,
-    web_version: WEB_VERSION,
-    api_version: API_VERSION,
-    update_url: "https://discord.gg/FzAF48mvK5",
-    changelog: `${WEB_VERSION} — Convex edition. Fixed crypto import, improved rate limiting, expanded admin actions.`,
-    security_model: {
-      session_token: "Plugin generates token on connect",
-      self_only: "Non-admin can only target own session",
-      ip_rate_limit: `${RATE_IP_PER_MIN}/min per IP`,
-      user_rate_limit: `${RATE_USER_PER_MIN}/min per user`,
-      burst_limit: `${RATE_BURST_COUNT} cmds per ${RATE_BURST_WINDOW}ms`,
-      hmac: "Optional X-Nexus-Signature HMAC-SHA256",
-      cors: "Strict origin allowlist",
-      dedup: `${DEDUP_WINDOW}ms window for destructive actions`,
-    },
-  };
-}
-
 // ── CRYPTO HELPERS ─────────────────────────────────────────────────────────────
 function timingSafeCompare(a: string, b: string): boolean {
   if (a.length !== b.length) return false;
@@ -470,21 +443,31 @@ function timingSafeCompare(a: string, b: string): boolean {
 }
 
 function generateNonce(len = 32): string {
-  const chars = "abcdef0123456789";
-  let out = "";
-  for (let i = 0; i < len * 2; i++) {
-    out += chars[Math.floor(Math.random() * chars.length)];
-  }
-  return out;
+  const bytes = new Uint8Array(len);
+  crypto.getRandomValues(bytes);
+  return Array.from(bytes, (b) => b.toString(16).padStart(2, "0")).join("");
 }
 
-function hashMd5(input: string): string {
-  let hash = 0;
-  for (let i = 0; i < input.length; i++) {
-    hash = ((hash << 5) - hash) + input.charCodeAt(i);
-    hash |= 0;
-  }
-  return Math.abs(hash).toString(16).padStart(8, "0");
+function bufToHex(buf: ArrayBuffer): string {
+  return Array.from(new Uint8Array(buf), (b) => b.toString(16).padStart(2, "0")).join("");
+}
+
+// SHA-256 hex digest via the standard Web Crypto API. This is available in
+// Convex's default (non-"use node") V8 runtime, so no node:crypto import is
+// required - unlike the previous stub, this actually works.
+async function sha256Hex(input: string): Promise<string> {
+  const data = new TextEncoder().encode(input);
+  const digest = await crypto.subtle.digest("SHA-256", data);
+  return bufToHex(digest);
+}
+
+// Fast, collision-resistant key for the short-lived command-dedup cache.
+// NOT used for any security-sensitive comparison (see verifyPluginHmac for
+// that). Replaces the previous 32-bit rolling hash, which was mislabeled
+// "hashMd5" despite not being MD5 and having a tiny, easily-collided
+// keyspace.
+async function hashForDedup(input: string): Promise<string> {
+  return (await sha256Hex(input)).substring(0, 32);
 }
 
 // ── TOKEN VERIFICATION ─────────────────────────────────────────────────────────
@@ -503,19 +486,49 @@ function verifyAdminToken(request: Request, queryToken?: string): boolean {
   return timingSafeCompare(candidate, env);
 }
 
-function verifyPluginHmac(request: Request, body: unknown): boolean {
+// Verifies X-Nexus-Signature / X-Roblox-Signature as HMAC-SHA256 over the
+// *raw* request body. Must be called with the raw text exactly as received
+// (not a re-serialized JS object) or a correct signature would never match.
+async function verifyPluginHmac(request: Request, rawBody: string): Promise<boolean> {
   const secret = process.env.PLUGIN_HMAC_SECRET ?? "";
-  if (!secret || secret.length < 16) return true;
+  if (!secret || secret.length < 16) return true; // HMAC is opt-in; skip if not configured
 
   const sig = (
     (request.headers.get("x-nexus-signature") ?? "") ||
     (request.headers.get("x-roblox-signature") ?? "")
   ).trim();
 
-  if (!sig) return true;
+  if (!sig) return true; // signature optional unless the deployer enforces PLUGIN_HMAC_SECRET on the client too
 
-  // HMAC disabled - node:crypto not available in Convex runtime
-  return true;
+  try {
+    const key = await crypto.subtle.importKey(
+      "raw",
+      new TextEncoder().encode(secret),
+      { name: "HMAC", hash: "SHA-256" },
+      false,
+      ["sign"]
+    );
+    const mac = await crypto.subtle.sign("HMAC", key, new TextEncoder().encode(rawBody));
+    const expectedHex = bufToHex(mac);
+    const provided = sig.toLowerCase().replace(/^sha256=/, "");
+    return timingSafeCompare(provided, expectedHex);
+  } catch {
+    return false;
+  }
+}
+
+// Lightweight replay guard for the X-Nexus-Nonce header. Reuses the existing
+// generic dedup mutation rather than requiring a new storage table - a nonce
+// is just a hash that must not be seen twice within the window.
+async function checkNonceReplay(ctx: ActionCtx, request: Request): Promise<boolean> {
+  const nonce = (request.headers.get("x-nexus-nonce") ?? "").trim();
+  if (!nonce) return true; // nonce is optional unless the client opts into signing
+  if (nonce.length > 128) return false;
+  const isReplay = await ctx.runMutation(internal.store.checkAndSetDedup, {
+    hash: `nonce:${nonce}`,
+    windowMs: 5 * 60_000,
+  });
+  return !isReplay;
 }
 
 function getClientIp(request: Request): string {
@@ -563,13 +576,23 @@ async function authorizeCommand(
     (request.headers.get("x-session-token") ?? "").trim() ||
     (body._session_token ? String(body._session_token).trim() : "");
 
-  if (!candidate) return { ok: true };
-
   const placeId = body._place_id ? sanStr(String(body._place_id), 30) : null;
   const session = await ctx.runQuery(internal.store.getSession, {
     username: targetUser,
   });
+
+  // No session has ever been registered for this user (plugin never
+  // connected) - there is nothing to verify against yet, so allow through.
   if (!session) return { ok: true };
+
+  // BUGFIX: a session now exists for this user, so a valid token is
+  // mandatory. Previously, simply omitting the X-Session-Token header
+  // skipped verification entirely (the check below never ran), which let
+  // anyone who knew/guessed a username impersonate that user's session and
+  // push arbitrary commands into their queue. A session existing must now
+  // always require a matching token.
+  if (!candidate)
+    return { ok: false, status: 401, error: "Session token required." };
 
   if (!timingSafeCompare(candidate, session.token))
     return { ok: false, status: 401, error: "Invalid session token." };
@@ -639,7 +662,7 @@ function buildInsertScript(assetId: string | number, assetName: string): string 
     .trim() || "Asset";
 
   return [
-    `-- Auto-generated by NexusAI ${WEB_VERSION}`,
+    "-- Auto-generated by NexusAI",
     `local InsertService = game:GetService("InsertService")`,
     `local ok, result = pcall(function() return InsertService:LoadAsset(${assetId}) end)`,
     `if ok then`,
@@ -686,7 +709,7 @@ async function robloxToolboxSearch(
         headers: {
           "x-api-key": apiKey,
           Accept: "application/json",
-          "User-Agent": `NexusAI/${WEB_VERSION}`,
+          "User-Agent": "NexusAI",
         },
       },
       12_000,
@@ -1008,7 +1031,7 @@ async function searchDocs(
       {
         headers: {
           Accept: "application/json",
-          "User-Agent": `NexusAI/${WEB_VERSION}`,
+          "User-Agent": "NexusAI",
         },
       },
       8_000,
@@ -1123,7 +1146,7 @@ async function dispatchWebhook(
         method: "POST",
         headers: {
           "Content-Type": "application/json",
-          "User-Agent": `NexusAI/${WEB_VERSION}`,
+          "User-Agent": "NexusAI",
         },
         body: JSON.stringify({ event, user: u, data, ts: Date.now() }),
       },
@@ -1203,7 +1226,7 @@ async function isDuplicateCommand(
   cmd: QueueCommand
 ): Promise<boolean> {
   if (!DEDUP_ACTIONS.has(cmd?.action)) return false;
-  const hash = hashMd5(
+  const hash = await hashForDedup(
     JSON.stringify({
       action: cmd.action,
       name:   cmd.name,
@@ -1265,9 +1288,9 @@ async function handleGet(
   const url = new URL(request.url);
   const q   = Object.fromEntries(url.searchParams.entries()) as Record<string, string>;
 
-  // Version / ping
-  if (q["version"] === "1" || Object.keys(q).length === 0)
-    return jsonResp(versionPayload(), 200, cors);
+  // Ping (no params)
+  if (Object.keys(q).length === 0)
+    return jsonResp({ ok: true, status: "ok", required_plugin_version: REQUIRED_PLUGIN_VERSION }, 200, cors);
 
   // Health check
   if (q["health"] === "1") {
@@ -1281,8 +1304,6 @@ async function handleGet(
       {
         ok:                      true,
         status:                  "healthy",
-        web_version:             WEB_VERSION,
-        api_version:             API_VERSION,
         required_plugin_version: REQUIRED_PLUGIN_VERSION,
         uptime:                  upMs,
         uptimeHuman:             `${Math.floor(upMs / 3_600_000)}h ${Math.floor((upMs % 3_600_000) / 60_000)}m`,
@@ -1345,7 +1366,6 @@ async function handleGet(
         placeId:                 sess?.placeId ?? null,
         userId:                  sess?.userId  ?? null,
         required_plugin_version: REQUIRED_PLUGIN_VERSION,
-        web_version:             WEB_VERSION,
         currentProject:          await getProject(ctx, u),
         globalStats: {
           totalCommands: s.totalCommands ?? 0,
@@ -1550,8 +1570,6 @@ async function handleGet(
         (c: QueueCommand) => c._priority === "critical" || c._priority === "high"
       ).length,
       required_plugin_version: REQUIRED_PLUGIN_VERSION,
-      web_version:             WEB_VERSION,
-      api_version:             API_VERSION,
       currentProject:          proj,
       projectId:               proj.projectId   ?? "",
       projectName:             proj.projectName ?? "",
@@ -1568,11 +1586,26 @@ async function handlePost(
   request: Request,
   cors: Record<string, string>
 ): Promise<Response> {
+  // Read the raw text first - HMAC must be checked against the exact bytes
+  // the client sent. Re-serializing the parsed JS object before checking a
+  // signature (the previous behaviour) can never match a correctly
+  // generated signature.
+  const rawBody = await request.text().catch(() => "");
   let body: Record<string, unknown>;
-  try { body = (await request.json()) as Record<string, unknown>; } catch { body = {}; }
+  try {
+    body = rawBody ? (JSON.parse(rawBody) as Record<string, unknown>) : {};
+  } catch {
+    body = (robustJsonParse(rawBody) as Record<string, unknown>) ?? {};
+  }
 
-  const ip      = getClientIp(request);
-  const ratUser = san(body["_user"] ?? body["user"] ?? "anon");
+  const ip = getClientIp(request);
+  // BUGFIX: previously defaulted to the literal string "anon" whenever no
+  // "_user"/"user" field was supplied, meaning every anonymous caller shared
+  // one global rate-limit bucket - a single abusive anonymous client could
+  // exhaust it and lock out every other anonymous user. Fall back to a
+  // per-IP bucket instead.
+  const hasIdentity = !!(body["_user"] ?? body["user"]);
+  const ratUser = hasIdentity ? san(body["_user"] ?? body["user"]) : `ip_${ip || "unknown"}`;
 
   // Rate limiting
   const okIp = await ctx.runMutation(internal.store.checkAndIncrRateLimit, {
@@ -1590,9 +1623,12 @@ async function handlePost(
   });
   if (!okBurst) return rateLimitResp(cors, 5);
 
-  // HMAC verification
-  if (!verifyPluginHmac(request, body))
+  // HMAC + replay verification (both now real checks - see helpers above)
+  if (!(await verifyPluginHmac(request, rawBody)))
     return errResp(cors, 401, "Invalid HMAC signature.", { hint: "Check PLUGIN_HMAC_SECRET." });
+
+  if (!(await checkNonceReplay(ctx, request)))
+    return errResp(cors, 401, "Nonce already used (possible replay).");
 
   const rawAction    = sanStr(String(body["action"] ?? body["type"] ?? ""), 80);
   const resolvedUser = san(body["_user"] ?? "");
@@ -1615,8 +1651,6 @@ async function handlePost(
         ok:                      true,
         status:                  "ok",
         required_plugin_version: REQUIRED_PLUGIN_VERSION,
-        web_version:             WEB_VERSION,
-        api_version:             API_VERSION,
         currentProject:          proj,
         projectId:               proj.projectId   ?? "",
         projectName:             proj.projectName ?? "",
@@ -1932,7 +1966,9 @@ async function handlePost(
       action:       act,
       _user:        String(body["_user"] ?? "web").substring(0, 50),
       _target_user: target,
-      _apiKey:      undefined,
+      _apiKey:        undefined,
+      _session_token: undefined,
+      _place_id:      undefined,
     };
 
     const pushed = await pushQueue(ctx, target, cmdToQueue, priority);
@@ -1954,7 +1990,6 @@ async function handlePost(
         pluginConnected:         Date.now() - lastPollTs < 8_000,
         queueLength:             qc.total,
         required_plugin_version: REQUIRED_PLUGIN_VERSION,
-        api_version:             API_VERSION,
       },
       200,
       cors
@@ -1989,7 +2024,6 @@ async function handlePost(
         hasSession:              !!sess,
         placeId:                 sess?.placeId ?? null,
         required_plugin_version: REQUIRED_PLUGIN_VERSION,
-        web_version:             WEB_VERSION,
         currentProject:          await getProject(ctx, target),
       },
       200,
@@ -2060,6 +2094,9 @@ async function handlePost(
         action:       act,
         _user:        resolvedUser,
         _target_user: target,
+        _apiKey:        undefined,
+        _session_token: undefined,
+        _place_id:      undefined,
       }, priority);
       results[target] = { sent, online: Date.now() - lastPollTs < 8_000 };
       if (sent) pushed++;
@@ -2324,7 +2361,9 @@ async function handlePost(
         action:       act,
         _user:        String(body["_user"] ?? "web").substring(0, 50),
         _target_user: target,
-        _apiKey:      undefined,
+        _apiKey:        undefined,
+        _session_token: undefined,
+        _place_id:      undefined,
       }, priority);
       pushed++;
     }
@@ -2391,7 +2430,9 @@ async function handlePost(
         action:       act,
         _user:        String(body["_user"] ?? "web").substring(0, 50),
         _target_user: target,
-        _apiKey:      undefined,
+        _apiKey:        undefined,
+        _session_token: undefined,
+        _place_id:      undefined,
       }, priority);
       pushed++;
     }
@@ -2460,7 +2501,6 @@ async function handlePost(
         pluginConnected:         Date.now() - lastPollTs < 8_000,
         queueLength:             qc.total,
         required_plugin_version: REQUIRED_PLUGIN_VERSION,
-        api_version:             API_VERSION,
       },
       200,
       cors
@@ -2474,8 +2514,6 @@ async function handlePost(
     'Request not recognised. Include a valid "action" or query parameter.',
     {
       hint:        'POST with { "action": "your_action", "_user": "username", ... }',
-      web_version: WEB_VERSION,
-      api_version: API_VERSION,
     }
   );
 }

@@ -82,114 +82,6 @@ interface SuggItem {
   q: string
   icon: string
 }
-interface LangStrings {
-  placeholder: string
-  noConv: string
-  newchat: string
-  recent: string
-  dash: string
-  son: string
-  soff: string
-  cancel: string
-  connected: string
-  disconnected: string
-  creditsLabel: string
-  credHint: string
-  helpBtn: string
-  inboxBtn: string
-  welcomeText: string
-  chatTitle: string
-  installLink: string
-  reconnectLink: string
-  installTitle: string
-  installSteps: string[]
-  installClose: string
-  settingsTitle: string
-  accountTitle: string
-  planLabel: string
-  robloxIdLabel: string
-  dailyTitle: string
-  freePlan: string
-  proPlan: string
-  playTestTitle: string
-  playTestLabel: string
-  playTestHint: string
-  playTestDurLabel: string
-  langTitle: string
-  langLabel: string
-  reportTitle: string
-  reportBtn: string
-  redeemTitle: string
-  redeemHint: string
-  downloadTitle: string
-  downloadHint: string
-  downloadPluginBtn: string
-  logoutLabel: string
-  close: string
-  guiAddLabel: string
-  guiEmptyText: string
-  guiLoadingText: string
-  guiToPlaceText: string
-  guiAiBuild: string
-  guiClear: string
-  guiExport: string
-  guiCodeTitle: string
-  copy: string
-  download: string
-  guiAiTitle: string
-  guiAiDesc: string
-  guiAiBuildBtn: string
-  guiAiCancel: string
-  guiPropsEmpty: string
-  guiLayerTitle: string
-  avatarClose: string
-  copiedToast: string
-  reconnectToast: string
-  creditsExhausted: string
-  creditsLow: string
-  cancelToast: string
-  modelBusyToast: string
-  guiSentToast: string
-  guiNotConnectedToast: string
-  addElementFirst: string
-  aiResponseInvalid: string
-  errorPrefix: string
-  clearConfirm: string
-  shareModalTitle: string
-  shareModalDesc: string
-  shareModalCopy: string
-  shareClose: string
-  workingOn: string
-  buildingInStudio: string
-  analyzingReq: string
-  designingSolution: string
-  readingScript: string
-  analyzingError: string
-  designingFix: string
-  designingUI: string
-  buildingComponents: string
-  preparingEdit: string
-  preparingTest: string
-  projectLabel: string
-  testRunning: string
-  testDone: string
-  testError: string
-  loaderInit: string
-  loaderLoadData: string
-  loaderConnecting: string
-  loaderReady: string
-  dailyReady: string
-  dailyAlready: string
-  dailyNext: string
-  injFail: string
-  tabChat: string
-  tabGui: string
-  retrying: string
-  noScriptWarning: string
-  injecting: string
-  injectDone: string
-  suggs: SuggItem[]
-}
 
 // ══════════════════════════════════════════════════════════════════════════════
 // PART 1 — SECURITY, CSRF, RATE LIMIT, CORE UTILITIES
@@ -274,10 +166,7 @@ function checkClientRateLimit(key: string, maxPerMin = 30): boolean {
   if (!_apiCallLog[key]) _apiCallLog[key] = []
   _apiCallLog[key] = _apiCallLog[key].filter((t) => now - t < 60000)
   if (_apiCallLog[key].length >= maxPerMin) {
-    toast(
-      curLang === 'id' ? 'Terlalu banyak permintaan, tunggu sebentar' : 'Too many requests, please wait',
-      'var(--yellow)', 3000
-    )
+    toast('Too many requests, please wait', 'var(--yellow)', 3000)
     return false
   }
   _apiCallLog[key].push(now)
@@ -285,11 +174,10 @@ function checkClientRateLimit(key: string, maxPerMin = 30): boolean {
 }
 
 // ── GLOBAL STATE ──────────────────────────────────────────────────────────────
-let curLang: string = typeof window !== 'undefined' ? (localStorage.getItem('nexus_lang') || 'id') : 'id'
 let SESSION: NexusSession | null = null
 let studioConnected = false
 let studioPollTimer: ReturnType<typeof setInterval> | null = null
-const API_URL = '/api/control'
+const API_URL = 'https://brazen-lapwing-697.convex.site'
 
 function esc(s: unknown): string {
   return String(s || '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;')
@@ -338,7 +226,7 @@ function cleanAIResponse(text: string): string {
 function isPureGreeting(txt: string): boolean {
   const t = txt.trim().toLowerCase()
   if (t.length > 100) return false
-  return /^(halo|hai|hi|hello|hey|selamat\s*(pagi|siang|sore|malam)|good\s*(morning|afternoon|evening|night)|apa\s*kabar|how\s*are\s*you|nexus|ping|hei|yo|sup|test|tes|coba|ok|oke|siap|ready|mantap|bagus|keren|nice|thanks|makasih|thank\s*you|terima\s*kasih)[\s?!.,]*$/.test(t)
+  return /^(hello|hey|hi|good\s*(morning|afternoon|evening|night)|how\s*are\s*you|nexus|ping|yo|sup|test|ok|ready|nice|thanks|thank\s*you)[\s?!.,]*$/.test(t)
 }
 
 function isOwner(): boolean {
@@ -374,7 +262,7 @@ function safeMarked(md: string): string {
 }
 
 // ══════════════════════════════════════════════════════════════════════════════
-// PART 2 — LANGUAGE, MODELS, CONSTANTS, SESSION
+// PART 2 — MODELS, CONSTANTS, SESSION
 // ══════════════════════════════════════════════════════════════════════════════
 
 const _docsCache: Record<string, unknown> = {}
@@ -439,6 +327,10 @@ let _syncInProgress = false
 let _syncDebounceTimer: ReturnType<typeof setTimeout> | null = null
 let _syncFailCount = 0
 
+// FIX: new chat debounce to prevent spam
+let _lastNewChatTime = 0
+const _NEW_CHAT_DEBOUNCE = 800 // ms
+
 const _DOCS_KEYWORDS = [
   'tweenservice', 'tween', 'datastore', 'remoteevent', 'remotefunction', 'bindable',
   'humanoid', 'leaderstats', 'collectionservice', 'pathfinding', 'runservice',
@@ -465,174 +357,111 @@ function _shouldSearchDocs(txt: string): boolean {
   return false
 }
 
-const LANGS: Record<string, LangStrings> = {
-  id: {
-    placeholder: 'Tanya NEXUS AI tentang Roblox... (ketik @ untuk mention)',
-    noConv: 'Belum ada percakapan', newchat: 'Percakapan Baru', recent: 'Riwayat Chat', dash: 'Dashboard',
-    son: 'Studio: ON', soff: 'Studio: OFF', cancel: 'Batalkan',
-    connected: 'Plugin terhubung — AI siap build di place kamu!',
-    disconnected: 'Plugin belum terhubung —',
-    creditsLabel: 'Credits', credHint: 'Klik untuk beli lebih', helpBtn: 'Butuh Bantuan?', inboxBtn: 'Inbox',
-    welcomeText: 'AI Roblox cerdas — tulis Lua, debug script, buat GUI. Connect plugin untuk inject langsung ke Studio!',
-    chatTitle: 'NEXUS AI — Asisten Roblox', installLink: 'Cara connect', reconnectLink: 'Reconnect',
-    installTitle: 'Cara Install Plugin NEXUS AI',
-    installSteps: [
-      'Download dari <a href="https://create.roblox.com/store/asset/91870814099475/NEXUS-AI" target="_blank" style="color:var(--cyan)">Creator Store</a>',
-      'Simpan ke: <code>C:\\Users\\[Nama]\\AppData\\Local\\Roblox\\Plugins\\</code>',
-      'Studio: <strong>Manage Plugin</strong> → Enable <strong>HTTP Requests</strong> + <strong>Script Injection</strong>',
-      'Klik <strong>NEXUS AI</strong> di toolbar Studio → Klik <strong>CONNECT</strong>',
-      'Status hijau = terhubung!',
-    ],
-    installClose: 'MENGERTI', settingsTitle: 'Pengaturan', accountTitle: 'Akun',
-    planLabel: 'Plan', robloxIdLabel: 'Roblox ID',
-    dailyTitle: 'Daily Credits', freePlan: 'Free Plan', proPlan: 'Pro Plan',
-    playTestTitle: 'Auto Play Test', playTestLabel: 'Jalankan play_test setelah inject',
-    playTestHint: 'Nonaktifkan jika laptop crash saat play_test', playTestDurLabel: 'Durasi (detik)',
-    langTitle: 'Bahasa', langLabel: 'Bahasa Interface & AI',
-    reportTitle: 'Laporkan Masalah', reportBtn: 'Kirim Report',
-    redeemTitle: 'Redeem Code',
-    redeemHint: 'Dapatkan code di <a href="https://discord.gg/FzAF48mvK5" target="_blank" style="color:var(--cyan)">Discord NEXUS STUDIO</a>',
-    downloadTitle: 'Download Plugin', downloadHint: 'Install NEXUS AI Plugin di Roblox Studio',
-    downloadPluginBtn: 'Download dari Creator Store', logoutLabel: 'Logout', close: 'TUTUP',
-    guiAddLabel: 'Tambah:', guiEmptyText: 'Tambah elemen atau klik AI Build',
-    guiLoadingText: 'AI sedang membangun UI...', guiToPlaceText: 'Kirim ke Place',
-    guiAiBuild: 'AI Build', guiClear: 'Hapus', guiExport: 'Export',
-    guiCodeTitle: 'Generated GUI Script', copy: 'Copy', download: 'Download .lua',
-    guiAiTitle: 'AI UI Builder', guiAiDesc: 'Deskripsikan UI yang Anda inginkan:',
-    guiAiBuildBtn: 'Bangun dengan AI', guiAiCancel: 'Batal',
-    guiPropsEmpty: 'Pilih elemen', guiLayerTitle: 'Layer',
-    avatarClose: 'TUTUP', copiedToast: 'Tersalin!', reconnectToast: 'Menghubungkan ulang...',
-    creditsExhausted: 'Credits habis! Beli di Payment.', creditsLow: 'Credits tidak cukup.',
-    cancelToast: 'Dibatalkan', modelBusyToast: 'Model sibuk, coba lagi dalam beberapa detik.',
-    guiSentToast: 'GUI dikirim ke Studio!', guiNotConnectedToast: 'Studio belum terhubung!',
-    addElementFirst: 'Tambahkan elemen dulu!', aiResponseInvalid: 'AI response tidak valid',
-    errorPrefix: 'Gagal', clearConfirm: 'Hapus semua pesan di percakapan ini?',
-    shareModalTitle: 'Bagikan Chat', shareModalDesc: 'Salin teks percakapan ini:',
-    shareModalCopy: 'Copy Teks', shareClose: 'Tutup',
-    workingOn: 'Memproses permintaan...', buildingInStudio: 'Membangun di Studio...',
-    analyzingReq: 'Menganalisis permintaan...', designingSolution: 'Merancang solusi...',
-    readingScript: 'Membaca script dari Studio...', analyzingError: 'Menganalisis error...',
-    designingFix: 'Merancang perbaikan...', designingUI: 'Merancang UI/UX...',
-    buildingComponents: 'Membangun komponen...', preparingEdit: 'Mempersiapkan edit...',
-    preparingTest: 'Mempersiapkan test...', projectLabel: 'Project',
-    testRunning: 'Menjalankan play_test', testDone: 'Test selesai', testError: 'Error ditemukan',
-    loaderInit: 'Menginisialisasi...', loaderLoadData: 'Memuat data...',
-    loaderConnecting: 'Memeriksa koneksi Studio...', loaderReady: 'Siap!',
-    dailyReady: 'Daily reward tersedia! Klik Claim.', dailyAlready: 'Sudah diklaim hari ini.',
-    dailyNext: 'Berikutnya: ', injFail: 'Gagal kirim ke Studio', tabChat: 'Chat', tabGui: 'UI Editor',
-    retrying: 'Mencoba ulang...', noScriptWarning: 'Tidak ada script yang terdeteksi untuk diinjeksi.',
-    injecting: 'Menginjeksi ke Studio...', injectDone: 'Inject selesai!',
-    suggs: [
-      { title: 'Loading Screen', body: 'Loading screen animasi profesional', q: 'Buat loading screen profesional dengan animasi progress bar, tips random, dan transisi halus', icon: '<polyline points="1 6 1 22 23 22 23 6"/><path d="M1 6l11 7 11-7"/>' },
-      { title: 'Shop GUI', body: 'Toko dengan animasi dan coins', q: 'Buat shop GUI lengkap dengan tombol buka tutup, item list, tombol beli, harga, coins display, dan animasi smooth', icon: '<circle cx="9" cy="21" r="1"/><circle cx="20" cy="21" r="1"/><path d="M1 1h4l2.68 13.39a2 2 0 0 0 2 1.61h9.72a2 2 0 0 0 2-1.61L23 6H6"/>' },
-      { title: 'Leaderboard', body: 'DataStore Coins + Level + Win', q: 'Buat sistem DataStore leaderboard untuk game Roblox dengan Coins, Level, dan Win', icon: '<polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/>' },
-      { title: 'Admin System', body: 'Admin commands dan UI panel', q: 'Buat sistem admin commands lengkap dengan kick, ban, give, speed, fly, dan UI panel rapi', icon: '<polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"/>' },
-    ],
-  },
-  en: {
-    placeholder: 'Ask NEXUS AI about Roblox... (type @ to mention)',
-    noConv: 'No conversations yet', newchat: 'New Chat', recent: 'Chat History', dash: 'Dashboard',
-    son: 'Studio: ON', soff: 'Studio: OFF', cancel: 'Cancel',
-    connected: 'Plugin connected — AI ready to build in your place!',
-    disconnected: 'Plugin not connected —',
-    creditsLabel: 'Credits', credHint: 'Click to buy more', helpBtn: 'Need Help?', inboxBtn: 'Inbox',
-    welcomeText: 'Smart Roblox AI — write Lua, debug scripts, build GUIs. Connect plugin to inject directly into Studio!',
-    chatTitle: 'NEXUS AI — Roblox Dev Assistant', installLink: 'How to connect', reconnectLink: 'Reconnect',
-    installTitle: 'How to Install NEXUS AI Plugin',
-    installSteps: [
-      'Download from <a href="https://create.roblox.com/store/asset/91870814099475/NEXUS-AI" target="_blank" style="color:var(--cyan)">Creator Store</a>',
-      'Save to: <code>C:\\Users\\[Name]\\AppData\\Local\\Roblox\\Plugins\\</code>',
-      'Studio: <strong>Manage Plugin</strong> → Enable <strong>HTTP Requests</strong> + <strong>Script Injection</strong>',
-      'Click <strong>NEXUS AI</strong> in Studio toolbar → Click <strong>CONNECT</strong>',
-      'Green status = connected!',
-    ],
-    installClose: 'GOT IT', settingsTitle: 'Settings', accountTitle: 'Account',
-    planLabel: 'Plan', robloxIdLabel: 'Roblox ID',
-    dailyTitle: 'Daily Credits', freePlan: 'Free Plan', proPlan: 'Pro Plan',
-    playTestTitle: 'Auto Play Test', playTestLabel: 'Run play_test after inject',
-    playTestHint: 'Disable if PC crashes during play_test', playTestDurLabel: 'Duration (seconds)',
-    langTitle: 'Language', langLabel: 'Interface & AI Language',
-    reportTitle: 'Report Issue', reportBtn: 'Send Report',
-    redeemTitle: 'Redeem Code',
-    redeemHint: 'Get codes at <a href="https://discord.gg/FzAF48mvK5" target="_blank" style="color:var(--cyan)">NEXUS STUDIO Discord</a>',
-    downloadTitle: 'Download Plugin', downloadHint: 'Install NEXUS AI Plugin in Roblox Studio',
-    downloadPluginBtn: 'Download from Creator Store', logoutLabel: 'Logout', close: 'CLOSE',
-    guiAddLabel: 'Add:', guiEmptyText: 'Add elements or click AI Build',
-    guiLoadingText: 'AI is building UI...', guiToPlaceText: 'Send to Place',
-    guiAiBuild: 'AI Build', guiClear: 'Clear', guiExport: 'Export',
-    guiCodeTitle: 'Generated GUI Script', copy: 'Copy', download: 'Download .lua',
-    guiAiTitle: 'AI UI Builder', guiAiDesc: 'Describe the UI you want:',
-    guiAiBuildBtn: 'Build with AI', guiAiCancel: 'Cancel',
-    guiPropsEmpty: 'Select element', guiLayerTitle: 'Layers',
-    avatarClose: 'CLOSE', copiedToast: 'Copied!', reconnectToast: 'Reconnecting...',
-    creditsExhausted: 'Credits exhausted! Buy at Payment.', creditsLow: 'Not enough credits.',
-    cancelToast: 'Cancelled', modelBusyToast: 'Model busy, please retry in a few seconds.',
-    guiSentToast: 'GUI sent to Studio!', guiNotConnectedToast: 'Studio not connected!',
-    addElementFirst: 'Add elements first!', aiResponseInvalid: 'AI response invalid',
-    errorPrefix: 'Failed', clearConfirm: 'Delete all messages in this chat?',
-    shareModalTitle: 'Share Chat', shareModalDesc: 'Copy conversation text:',
-    shareModalCopy: 'Copy Text', shareClose: 'Close',
-    workingOn: 'Processing request...', buildingInStudio: 'Building in Studio...',
-    analyzingReq: 'Analyzing request...', designingSolution: 'Designing solution...',
-    readingScript: 'Reading script from Studio...', analyzingError: 'Analyzing error...',
-    designingFix: 'Designing fix...', designingUI: 'Designing UI/UX...',
-    buildingComponents: 'Building components...', preparingEdit: 'Preparing edit...',
-    preparingTest: 'Preparing test...', projectLabel: 'Project',
-    testRunning: 'Running play_test', testDone: 'Test done', testError: 'Errors found',
-    loaderInit: 'Initializing...', loaderLoadData: 'Loading data...',
-    loaderConnecting: 'Checking Studio connection...', loaderReady: 'Ready!',
-    dailyReady: 'Daily reward available! Click Claim.', dailyAlready: 'Already claimed today.',
-    dailyNext: 'Next: ', injFail: 'Send to Studio failed', tabChat: 'Chat', tabGui: 'UI Editor',
-    retrying: 'Retrying...', noScriptWarning: 'No scripts detected to inject.',
-    injecting: 'Injecting to Studio...', injectDone: 'Inject complete!',
-    suggs: [
-      { title: 'Loading Screen', body: 'Professional animated loading screen', q: 'Create a professional loading screen with animated progress bar, random tips, and smooth transitions', icon: '<polyline points="1 6 1 22 23 22 23 6"/><path d="M1 6l11 7 11-7"/>' },
-      { title: 'Shop GUI', body: 'Shop with animations and coins', q: 'Create a complete shop GUI with open/close button, item list, buy button, prices, coins display, and smooth animations', icon: '<circle cx="9" cy="21" r="1"/><circle cx="20" cy="21" r="1"/><path d="M1 1h4l2.68 13.39a2 2 0 0 0 2 1.61h9.72a2 2 0 0 0 2-1.61L23 6H6"/>' },
-      { title: 'Leaderboard', body: 'DataStore Coins + Level + Win', q: 'Create a DataStore leaderboard system for Roblox with Coins, Level, and Win stats', icon: '<polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/>' },
-      { title: 'Admin System', body: 'Admin commands and UI panel', q: 'Create a complete admin commands system with kick, ban, give, speed, fly, and a clean UI panel', icon: '<polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"/>' },
-    ],
-  },
+// ── ENGLISH-ONLY STRINGS ──────────────────────────────────────────────────────
+const LANG_EN = {
+  placeholder: 'Ask NEXUS AI about Roblox... (type @ to mention)',
+  noConv: 'No conversations yet', newchat: 'New Chat', recent: 'Chat History', dash: 'Dashboard',
+  son: 'Studio: ON', soff: 'Studio: OFF', cancel: 'Cancel',
+  connected: 'Plugin connected — AI ready to build in your place!',
+  disconnected: 'Plugin not connected —',
+  creditsLabel: 'Credits', credHint: 'Click to buy more', helpBtn: 'Need Help?', inboxBtn: 'Inbox',
+  welcomeText: 'Smart Roblox AI — write Lua, debug scripts, build GUIs. Connect plugin to inject directly into Studio!',
+  chatTitle: 'NEXUS AI — Roblox Dev Assistant', installLink: 'How to connect', reconnectLink: 'Reconnect',
+  installTitle: 'How to Install NEXUS AI Plugin',
+  installSteps: [
+    'Download from <a href="https://create.roblox.com/store/asset/91870814099475/NEXUS-AI" target="_blank" style="color:var(--cyan)">Creator Store</a>',
+    'Save to: <code>C:\\Users\\[Name]\\AppData\\Local\\Roblox\\Plugins\\</code>',
+    'Studio: <strong>Manage Plugin</strong> → Enable <strong>HTTP Requests</strong> + <strong>Script Injection</strong>',
+    'Click <strong>NEXUS AI</strong> in Studio toolbar → Click <strong>CONNECT</strong>',
+    'Green status = connected!',
+  ],
+  installClose: 'GOT IT', settingsTitle: 'Settings', accountTitle: 'Account',
+  planLabel: 'Plan', robloxIdLabel: 'Roblox ID',
+  dailyTitle: 'Daily Credits', freePlan: 'Free Plan', proPlan: 'Pro Plan',
+  playTestTitle: 'Auto Play Test', playTestLabel: 'Run play_test after inject',
+  playTestHint: 'Disable if PC crashes during play_test', playTestDurLabel: 'Duration (seconds)',
+  reportTitle: 'Report Issue', reportBtn: 'Send Report',
+  redeemTitle: 'Redeem Code',
+  redeemHint: 'Get codes at <a href="https://discord.gg/FzAF48mvK5" target="_blank" style="color:var(--cyan)">NEXUS STUDIO Discord</a>',
+  downloadTitle: 'Download Plugin', downloadHint: 'Install NEXUS AI Plugin in Roblox Studio',
+  downloadPluginBtn: 'Download from Creator Store', logoutLabel: 'Logout', close: 'CLOSE',
+  guiAddLabel: 'Add:', guiEmptyText: 'Add elements or click AI Build',
+  guiLoadingText: 'AI is building UI...', guiToPlaceText: 'Send to Place',
+  guiAiBuild: 'AI Build', guiClear: 'Clear', guiExport: 'Export',
+  guiCodeTitle: 'Generated GUI Script', copy: 'Copy', download: 'Download .lua',
+  guiAiTitle: 'AI UI Builder', guiAiDesc: 'Describe the UI you want:',
+  guiAiBuildBtn: 'Build with AI', guiAiCancel: 'Cancel',
+  guiPropsEmpty: 'Select element', guiLayerTitle: 'Layers',
+  avatarClose: 'CLOSE', copiedToast: 'Copied!', reconnectToast: 'Reconnecting...',
+  creditsExhausted: 'Credits exhausted! Buy at Payment.', creditsLow: 'Not enough credits.',
+  cancelToast: 'Cancelled', modelBusyToast: 'Model busy, please retry in a few seconds.',
+  guiSentToast: 'GUI sent to Studio!', guiNotConnectedToast: 'Studio not connected!',
+  addElementFirst: 'Add elements first!', aiResponseInvalid: 'AI response invalid',
+  errorPrefix: 'Failed', clearConfirm: 'Delete all messages in this chat?',
+  shareModalTitle: 'Share Chat', shareModalDesc: 'Copy conversation text:',
+  shareModalCopy: 'Copy Text', shareClose: 'Close',
+  workingOn: 'Processing request...', buildingInStudio: 'Building in Studio...',
+  analyzingReq: 'Analyzing request...', designingSolution: 'Designing solution...',
+  readingScript: 'Reading script from Studio...', analyzingError: 'Analyzing error...',
+  designingFix: 'Designing fix...', designingUI: 'Designing UI/UX...',
+  buildingComponents: 'Building components...', preparingEdit: 'Preparing edit...',
+  preparingTest: 'Preparing test...', projectLabel: 'Project',
+  testRunning: 'Running play_test', testDone: 'Test done', testError: 'Errors found',
+  loaderInit: 'Initializing...', loaderLoadData: 'Loading data...',
+  loaderConnecting: 'Checking Studio connection...', loaderReady: 'Ready!',
+  dailyReady: 'Daily reward available! Click Claim.',
+  dailyAlready: 'Already claimed today.',
+  dailyNext: 'Next: ',
+  injFail: 'Send to Studio failed', tabChat: 'Chat', tabGui: 'UI Editor',
+  retrying: 'Retrying...', noScriptWarning: 'No scripts detected to inject.',
+  injecting: 'Injecting to Studio...', injectDone: 'Inject complete!',
+  suggs: [
+    { title: 'Loading Screen', body: 'Professional animated loading screen', q: 'Create a professional loading screen with animated progress bar, random tips, and smooth transitions', icon: '<polyline points="1 6 1 22 23 22 23 6"/><path d="M1 6l11 7 11-7"/>' },
+    { title: 'Shop GUI', body: 'Shop with animations and coins', q: 'Create a complete shop GUI with open/close button, item list, buy button, prices, coins display, and smooth animations', icon: '<circle cx="9" cy="21" r="1"/><circle cx="20" cy="21" r="1"/><path d="M1 1h4l2.68 13.39a2 2 0 0 0 2 1.61h9.72a2 2 0 0 0 2-1.61L23 6H6"/>' },
+    { title: 'Leaderboard', body: 'DataStore Coins + Level + Win', q: 'Create a DataStore leaderboard system for Roblox with Coins, Level, and Win stats', icon: '<polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/>' },
+    { title: 'Admin System', body: 'Admin commands and UI panel', q: 'Create a complete admin commands system with kick, ban, give, speed, fly, and a clean UI panel', icon: '<polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"/>' },
+  ] as SuggItem[],
 }
-function T(): LangStrings { return LANGS[curLang] || LANGS.en }
 
+function T() { return LANG_EN }
+
+// ── MODEL LIST (no migration needed — clean IDs only) ─────────────────────────
 const MODEL_LIST: ModelEntry[] = [
   { grp: 'Google' },
-  { id: 'gemini-3.5-flash', prov: 'gemini', cost: 3, label: 'Gemini 3.5 Flash', icon: '/images/gemini.png', badge: 'FAST' },
-  { id: 'gemini-3.1-flash-lite', prov: 'gemini', cost: 2, label: 'Gemini 3.1 Flash Lite', icon: '/images/gemini.png', badge: 'FAST' },
-  { id: 'gemini-3.1-pro-preview', prov: 'gemini', cost: 12, label: 'Gemini 3.1 Pro', icon: '/images/gemini.png', badge: 'BEST' },
+  { id: 'gemini-2.5-flash', prov: 'gemini', cost: 3, label: 'Gemini 2.5 Flash', icon: '/images/gemini.png', badge: 'FAST' },
+  { id: 'gemini-2.5-flash-lite', prov: 'gemini', cost: 2, label: 'Gemini 2.5 Flash Lite', icon: '/images/gemini.png', badge: 'FAST' },
+  { id: 'gemini-2.5-pro', prov: 'gemini', cost: 12, label: 'Gemini 2.5 Pro', icon: '/images/gemini.png', badge: 'BEST' },
   { grp: 'ChatGPT' },
-  { id: 'openai/gpt-oss-120b:free', prov: 'openrouter', cost: 0, label: 'ChatGPT', icon: '/images/chatgpt.png', badge: 'FREE' },
+  { id: 'openai/gpt-4o-mini:free', prov: 'openrouter', cost: 0, label: 'ChatGPT 4o Mini', icon: '/images/chatgpt.png', badge: 'FREE' },
   { grp: 'DeepSeek' },
-  { id: 'deepseek/deepseek-v4-flash', prov: 'openrouter', cost: 15, label: 'DeepSeek V4 Pro', icon: '/images/deepseek.svg', badge: 'BEST' },
+  { id: 'deepseek/deepseek-chat', prov: 'openrouter', cost: 15, label: 'DeepSeek V3', icon: '/images/deepseek.svg', badge: 'BEST' },
 ]
+
+function getFreeModel(): ModelEntry {
+  for (let i = 0; i < MODEL_LIST.length; i++) { if (MODEL_LIST[i].id && !MODEL_LIST[i].grp) return MODEL_LIST[i] }
+  return { id: 'gemini-2.5-flash', prov: 'gemini', cost: 3, label: 'Gemini 2.5 Flash' }
+}
 
 const S: AppState = {
   credits: 30, allConvs: [], convs: [], curConv: null,
   gen: false, cancelCtrl: null,
-  model: { id: 'gemini-3.5-flash', prov: 'gemini', cost: 3, label: 'Gemini 3.5 Flash' },
-  guiModel: { id: 'gemini-3.5-flash', prov: 'gemini', cost: 3, label: 'Gemini 3.5 Flash' },
+  model: { id: 'gemini-2.5-flash', prov: 'gemini', cost: 3, label: 'Gemini 2.5 Flash' },
+  guiModel: { id: 'gemini-2.5-flash', prov: 'gemini', cost: 3, label: 'Gemini 2.5 Flash' },
   plan: 'free', draftText: {}, attachments: [], lastClaim: null, unreadInbox: 0,
   currentProjectId: null, currentProjectName: null, projects: [],
   playTestEnabled: typeof window !== 'undefined' ? localStorage.getItem('nexus_play_test') !== 'false' : false,
   playTestDuration: typeof window !== 'undefined' ? Math.max(5, Math.min(120, parseInt(localStorage.getItem('nexus_play_test_dur') || '15'))) : 15,
 }
 
-const _MODEL_ID_MIGRATION: Record<string, string> = {
-  'gemini-2.5-flash-lite': 'gemini-3.1-flash-lite',
-  'gemini-3-flash-preview': 'gemini-3.5-flash',
-  'gemini-3.5-flash-preview': 'gemini-3.5-flash',
-  'gemini-3-pro-preview': 'gemini-3.1-pro-preview',
-  'gemini-3.5-pro-preview': 'gemini-3.1-pro-preview',
-  'gemini-3.5-ultra-preview': 'gemini-3.1-pro-preview',
-}
-function _migrateModelId(modelObj: ModelEntry): ModelEntry {
-  if (!modelObj || !modelObj.id) return modelObj
-  const newId = _MODEL_ID_MIGRATION[modelObj.id]
-  if (newId) {
-    const found = MODEL_LIST.find((m) => m.id === newId)
-    return found || Object.assign({}, modelObj, { id: newId })
-  }
-  return modelObj
+// FIX: resolve a saved model id to a known MODEL_LIST entry, no migration table needed
+function _resolveModel(modelObj: unknown): ModelEntry {
+  if (!modelObj || typeof modelObj !== 'object') return getFreeModel()
+  const m = modelObj as ModelEntry
+  if (!m.id) return getFreeModel()
+  const found = MODEL_LIST.find((x) => x.id === m.id && !x.grp)
+  if (found) return found
+  // If stored ID not recognized, fall back to default model
+  return getFreeModel()
 }
 
 // ── SESSION CHECK ─────────────────────────────────────────────────────────────
@@ -747,7 +576,8 @@ async function syncToServer(): Promise<void> {
       user: (SESSION.user.username || '').toLowerCase(),
       robloxId: SESSION.user.robloxId,
       data: {
-        credits: S.credits, plan: S.plan, model: S.model,
+        // FIX: DO NOT send credits from client — server owns credits
+        plan: S.plan, model: S.model,
         lastClaim: S.lastClaim,
         convs: convsTrimmed, projects: S.projects || [], lastSync: Date.now(),
       },
@@ -759,7 +589,17 @@ async function syncToServer(): Promise<void> {
       body: JSON.stringify(payload),
     })
     clearTimeout(timeoutId)
-    if (resp.ok) { _syncFailCount = 0 }
+    if (resp.ok) {
+      const d = await resp.json() as { credits?: number; plan?: string }
+      // FIX: always trust server credits on sync response
+      if (d && typeof d.credits === 'number') {
+        S.credits = d.credits
+        updateCreds()
+        if (SESSION) SESSION.data.credits = S.credits
+        try { localStorage.setItem('nexus_session', JSON.stringify(SESSION)) } catch { }
+      }
+      _syncFailCount = 0
+    }
     else if (resp.status === 413) { _syncFailCount++; console.warn('[NEXUS sync] 413') }
     else if (resp.status === 500) { _syncFailCount++; console.warn('[NEXUS sync] 500') }
     else if (resp.status === 401 || resp.status === 403) { _syncFailCount = 5; console.warn('[NEXUS sync] auth error') }
@@ -782,22 +622,8 @@ function startAutoSync(): void {
 
 async function loadS(): Promise<void> {
   if (!SESSION) return
-  S.credits = parseFloat(String((SESSION.data && SESSION.data.credits !== undefined) ? SESSION.data.credits : 30)) || 30
-  S.plan = (SESSION.data && SESSION.data.plan as string) || 'free'
-  S.lastClaim = (SESSION.data && SESSION.data.lastClaim as string) || null
-  if (SESSION.data && SESSION.data.model) {
-    const sm = SESSION.data.model as ModelEntry
-    let found = MODEL_LIST.find((m) => m.id === sm.id)
-    if (!found) {
-      const migrated = _migrateModelId(sm)
-      found = MODEL_LIST.find((m) => m.id === migrated.id) || migrated
-    }
-    S.model = found || sm
-  }
-  S.allConvs = (SESSION.data && SESSION.data.convs as Conv[]) || []
-  S.convs = S.currentProjectId
-    ? S.allConvs.filter((c) => c.projectId === S.currentProjectId)
-    : S.allConvs.slice()
+
+  // FIX: Load credits from server first (authoritative), localStorage is only a cache
   try {
     const ctrl = new AbortController()
     const tid = setTimeout(() => ctrl.abort(), 12000)
@@ -805,22 +631,50 @@ async function loadS(): Promise<void> {
     clearTimeout(tid)
     if (r.ok) {
       const d = await r.json() as { credits?: number; plan?: string; lastClaim?: string; convs?: Conv[]; projects?: AppState['projects'] }
-      if (d && d.credits !== undefined) {
-        S.credits = parseFloat(String(d.credits)) || 0
-        S.plan = d.plan || S.plan
-        S.lastClaim = d.lastClaim || S.lastClaim
+      if (d) {
+        // Server is authoritative for credits — always use server value
+        if (typeof d.credits === 'number') {
+          S.credits = d.credits
+        } else {
+          // No server credits yet — use localStorage as fallback for new users
+          S.credits = parseFloat(String((SESSION.data && SESSION.data.credits !== undefined) ? SESSION.data.credits : 30)) || 30
+        }
+        S.plan = d.plan || (SESSION.data && SESSION.data.plan as string) || 'free'
+        S.lastClaim = d.lastClaim || (SESSION.data && SESSION.data.lastClaim as string) || null
         if (d.convs && d.convs.length) {
           S.allConvs = d.convs
           S.convs = S.currentProjectId
             ? S.allConvs.filter((c) => c.projectId === S.currentProjectId)
             : S.allConvs.slice()
+        } else {
+          S.allConvs = (SESSION.data && SESSION.data.convs as Conv[]) || []
+          S.convs = S.currentProjectId
+            ? S.allConvs.filter((c) => c.projectId === S.currentProjectId)
+            : S.allConvs.slice()
         }
         if (d.projects) S.projects = d.projects
+        // Persist authoritative data back to localStorage
         SESSION.data = Object.assign(SESSION.data || {}, d)
+        SESSION.data.credits = S.credits
         try { localStorage.setItem('nexus_session', JSON.stringify(SESSION)) } catch { }
+        return
       }
     }
-  } catch (e) { console.warn('[NEXUS loadS] sync fetch failed:', (e as Error).message) }
+  } catch (e) { console.warn('[NEXUS loadS] server fetch failed:', (e as Error).message) }
+
+  // Fallback to localStorage if server unreachable
+  S.credits = parseFloat(String((SESSION.data && SESSION.data.credits !== undefined) ? SESSION.data.credits : 30)) || 30
+  S.plan = (SESSION.data && SESSION.data.plan as string) || 'free'
+  S.lastClaim = (SESSION.data && SESSION.data.lastClaim as string) || null
+  S.allConvs = (SESSION.data && SESSION.data.convs as Conv[]) || []
+  S.convs = S.currentProjectId
+    ? S.allConvs.filter((c) => c.projectId === S.currentProjectId)
+    : S.allConvs.slice()
+
+  // FIX: use _resolveModel — no migration table
+  if (SESSION.data && SESSION.data.model) {
+    S.model = _resolveModel(SESSION.data.model)
+  }
 }
 
 async function loadKeys(): Promise<void> {
@@ -848,15 +702,29 @@ async function loadKeys(): Promise<void> {
   } catch (e) { console.warn('[NEXUS] loadKeys error:', (e as Error).message) }
 }
 
+// FIX: loadAdminIds — robust error handling, no crash on bad response
 async function loadAdminIds(): Promise<void> {
   try {
     const ctrl = new AbortController()
     const tid = setTimeout(() => ctrl.abort(), 8000)
     const r = await fetch('/api/sync?admin_ids=1', { signal: ctrl.signal })
     clearTimeout(tid)
-    if (r.ok) { const d = await r.json() as { admin_ids?: string[] }; if (d && d.admin_ids) ADMIN_IDS = d.admin_ids }
+    if (r.ok) {
+      const d = await r.json() as { admin_ids?: unknown; owner_ids?: unknown }
+      if (d && Array.isArray(d.admin_ids)) {
+        ADMIN_IDS = d.admin_ids.filter((x): x is string => typeof x === 'string' && x.length > 0)
+      }
+      // Also load owner IDs if returned
+      if (d && Array.isArray(d.owner_ids)) {
+        const extras = d.owner_ids.filter((x): x is string => typeof x === 'string' && x.length > 0)
+        extras.forEach((id) => { if (!OWNER_IDS.includes(id)) OWNER_IDS.push(id) })
+      }
+    }
   } catch (e) {
-    if (e && (e as { name?: string }).name !== 'AbortError') console.warn('[NEXUS] loadAdminIds error:', (e as Error).message)
+    if (e && (e as { name?: string }).name !== 'AbortError') {
+      console.warn('[NEXUS] loadAdminIds error (non-fatal):', (e as Error).message)
+    }
+    // Non-fatal — app works fine without admin IDs
   }
 }
 
@@ -873,34 +741,51 @@ async function loadInboxCount(): Promise<void> {
 }
 
 // ── DAILY REWARD ──────────────────────────────────────────────────────────────
+// FIX: Daily reward is ONLY given when user clicks Claim — no auto-grant
 function checkDailyOnLoad(): void {
   if (isOwner() || isAdmin()) return
   const t = T()
   const ce = document.getElementById('lastClaimInfo')
   const cb = document.getElementById('claimDailyBtn') as HTMLButtonElement | null
-  if (!S.lastClaim) { if (ce) ce.textContent = t.dailyReady; if (cb) cb.disabled = false; return }
+  if (!S.lastClaim) {
+    if (ce) ce.textContent = t.dailyReady
+    if (cb) cb.disabled = false
+    return
+  }
   const diff = (Date.now() - new Date(S.lastClaim).getTime()) / 3600000
-  if (diff >= 24) { if (ce) ce.textContent = t.dailyReady; if (cb) cb.disabled = false }
-  else { const hrs = Math.ceil(24 - diff); if (ce) ce.textContent = t.dailyNext + hrs + 'h'; if (cb) cb.disabled = true }
+  if (diff >= 24) {
+    if (ce) ce.textContent = t.dailyReady
+    if (cb) cb.disabled = false
+  } else {
+    const hrs = Math.ceil(24 - diff)
+    if (ce) ce.textContent = t.dailyNext + hrs + 'h'
+    if (cb) cb.disabled = true
+  }
 }
 
+// Alias kept for backward compat with any HTML callers
 function checkDailyCredits(): void { checkDailyOnLoad() }
 
 function claimDaily(): void {
   if (isOwner() || isAdmin()) return
   const t = T()
+  // FIX: check 24h cooldown — no auto-claim, only triggered by user click
   if (S.lastClaim) {
     const diff = (Date.now() - new Date(S.lastClaim).getTime()) / 3600000
     if (diff < 24) { toast(t.dailyAlready, 'var(--yellow)'); return }
   }
   const n = S.plan === 'pro' ? 25 : 2
-  S.credits += n; S.lastClaim = new Date().toISOString()
-  updateCreds(); saveS()
+  S.credits += n
+  S.lastClaim = new Date().toISOString()
+  updateCreds()
+  saveS()
+  // Also sync daily reward to server so it's persisted
+  _debouncedSync()
   const b = document.getElementById('claimDailyBtn') as HTMLButtonElement | null
   if (b) b.disabled = true
   const e = document.getElementById('lastClaimInfo')
   if (e) e.textContent = '+' + n + ' CR!'
-  toast('+' + n + ' CR ' + (curLang === 'id' ? 'diklaim!' : 'claimed!'), 'var(--green)')
+  toast('+' + n + ' CR claimed!', 'var(--green)')
   setTimeout(checkDailyCredits, 500)
 }
 
@@ -910,9 +795,7 @@ function togglePlayTest(): void {
   localStorage.setItem('nexus_play_test', S.playTestEnabled ? 'true' : 'false')
   updatePlayTestUI()
   toast(
-    S.playTestEnabled
-      ? (curLang === 'id' ? 'Auto play_test aktif' : 'Auto play_test enabled')
-      : (curLang === 'id' ? 'Dinonaktifkan' : 'Disabled'),
+    S.playTestEnabled ? 'Auto play_test enabled' : 'Disabled',
     S.playTestEnabled ? 'var(--green)' : 'var(--yellow)'
   )
 }
@@ -1607,7 +1490,7 @@ function makeStepLabel(cmd: Cmd): string | null {
 
 async function fetchRetry(url: string, opts: RequestInit, tries = 3): Promise<Response | null> {
   const headers = opts.headers as Record<string, string>
-  if (headers && url.indexOf('/api/control') !== -1) {
+  if (headers && url.indexOf('https://brazen-lapwing-697.convex.site') !== -1) {
     headers['X-Nexus-Nonce'] = _csrfNonce
     if (isAdmin() || isOwner()) headers['X-Admin-Token'] = _adminToken || generateAdminToken()
   }
@@ -1619,7 +1502,7 @@ async function fetchRetry(url: string, opts: RequestInit, tries = 3): Promise<Re
       const r = await fetch(url, mergedOpts)
       clearTimeout(tid)
       if (r.ok) return r
-      if (r.status === 429) { toast(curLang === 'id' ? 'Rate limit server, tunggu...' : 'Server rate limit, waiting...', 'var(--yellow)'); await _sleep(_jitter(3000 * (i + 1))) }
+      if (r.status === 429) { toast('Server rate limit, waiting...', 'var(--yellow)'); await _sleep(_jitter(3000 * (i + 1))) }
       else if (r.status >= 500) { if (i < tries - 1) await _sleep(_jitter(1000 * (i + 1))); else return r }
       else return r
     } catch (e) {
@@ -1720,7 +1603,7 @@ async function autoInjectToStudio(aiResponse: string, userPrompt: string): Promi
       if (!lbl) return
       sub = String(item.cmd!.parent || item.cmd!.theme || '')
     } else if (item.type === 'lua') {
-      lbl = (curLang === 'id' ? 'Buat ' : 'Create ') + item.info!.type + ': ' + item.name
+      lbl = 'Create ' + item.info!.type + ': ' + item.name
       sub = item.info!.parent
     } else { lbl = t.testRunning; sub = 'auto play_test' }
     const sid = lbl ? addStep(lbl, 'pending', sub, item.type === 'lua' ? { code: item.code!, name: item.name!, parent: item.info!.parent, type: item.info!.type } : undefined) : null
@@ -1807,11 +1690,11 @@ function buildApiMsgs(): { role: string; content: string | unknown[] }[] {
 }
 
 function detectType(txt: string): string {
-  if (/error|fix|bug|debug|broken|crash|not work|tidak bisa|gagal/i.test(txt)) return 'debug'
+  if (/error|fix|bug|debug|broken|crash|not work|failed/i.test(txt)) return 'debug'
   if (/gui|hud|menu|shop|loading|inventory|screen|frame|button/i.test(txt)) return 'gui'
-  if (/read|baca|lihat|cek|check script/i.test(txt)) return 'read'
-  if (/edit|ubah|ganti|update|tambah ke/i.test(txt) && /script/i.test(txt)) return 'edit'
-  if (/test|play|jalankan|run/i.test(txt)) return 'test'
+  if (/read|check script/i.test(txt)) return 'read'
+  if (/edit|change|update|add to/i.test(txt) && /script/i.test(txt)) return 'edit'
+  if (/test|play|run/i.test(txt)) return 'test'
   return 'normal'
 }
 
@@ -1866,7 +1749,7 @@ async function callAiApi(body: Record<string, unknown>, abortSignal?: AbortSigna
 
       if (isBusy && attempt < MAX_RETRIES) {
         const waitMs = RETRY_DELAYS[attempt] || 5000
-        if (attempt === 0) toast(curLang === 'id' ? 'Model sibuk, mencoba ulang...' : 'Model busy, retrying...', 'var(--yellow)', waitMs)
+        if (attempt === 0) toast('Model busy, retrying...', 'var(--yellow)', waitMs)
         const stepsTxt = document.getElementById('stepsTxt')
         if (stepsTxt) stepsTxt.textContent = T().retrying + ' (' + (attempt + 1) + '/' + MAX_RETRIES + ')'
         await _sleep(waitMs); continue
@@ -1917,7 +1800,7 @@ async function send(): Promise<void> {
     const _mc = S.model.cost || 0
     if (_mc > 0 && S.credits <= 0) { toast(t.creditsExhausted, 'var(--pink)'); return }
     if (_mc > 0 && S.credits < _mc) {
-      toast((curLang === 'id' ? 'Butuh minimal ' : 'Need at least ') + _mc + ' CR untuk model ini', 'var(--yellow)'); return
+      toast('Need at least ' + _mc + ' CR for this model', 'var(--yellow)'); return
     }
   }
 
@@ -2037,14 +1920,14 @@ async function send(): Promise<void> {
   if (!aiResult.ok) {
     if (aiResult.error && _isAbortError({ name: 'AbortError', message: aiResult.error })) { _resetGenState(); return }
     let errMsg = aiResult.error || 'Unknown error'
-    if (aiResult.timeout) errMsg = curLang === 'id' ? 'Request timeout. Coba pesan lebih pendek.' : 'Request timeout. Try a shorter message.'
-    else if (/overloaded|busy|503|429/i.test(String(errMsg))) errMsg = curLang === 'id' ? 'Model sedang sangat sibuk. Tunggu beberapa menit atau ganti model.' : 'Model is very busy. Wait a few minutes or switch model.'
-    aiText = '**' + t.errorPrefix + '**\n\n' + errMsg + '\n\n' + (curLang === 'id' ? 'Saran: coba model lain.' : 'Suggestion: try another model.')
+    if (aiResult.timeout) errMsg = 'Request timeout. Try a shorter message.'
+    else if (/overloaded|busy|503|429/i.test(String(errMsg))) errMsg = 'Model is very busy. Wait a few minutes or switch model.'
+    aiText = '**' + t.errorPrefix + '**\n\n' + errMsg + '\n\nSuggestion: try another model.'
   } else {
     aiText = aiResult.data!.content || ''
   }
 
-  const hasError = aiText && (aiText.startsWith('**Gagal') || aiText.startsWith('**Failed'))
+  const hasError = aiText && (aiText.startsWith('**Failed') || aiText.startsWith('**Error'))
 
   if (!isOwner() && !isAdmin() && aiText && !hasError) {
     const _baseCost = S.model.cost || 0
@@ -2070,8 +1953,8 @@ async function send(): Promise<void> {
       if (showThinking) {
         clearSteps()
         const _injectSummaryStep = addStep(
-          (curLang === 'id' ? 'Mengirim ' + _totalActions + ' action ke Studio...' : 'Sending ' + _totalActions + ' action(s) to Studio...'),
-          'running', curLang === 'id' ? 'Satu per satu, tunggu sebentar' : 'One by one, please wait'
+          'Sending ' + _totalActions + ' action(s) to Studio...',
+          'running', 'One by one, please wait'
         )
         setStepTitle(t.buildingInStudio)
         await _sleep(200)
@@ -2080,12 +1963,12 @@ async function send(): Promise<void> {
       studioSummary = await autoInjectToStudio(aiText, lastPrompt)
       if (!S.gen || (_localCancelSignal && _localCancelSignal.aborted)) {
         _resetGenState()
-        const cancelMsg: ConvMsg = { role: 'ai', content: curLang === 'id' ? 'Proses dibatalkan.' : 'Process cancelled.', time: Date.now() }
+        const cancelMsg: ConvMsg = { role: 'ai', content: 'Process cancelled.', time: Date.now() }
         cv.msgs.push(cancelMsg); appendMsg(cancelMsg); saveS(); return
       }
     } else {
       if (showThinking) { finalizeSteps(); await _sleep(300); removeStepsCard() }
-      displayText = cleanAIResponse(aiText) + '\n\n> ⚠️ ' + (curLang === 'id' ? 'Tidak ada script/command yang dideteksi.' : 'No scripts/commands detected.')
+      displayText = cleanAIResponse(aiText) + '\n\n> ⚠️ No scripts/commands detected.'
       const aiMsg0: ConvMsg & { _rawContent: string } = { role: 'ai', content: displayText, time: Date.now(), _rawContent: aiText }
       cv.msgs.push(aiMsg0); appendMsg(aiMsg0); _resetGenState(); saveS(); return
     }
@@ -2093,9 +1976,9 @@ async function send(): Promise<void> {
     displayText = stripAllCode(aiText)
     if (!displayText || displayText.length < 20) {
       if (studioSummary && studioSummary.length > 0) {
-        displayText = (curLang === 'id' ? 'Berhasil diinjeksi ke Studio:\n' : 'Successfully injected to Studio:\n') + studioSummary.map((s) => '• ' + s).join('\n')
+        displayText = 'Successfully injected to Studio:\n' + studioSummary.map((s) => '• ' + s).join('\n')
       } else {
-        displayText = curLang === 'id' ? 'Proses inject selesai. Cek Explorer di Studio.' : 'Inject complete. Check Explorer in Studio.'
+        displayText = 'Inject complete. Check Explorer in Studio.'
       }
     }
 
@@ -2150,7 +2033,6 @@ function applyLang(): void {
   s('freePlanLabel', t.freePlan); s('proPlanLabel', t.proPlan)
   s('playTestTitle', t.playTestTitle); s('playTestLabel', t.playTestLabel)
   s('playTestHint', t.playTestHint); s('playTestDurLabel', t.playTestDurLabel)
-  s('langTitle', t.langTitle); s('langLabel', t.langLabel)
   s('reportTitle', t.reportTitle); s('reportBtn', t.reportBtn)
   s('redeemTitle', t.redeemTitle); sh('redeemHint', t.redeemHint)
   s('downloadTitle', t.downloadTitle); s('downloadHint', t.downloadHint)
@@ -2170,18 +2052,16 @@ function applyLang(): void {
   s('shareModalTitle', t.shareModalTitle); s('shareModalDesc', t.shareModalDesc)
   s('shareModalCopyBtn', t.shareModalCopy); s('shareModalCloseBtn', t.shareClose)
   const mhdr = document.getElementById('mentionHdrTxt')
-  if (mhdr) mhdr.textContent = curLang === 'id' ? 'Scripts & Objek di Place' : 'Scripts & Objects in Place'
+  if (mhdr) mhdr.textContent = 'Scripts & Objects in Place'
   const aiP = document.getElementById('guiAIPrompt') as HTMLTextAreaElement | null
-  if (aiP) aiP.placeholder = curLang === 'id' ? 'contoh: Shop GUI 3 item, scroll list, tombol beli...' : 'e.g. Shop GUI with 3 items, scroll list, buy button...'
+  if (aiP) aiP.placeholder = 'e.g. Shop GUI with 3 items, scroll list, buy button...'
   setStudioStatus(studioConnected)
   updateModelUI()
   renderConvs()
   updatePlayTestUI()
   renderSuggestions()
-  document.documentElement.lang = curLang
+  document.documentElement.lang = 'en'
 }
-
-function changeLang(l: string): void { curLang = l; localStorage.setItem('nexus_lang', l); applyLang() }
 
 // ── CONVERSATIONS ─────────────────────────────────────────────────────────────
 function renderConvs(): void {
@@ -2191,18 +2071,24 @@ function renderConvs(): void {
   if (!S.convs || !S.convs.length) { list.innerHTML = `<div class="conv-empty">${t.noConv}</div>`; return }
   list.innerHTML = S.convs.slice().reverse().map((cv) => {
     const act = cv.id === S.curConv ? 'act' : ''
-    const time = cv.time ? new Date(cv.time).toLocaleDateString(curLang === 'id' ? 'id-ID' : 'en-US', { day: '2-digit', month: '2-digit' }) : ''
+    const time = cv.time ? new Date(cv.time).toLocaleDateString('en-US', { day: '2-digit', month: '2-digit' }) : ''
     return `<div class="ci ${act}" onclick="window.loadConv('${cv.id}')">` +
-      `<div class="ci-title">${esc(cv.title || (curLang === 'id' ? 'Percakapan' : 'Chat'))}</div>` +
+      `<div class="ci-title">${esc(cv.title || 'Chat')}</div>` +
       `<div class="ci-time">${time}</div>` +
       `<button class="ci-del" onclick="window.delConv(event,'${cv.id}')" title="Delete">x</button></div>`
   }).join('')
 }
 
+// FIX: newChat with debounce to prevent spam-clicking
 function newChat(): void {
+  const now = Date.now()
+  // Debounce: prevent creating multiple chats in rapid succession
+  if (now - _lastNewChatTime < _NEW_CHAT_DEBOUNCE) return
+  _lastNewChatTime = now
+
   if (S.gen) _resetGenState()
   const id = 'c' + Date.now()
-  const cv: Conv = { id, title: curLang === 'id' ? 'Percakapan Baru' : 'New Chat', time: Date.now(), msgs: [], projectId: S.currentProjectId }
+  const cv: Conv = { id, title: 'New Chat', time: Date.now(), msgs: [], projectId: S.currentProjectId }
   S.curConv = id
   if (!S.convs) S.convs = []
   S.convs.push(cv)
@@ -2219,7 +2105,7 @@ function loadConv(id: string): void {
   if (S.gen && S.curConv !== id) _resetGenState()
   const cv = S.convs.find((x) => x.id === id); if (!cv) return
   S.curConv = id; renderConvs()
-  const ti = document.getElementById('chatTitle'); if (ti) ti.textContent = cv.title || (curLang === 'id' ? 'Percakapan' : 'Chat')
+  const ti = document.getElementById('chatTitle'); if (ti) ti.textContent = cv.title || 'Chat'
   const w = document.getElementById('welcome'); if (w) w.style.display = (cv.msgs && cv.msgs.length) ? 'none' : 'flex'
   renderMsgs(cv.msgs || [])
   S.attachments = []; renderAttachRow()
@@ -2279,11 +2165,6 @@ function updateProjectUI(): void {
 }
 
 // ── MODEL UI ──────────────────────────────────────────────────────────────────
-function getFreeModel(): ModelEntry {
-  for (let i = 0; i < MODEL_LIST.length; i++) { if (MODEL_LIST[i].id && !MODEL_LIST[i].grp) return MODEL_LIST[i] }
-  return { id: 'gemini-3.1-flash-lite', prov: 'gemini', cost: 0, label: 'Gemini 3.1 Flash Lite' }
-}
-
 function updateModelUI(): void {
   const m = S.model || getFreeModel()
   const el = document.getElementById('inpMName'); if (el) el.textContent = m.label || m.id || ''
@@ -2394,7 +2275,7 @@ function _processSuggestionChips(bubble: HTMLElement): void {
       const text = li.textContent!.trim(); if (!text) return
       const btn = document.createElement('button')
       btn.className = 'suggestion-chip'; btn.textContent = text
-      btn.title = curLang === 'id' ? 'Klik untuk tanya ini' : 'Click to ask this'
+      btn.title = 'Click to ask this'
       btn.onclick = () => {
         if (S.gen) return
         btn.classList.add('sending')
@@ -2468,7 +2349,7 @@ function appendMsg(m: ConvMsg, skipScroll?: boolean): void {
   const mbWrap = document.createElement('div'); mbWrap.className = 'mb-wrap'
   const sender = document.createElement('div'); sender.className = 'msg-sender'
   const t2 = new Date(m.time || Date.now())
-  sender.innerHTML = `<span>${isUser ? '@' + (SESSION && SESSION.user && SESSION.user.username || 'You') : 'NEXUS AI'}</span><span>${t2.toLocaleTimeString(curLang === 'id' ? 'id-ID' : 'en-US', { hour: '2-digit', minute: '2-digit' })}</span>`
+  sender.innerHTML = `<span>${isUser ? '@' + (SESSION && SESSION.user && SESSION.user.username || 'You') : 'NEXUS AI'}</span><span>${t2.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' })}</span>`
   mbWrap.appendChild(sender)
   const bubble = document.createElement('div'); bubble.className = 'bubble'
 
@@ -2519,12 +2400,12 @@ function appendMsg(m: ConvMsg, skipScroll?: boolean): void {
     const sumDiv = document.createElement('div'); sumDiv.className = 'studio-summary-box'
     const _sumItems = sm; const _sumCollapsed = _sumItems.length > 4
     const _sumId = 'sum_' + Date.now() + '_' + Math.random().toString(36).slice(2)
-    const _lblShowAll = curLang === 'id' ? 'Lihat Semua (' + _sumItems.length + ')' : 'Show All (' + _sumItems.length + ')'
-    const _lblShowLess = curLang === 'id' ? 'Lihat Sedikit' : 'Show Less'
+    const _lblShowAll = 'Show All (' + _sumItems.length + ')'
+    const _lblShowLess = 'Show Less'
     const renderSumItems = (collapsed: boolean) => (collapsed ? _sumItems.slice(0, 4) : _sumItems).map((it) =>
       `<div class="studio-summary-item"><span class="studio-summary-dot"></span>${esc(it)}</div>`).join('')
     sumDiv.innerHTML =
-      `<div class="studio-summary-title"><svg width="10" height="10" viewBox="0 0 24 24" stroke="currentColor" fill="none" stroke-width="2.5"><polyline points="20 6 9 17 4 12"/></svg>${curLang === 'id' ? 'Dibangun di Studio' : 'Built in Studio'} <span style="color:var(--dim);font-size:9px;">(${_sumItems.length})</span></div>` +
+      `<div class="studio-summary-title"><svg width="10" height="10" viewBox="0 0 24 24" stroke="currentColor" fill="none" stroke-width="2.5"><polyline points="20 6 9 17 4 12"/></svg>Built in Studio <span style="color:var(--dim);font-size:9px;">(${_sumItems.length})</span></div>` +
       `<div id="${_sumId}" class="studio-summary-items">${renderSumItems(_sumCollapsed)}</div>` +
       (_sumItems.length > 4 ? `<button id="btn_${_sumId}" class="sum-toggle-btn" style="margin-top:5px;background:none;border:none;color:var(--cyan);font-size:9.5px;cursor:pointer;padding:2px 0;opacity:.8;">${_sumCollapsed ? _lblShowAll : _lblShowLess}</button>` : '')
     bubble.appendChild(sumDiv)
@@ -2597,7 +2478,7 @@ function createStepsCard(): void {
   wrap.appendChild(mkAv('ai'))
   const mbW = document.createElement('div'); mbW.className = 'mb-wrap'
   const sender = document.createElement('div'); sender.className = 'msg-sender'
-  sender.innerHTML = `<span>NEXUS AI</span><span>${new Date().toLocaleTimeString(curLang === 'id' ? 'id-ID' : 'en-US', { hour: '2-digit', minute: '2-digit' })}</span>`
+  sender.innerHTML = `<span>NEXUS AI</span><span>${new Date().toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' })}</span>`
   mbW.appendChild(sender)
   const box = document.createElement('div'); box.className = 'steps-box'
   const hdr = document.createElement('div'); hdr.className = 'steps-hdr'; hdr.id = 'stepsHdr'
@@ -2606,12 +2487,12 @@ function createStepsCard(): void {
   const hdrCount = document.createElement('span'); hdrCount.className = 'steps-hdr-count'; hdrCount.id = 'stepsCount'; hdrCount.textContent = '(0/0)'
   const hdrToggle = document.createElement('button'); hdrToggle.id = 'stepsToggle'
   hdrToggle.style.cssText = 'margin-left:auto;background:none;border:none;color:var(--cyan);font-size:9px;cursor:pointer;padding:2px 6px;opacity:.75;white-space:nowrap;flex-shrink:0;'
-  hdrToggle.textContent = curLang === 'id' ? 'Lihat Sedikit' : 'Show Less'
+  hdrToggle.textContent = 'Show Less'
   let _stepsExpanded = true
   hdrToggle.onclick = () => {
     _stepsExpanded = !_stepsExpanded
     const sl = document.getElementById('stepsList'); if (sl) sl.style.display = _stepsExpanded ? '' : 'none'
-    hdrToggle.textContent = _stepsExpanded ? (curLang === 'id' ? 'Lihat Sedikit' : 'Show Less') : (curLang === 'id' ? 'Lihat Semua' : 'Show All')
+    hdrToggle.textContent = _stepsExpanded ? 'Show Less' : 'Show All'
   }
   hdr.appendChild(spinner); hdr.appendChild(hdrTxt); hdr.appendChild(hdrCount); hdr.appendChild(hdrToggle)
   box.appendChild(hdr)
@@ -2653,7 +2534,7 @@ function addStep(text: string, state: string, sub?: string, meta?: StepMeta): nu
     txtEl.style.cssText = 'cursor:pointer;display:flex;align-items:center;gap:4px;'
     txtEl.innerHTML = text.replace(/</g, '&lt;') + '<svg width="10" height="10" viewBox="0 0 24 24" stroke="currentColor" fill="none" stroke-width="2" style="flex-shrink:0;color:var(--cyan);"><polyline points="9 18 15 12 9 6"/></svg>'
     txtEl.onclick = () => openCodePreview(id)
-    txtEl.title = curLang === 'id' ? 'Klik untuk lihat kode' : 'Click to preview code'
+    txtEl.title = 'Click to preview code'
   } else { txtEl.textContent = text }
   cont.appendChild(txtEl)
   if (sub) { const sv = document.createElement('div'); sv.className = 'step-sub'; sv.textContent = sub; cont.appendChild(sv) }
@@ -2744,9 +2625,9 @@ function showMentionDD(query: string): void {
   const items = extractMentionItems(_wsCache, query)
   const list = document.getElementById('mentionList'); if (!list) return
   _mentionSelIdx = 0
-  if (!studioConnected) { list.innerHTML = `<div class="mention-empty">${curLang === 'id' ? 'Studio belum terhubung' : 'Studio not connected'}</div>` }
-  else if (!_wsCache) { list.innerHTML = `<div class="mention-empty">${curLang === 'id' ? 'Memuat...' : 'Loading...'}</div>`; fetchWsCache() }
-  else if (!items.length) { list.innerHTML = `<div class="mention-empty">${curLang === 'id' ? 'Tidak ada hasil' : 'No results'}</div>` }
+  if (!studioConnected) { list.innerHTML = `<div class="mention-empty">Studio not connected</div>` }
+  else if (!_wsCache) { list.innerHTML = `<div class="mention-empty">Loading...</div>`; fetchWsCache() }
+  else if (!items.length) { list.innerHTML = `<div class="mention-empty">No results</div>` }
   else {
     list.innerHTML = items.map((item, idx) => {
       const ic = getMentionIcon(item.cls)
@@ -2903,7 +2784,7 @@ function openShareModal(): void {
   let text = ''
   ;(cv.msgs || []).forEach((m) => {
     const name = m.role === 'user' ? ('@' + (SESSION && SESSION.user && SESSION.user.username || 'You')) : 'NEXUS AI'
-    const time = m.time ? new Date(m.time).toLocaleTimeString(curLang === 'id' ? 'id-ID' : 'en-US', { hour: '2-digit', minute: '2-digit' }) : ''
+    const time = m.time ? new Date(m.time).toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' }) : ''
     text += '[' + time + '] ' + name + ':\n' + (m.content || '') + '\n\n'
   })
   const ta = document.getElementById('shareModalTa') as HTMLTextAreaElement | null; if (ta) ta.value = text
@@ -2930,12 +2811,12 @@ async function sendReport(): Promise<void> {
         cfToken = tw.turnstile.getResponse(_turnstileWidget) || ''
       } catch { cfToken = '' }
     }
-    if (!cfToken) { if (st) st.textContent = curLang === 'id' ? 'Selesaikan CAPTCHA dulu' : 'Complete CAPTCHA first'; return }
+    if (!cfToken) { if (st) st.textContent = 'Complete CAPTCHA first'; return }
   }
   if (btn) btn.disabled = true
   try {
     await fetch(REPORT_URL, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ from: SESSION && SESSION.user && SESSION.user.username || '?', userId: SESSION && SESSION.user && SESSION.user.robloxId || '?', message: ta.value, type: 'report', 'cf-turnstile-response': cfToken, time: new Date().toISOString() }) })
-    if (st) st.textContent = curLang === 'id' ? 'Terkirim!' : 'Sent!'
+    if (st) st.textContent = 'Sent!'
     if (ta) ta.value = ''
     const tw = window as unknown as { turnstile?: { reset: (w: unknown) => void } }
     if (K.turnstile && tw.turnstile && _turnstileWidget !== null) tw.turnstile.reset(_turnstileWidget)
@@ -2966,8 +2847,7 @@ interface GuiEl {
   bgColor: string; textColor: string; text: string; fontSize: number; cornerRadius: number
 }
 
-// Default palette used by the GUI editor (no user-selectable themes)
-const GUI_DEFAULT: { bg: string; panel: string; card: string; accent: string; text: string; corner: number } = {
+const GUI_DEFAULT = {
   bg: '#030312', panel: '#06071a', card: '#0a0b22', accent: '#00e5ff', text: '#b8cfff', corner: 10,
 }
 
@@ -3035,8 +2915,8 @@ function updatePropsPanel(): void {
     `<div class="gui-prop-label">Height</div><input class="gui-prop-input" type="number" value="${el.h}" min="10" onchange="window.resizeElProp('${sid}','h',parseInt(this.value))">` +
     `<div class="gui-prop-label">X</div><input class="gui-prop-input" type="number" value="${el.x}" onchange="window.moveElProp('${sid}','x',parseInt(this.value))">` +
     `<div class="gui-prop-label">Y</div><input class="gui-prop-input" type="number" value="${el.y}" onchange="window.moveElProp('${sid}','y',parseInt(this.value))">` +
-    `<button style="margin-top:12px;width:100%;padding:6px;background:rgba(0,229,255,.06);border:1px solid var(--b);border-radius:5px;color:var(--cyan);font-size:10px;cursor:pointer;" onclick="window.duplicateEl('${sid}')">${curLang === 'id' ? 'Duplikat' : 'Duplicate'}</button>` +
-    `<button style="margin-top:5px;width:100%;padding:6px;background:rgba(255,45,107,.08);border:1px solid rgba(255,45,107,.25);border-radius:5px;color:var(--pink);font-size:10px;cursor:pointer;" onclick="window.deleteEl('${sid}')">${curLang === 'id' ? 'Hapus' : 'Remove'}</button>`
+    `<button style="margin-top:12px;width:100%;padding:6px;background:rgba(0,229,255,.06);border:1px solid var(--b);border-radius:5px;color:var(--cyan);font-size:10px;cursor:pointer;" onclick="window.duplicateEl('${sid}')">Duplicate</button>` +
+    `<button style="margin-top:5px;width:100%;padding:6px;background:rgba(255,45,107,.08);border:1px solid rgba(255,45,107,.25);border-radius:5px;color:var(--pink);font-size:10px;cursor:pointer;" onclick="window.deleteEl('${sid}')">Remove</button>`
 }
 
 function updateElProp(elId: string, prop: string, val: string | number): void {
@@ -3089,7 +2969,6 @@ function generateGuiCode(): void {
     if (r.length < 6) return '30,32,64'
     return parseInt(r.substr(0, 2), 16) + ',' + parseInt(r.substr(2, 2), 16) + ',' + parseInt(r.substr(4, 2), 16)
   }
-  const isID = curLang === 'id'
   const lines = ['-- Generated by NEXUS AI UI Editor', '-- name: NexusGUI_Client', '-- parent: StarterGui', '-- script_type: LocalScript', '', "local Players = game:GetService('Players')", 'local player = Players.LocalPlayer', "local playerGui = player:WaitForChild('PlayerGui')", '', 'local screenGui = Instance.new("ScreenGui")', 'screenGui.Name = "NexusGUI"', 'screenGui.DisplayOrder = 999', 'screenGui.ResetOnSpawn = false', 'screenGui.IgnoreGuiInset = true', 'screenGui.Parent = playerGui', '']
   els.forEach((el) => {
     const v = el.name.replace(/[^a-zA-Z0-9_]/g, '_')
@@ -3104,7 +2983,7 @@ function generateGuiCode(): void {
     lines.push(`${v}.BorderSizePixel = 0`)
     if (el.cornerRadius && el.cornerRadius > 0) { lines.push(`local ${v}_c = Instance.new("UICorner", ${v})`); lines.push(`${v}_c.CornerRadius = UDim.new(0, ${el.cornerRadius})`) }
     lines.push(`${v}.Parent = screenGui`)
-    if (el.type === 'TextButton') { lines.push(''); lines.push(`${v}.MouseButton1Click:Connect(function()`); lines.push(`\tprint("${el.name} ${isID ? 'diklik' : 'clicked'}")`); lines.push('end)') }
+    if (el.type === 'TextButton') { lines.push(''); lines.push(`${v}.MouseButton1Click:Connect(function()`); lines.push(`\tprint("${el.name} clicked")`); lines.push('end)') }
   })
   const out = document.getElementById('guiCodeOutput'); if (out) out.textContent = lines.join('\n')
   const m = document.getElementById('guiCodeModal'); if (m) m.classList.add('show')
@@ -3142,7 +3021,7 @@ async function generateGuiFromAI(): Promise<void> {
           })
           const empt = document.getElementById('guiEmpty'); if (empt) empt.style.display = 'none'
           updateLayerList()
-          toast(curLang === 'id' ? 'UI berhasil dibuat!' : 'UI built successfully!', 'var(--green)', 2500)
+          toast('UI built successfully!', 'var(--green)', 2500)
         } catch { toast(t.aiResponseInvalid, 'var(--yellow)') }
       } else { toast(t.aiResponseInvalid, 'var(--yellow)') }
     } else { toast('API error: ' + r.status, 'var(--pink)') }
@@ -3159,7 +3038,7 @@ async function sendGuiToPlace(): Promise<void> {
   const cmd = { action: 'create_gui', name: 'NexusGUI', parent: 'StarterGui', display_order: 999, ignore_inset: true, reset_on_spawn: false, elements: els.map((el) => ({ class: el.type, name: el.name, size: [0, el.w, 0, el.h], position: [0, el.x, 0, el.y], background_color: el.bgColor && el.bgColor !== 'transparent' ? hRgb(el.bgColor) : [30, 32, 64], background_transparency: el.bgColor === 'transparent' ? 1 : 0, text_color: hRgb(el.textColor || '#ffffff'), text: el.text || '', text_size: el.fontSize || 14, corner_radius: el.cornerRadius || 0, z_index: 1 })) }
   try {
     const r = await fetchRetry(API_URL, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ type: 'batch_commands', commands: [cmd], _user: SESSION ? SESSION.user.username : 'web', target: (SESSION ? SESSION.user.username : '').toLowerCase() }) }, 3)
-    if (r) { const d = await r.json() as { pushed?: number; status?: string }; if ((d.pushed || 0) > 0 || d.status === 'ok') toast(t.guiSentToast, 'var(--green)'); else toast(curLang === 'id' ? 'Diantri ke Studio' : 'Queued to Studio', 'var(--yellow)') }
+    if (r) { const d = await r.json() as { pushed?: number; status?: string }; if ((d.pushed || 0) > 0 || d.status === 'ok') toast(t.guiSentToast, 'var(--green)'); else toast('Queued to Studio', 'var(--yellow)') }
   } catch (e) { toast('Error: ' + ((e as Error).message || ''), 'var(--pink)') }
 }
 
@@ -3191,6 +3070,7 @@ async function initApp(): Promise<void> {
   updateLoader(8, t.loaderInit)
   S.currentProjectId = getProjectIdFromUrl()
   updateLoader(22, t.loaderLoadData)
+  // FIX: loadS now fetches server-authoritative credits first
   await loadS()
   updateLoader(42, t.loaderLoadData)
   if (S.currentProjectId) {
@@ -3209,7 +3089,10 @@ async function initApp(): Promise<void> {
   updateRoleDisplay(); updateCreds(); updatePlayTestUI()
   updateLoader(58, t.loaderLoadData)
   await _loadSysPromptScript()
-  await loadKeys(); await loadAdminIds(); await loadInboxCount()
+  await loadKeys()
+  // FIX: loadAdminIds is non-fatal, errors are caught inside
+  await loadAdminIds()
+  await loadInboxCount()
   updateLoader(72, t.loaderConnecting)
   applyLang(); updateModelUI()
   updateLoader(84, t.loaderConnecting)
@@ -3259,22 +3142,18 @@ if (_inpEl) {
   })
 }
 
-// ── CLOSE DROPDOWNS ON OUTSIDE CLICK ─────────────────────────────────────────
 document.addEventListener('click', (e) => {
   const target = e.target as HTMLElement
-
   const mDD = document.getElementById('mDD')
   if (mDD && mDD.classList.contains('open') && !mDD.contains(target)) {
     const btn = document.getElementById('inpModelBtn')
     if (!btn || !btn.contains(target)) mDD.classList.remove('open')
   }
-
   const guiMDD = document.getElementById('guiMDD')
   if (guiMDD && guiMDD.classList.contains('open') && !guiMDD.contains(target)) {
     const btn = document.getElementById('guiModelBtn')
     if (!btn || !btn.contains(target)) guiMDD.classList.remove('open')
   }
-
   const mentionDD = document.getElementById('mentionDD')
   if (mentionDD && mentionDD.classList.contains('open') && !mentionDD.contains(target)) {
     const inp = document.getElementById('inp')
@@ -3282,7 +3161,6 @@ document.addEventListener('click', (e) => {
   }
 })
 
-// ── PASTE HANDLER (image paste) ───────────────────────────────────────────────
 const _inpPasteEl = document.getElementById('inp') as HTMLTextAreaElement | null
 if (_inpPasteEl) {
   _inpPasteEl.addEventListener('paste', (e: ClipboardEvent) => {
@@ -3305,7 +3183,6 @@ if (_inpPasteEl) {
   })
 }
 
-// ── VISIBILITY CHANGE (pause sync when hidden) ────────────────────────────────
 document.addEventListener('visibilitychange', () => {
   if (!document.hidden && SESSION) {
     if (!_syncInProgress && !_syncDebounceTimer) _debouncedSync()
@@ -3313,13 +3190,11 @@ document.addEventListener('visibilitychange', () => {
 })
 
 // ══════════════════════════════════════════════════════════════════════════════
-// WINDOW ASSIGNMENTS — expose all functions for JSX onClick / inline handlers
+// WINDOW ASSIGNMENTS
 // ══════════════════════════════════════════════════════════════════════════════
 ;(function assignWindowFns() {
   if (typeof window === 'undefined') return
   const w = window as unknown as Record<string, unknown>
-
-  // Chat & conversation
   w.send            = send
   w.cancelGen       = cancelGen
   w.newChat         = newChat
@@ -3332,51 +3207,28 @@ document.addEventListener('visibilitychange', () => {
   w.copyMsgText     = copyMsgText
   w.openShareModal  = openShareModal
   w.copyShareText   = copyShareText
-
-  // Code blocks
   w.copyCode        = copyCode
   w.downloadCode    = downloadCode
   w.copyPreviewCode = copyPreviewCode
-
-  // Mention
   w.insertMention   = insertMention
-
-  // Model dropdown
   w.toggleMDD       = toggleMDD
   w.toggleGuiMDD    = toggleGuiMDD
   w.selModel        = selModel
-
-  // Settings / modals
   w.openSettings    = openSettings
   w.openAvatarModal = openAvatarModal
   w.closeModal      = closeModal
   w.logout          = logout
   w.showInstall     = showInstall
-
-  // Daily / credits / play test
   w.claimDaily      = claimDaily
   w.togglePlayTest  = togglePlayTest
   w.setPlayTestDur  = setPlayTestDur
-
-  // Language
-  w.changeLang      = changeLang
-
-  // Studio
   w.retryStudio     = retryStudio
-
-  // Sidebar / tabs
   w.toggleSidebar   = toggleSidebar
   w.switchTab       = switchTab
-
-  // File attachment
   w.handleFile      = handleFile
   w.removeAttach    = removeAttach
-
-  // Report / redeem
   w.sendReport      = sendReport
   w.redeemCode      = redeemCode
-
-  // GUI editor
   w.addEl           = addEl
   w.selectEl        = selectEl
   w.updateElProp    = updateElProp
@@ -3391,8 +3243,6 @@ document.addEventListener('visibilitychange', () => {
   w.openGuiAIChat   = openGuiAIChat
   w.generateGuiFromAI = generateGuiFromAI
   w.sendGuiToPlace  = sendGuiToPlace
-
-  // Expose buildSysPrompt fallback
   if (!w.buildSysPrompt) w.buildSysPrompt = _fallbackBuildSysPrompt
 })()
 
