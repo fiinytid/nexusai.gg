@@ -10,6 +10,7 @@ const MAX_LOGSVC        = 1_000;
 const QUEUE_MAX_AGE     = 30 * 60_000;
 const MAX_QUEUE_SIZE    = 300;
 const MAX_PRIORITY_Q    = 50;
+const MAX_AI_FEED_PER_USER = 1_000;
 const PRIORITY_ORDER: Record<string, number> = { critical: 0, high: 1, normal: 2, low: 3 };
 
 // ── SESSION ────────────────────────────────────────────────────────────────────
@@ -394,7 +395,13 @@ export const checkAndIncrBurst = internalMutation({
   },
 });
 
-// ── DEDUP ──────────────────────────────────────────────────────────────────────
+// ── DEDUP / NONCE REPLAY GUARD ───────────────────────────────────────────────────
+// NOTE: this is NOT the old command-dedup feature (DEDUP_ACTIONS /
+// isDuplicateCommand), which has been removed entirely from control.ts.
+// This generic hash-based "seen before within windowMs?" check is still
+// required because control.ts's checkNonceReplay() reuses it as a replay
+// guard for the X-Nexus-Nonce header. Keep this function and the
+// "dedupCache" table — removing them would break nonce replay protection.
 export const checkAndSetDedup = internalMutation({
   args: { hash: v.string(), windowMs: v.number() },
   handler: async (ctx, { hash, windowMs }) => {
@@ -460,3 +467,87 @@ export const setCacheEntry = internalMutation({
     else    await ctx.db.insert("apiCache", { key, value, expiresAt });
   },
 });
+
+// ── AI FEED ────────────────────────────────────────────────────────────────────
+// Durable, time-ordered inbox of "messages to the AI". Every report-type
+// action in control.ts (read_script, output_log, runcode_report,
+// plugin_error_report, ...) appends one entry here via pushAiFeedEntry,
+// in addition to saving its usual upsertData() snapshot. The AI retrieves
+// unread entries via getAiFeedEntries and they are marked read via
+// markAiFeedRead so the same entry is never delivered twice. Nothing is
+// overwritten — every event is its own row — so the AI can catch up on
+// everything that happened even if it wasn't asked anything for a while.
+//
+// Requires a new "aiFeed" table in schema.ts:
+//
+//   aiFeed: defineTable({
+//     username: v.string(),
+//     kind:     v.string(),
+//     summary:  v.string(),
+//     data:     v.string(),
+//     ts:       v.number(),
+//     read:     v.boolean(),
+//   }).index("by_username_ts", ["username", "ts"]),
+export const pushAiFeedEntry = internalMutation({
+  args: {
+    username: v.string(),
+    kind:     v.string(),
+    summary:  v.string(),
+    data:     v.string(),
+    ts:       v.number(),
+  },
+  handler: async (ctx, args) => {
+    await ctx.db.insert("aiFeed", { ...args, read: false });
+
+    const all = await ctx.db.query("aiFeed")
+      .withIndex("by_username_ts", q => q.eq("username", args.username)).collect();
+    if (all.length > MAX_AI_FEED_PER_USER) {
+      all.sort((a, b) => a.ts - b.ts);
+      for (const d of all.slice(0, all.length - MAX_AI_FEED_PER_USER)) await ctx.db.delete(d._id);
+    }
+  },
+});
+
+export const getAiFeedEntries = internalQuery({
+  args: { username: v.string(), limit: v.number(), unreadOnly: v.boolean() },
+  handler: async (ctx, { username, limit, unreadOnly }) => {
+    let rows = await ctx.db.query("aiFeed")
+      .withIndex("by_username_ts", q => q.eq("username", username))
+      .order("asc")
+      .collect();
+
+    if (unreadOnly) rows = rows.filter(r => !r.read);
+    rows = rows.slice(0, limit);
+
+    return rows.map(r => ({
+      id:       r._id as unknown as string,
+      username: r.username,
+      kind:     r.kind,
+      summary:  r.summary,
+      data:     safeParseJson(r.data),
+      ts:       r.ts,
+      read:     r.read,
+    }));
+  },
+});
+
+export const markAiFeedRead = internalMutation({
+  args: { username: v.string(), ids: v.array(v.string()) },
+  handler: async (ctx, { username, ids }) => {
+    for (const idStr of ids) {
+      try {
+        const id = idStr as any;
+        const row = await ctx.db.get(id);
+        if (row && (row as any).username === username) {
+          await ctx.db.patch(id, { read: true });
+        }
+      } catch {
+        // Ignore malformed/foreign ids rather than failing the whole batch.
+      }
+    }
+  },
+});
+
+function safeParseJson(raw: string): unknown {
+  try { return JSON.parse(raw); } catch { return null; }
+}

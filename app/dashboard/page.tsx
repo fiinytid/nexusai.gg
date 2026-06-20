@@ -58,7 +58,7 @@ const SESSION_MAX_AGE_MS = 86400000 * 7
    CSS
 ───────────────────────────────────────────────────────────────────────────── */
 const PAGE_CSS = `
-@import url('https://fonts.googleapis.com/css2?family=Orbitron:wght@400;600;700;900&family=Inter:wght@300;400;500;600;700&display=swap');
+@import url('https://fonts.googleapis.com/css2?family=Orbitron:wght@400;600;700;900&family=JetBrains+Mono:wght@300;400;500;600&display=swap');
 
 :root {
   --bg:      #050514;
@@ -97,7 +97,7 @@ html {
 }
 
 body {
-  font-family: 'Inter', sans-serif;
+  font-family: 'JetBrains Mono', monospace;
   background: var(--bg);
   color: var(--text);
   min-height: 100vh;
@@ -209,7 +209,7 @@ body::after {
   padding: 4px 14px; border-radius: 6px;
   border: 1px solid rgba(249,115,22,.3); background: rgba(249,115,22,.1);
   color: var(--orange); font-size: 10px; cursor: pointer;
-  font-family: 'Inter', sans-serif; transition: background .15s; margin-left: 8px;
+  font-family: 'JetBrains Mono', monospace; transition: background .15s; margin-left: 8px;
 }
 .btn-retry-offline:hover { background: rgba(249,115,22,.2); }
 
@@ -304,7 +304,7 @@ body::after {
   color: var(--text2); text-decoration: none;
   transition: all .12s; min-height: 44px;
   border: none; background: none; width: 100%;
-  font-family: 'Inter', sans-serif; text-align: left;
+  font-family: 'JetBrains Mono', monospace; text-align: left;
 }
 .dd-item:hover { background: rgba(255,255,255,.04); color: var(--text); }
 .dd-item svg { width: 14px; height: 14px; stroke: currentColor; fill: none; stroke-width: 2; flex-shrink: 0; opacity: .5; transition: opacity .12s; }
@@ -351,7 +351,7 @@ body::after {
   padding: 0 20px; min-height: 52px; cursor: pointer;
   font-size: 13px; color: var(--text2); text-decoration: none;
   transition: background .12s; border: none; background: none;
-  width: 100%; font-family: 'Inter', sans-serif; text-align: left;
+  width: 100%; font-family: 'JetBrains Mono', monospace; text-align: left;
 }
 .sheet-item:active { background: rgba(255,255,255,.04); }
 .sheet-item svg { width: 17px; height: 17px; stroke: currentColor; fill: none; stroke-width: 2; flex-shrink: 0; opacity: .5; }
@@ -369,7 +369,7 @@ body::after {
 .sheet-close {
   width: 100%; min-height: 48px; border-radius: 10px;
   background: var(--bg3); border: 1px solid var(--border);
-  color: var(--text2); font-family: 'Inter', sans-serif;
+  color: var(--text2); font-family: 'JetBrains Mono', monospace;
   font-size: 12px; cursor: pointer; transition: all .15s;
 }
 .sheet-close:active { border-color: rgba(0,212,255,.2); color: var(--text); }
@@ -489,7 +489,7 @@ body::after {
 .proj-input {
   flex: 1; background: rgba(0,0,0,.35); border: 1px solid var(--border);
   border-radius: var(--r); padding: 0 18px; height: 50px;
-  color: #fff; font-family: 'Inter', sans-serif; font-size: 14px;
+  color: #fff; font-family: 'JetBrains Mono', monospace; font-size: 14px;
   outline: none; transition: all .22s; min-width: 0;
   -webkit-appearance: none; appearance: none;
 }
@@ -548,7 +548,7 @@ body::after {
 .queue-retry {
   padding: 6px 14px; border-radius: 6px; border: 1px solid rgba(249,115,22,.3);
   background: rgba(249,115,22,.08); color: var(--orange);
-  font-size: 10px; cursor: pointer; font-family: 'Inter', sans-serif;
+  font-size: 10px; cursor: pointer; font-family: 'JetBrains Mono', monospace;
   transition: background .15s; white-space: nowrap;
 }
 .queue-retry:hover { background: rgba(249,115,22,.16); }
@@ -569,7 +569,7 @@ body::after {
 .search-input {
   width: 100%; background: var(--bg2); border: 1px solid var(--border);
   border-radius: var(--r); padding: 0 14px 0 40px; height: 44px;
-  color: var(--text); font-family: 'Inter', sans-serif; font-size: 13px;
+  color: var(--text); font-family: 'JetBrains Mono', monospace; font-size: 13px;
   outline: none; transition: all .2s; -webkit-appearance: none; appearance: none;
 }
 .search-input:focus { border-color: rgba(0,212,255,.28); }
@@ -578,7 +578,7 @@ body::after {
 .sort-select {
   background: var(--bg2); border: 1px solid var(--border);
   border-radius: var(--r); padding: 0 34px 0 14px;
-  height: 44px; color: var(--text); font-family: 'Inter', sans-serif;
+  height: 44px; color: var(--text); font-family: 'JetBrains Mono', monospace;
   font-size: 11px; outline: none; cursor: pointer;
   transition: all .2s; flex-shrink: 0; width: 115px;
   -webkit-appearance: none; appearance: none;
@@ -635,7 +635,7 @@ body::after {
   font-size: 8px; color: var(--dim2); background: rgba(0,0,0,.4);
   padding: 3px 9px; border-radius: 5px; border: 1px solid rgba(255,255,255,.04);
   max-width: 100px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
-  cursor: help; font-family: 'Inter', sans-serif;
+  cursor: help; font-family: 'JetBrains Mono', monospace;
 }
 .btn-delete {
   width: 32px; height: 32px; border-radius: 8px; flex-shrink: 0;
@@ -805,7 +805,7 @@ body::after {
 .acc-tab {
   padding: 13px 18px; font-size: 11px; font-weight: 600;
   color: var(--dim2); cursor: pointer; border: none; background: none;
-  font-family: 'Inter', sans-serif; transition: color .15s; white-space: nowrap;
+  font-family: 'JetBrains Mono', monospace; transition: color .15s; white-space: nowrap;
   border-bottom: 2px solid transparent; margin-bottom: -1px;
 }
 .acc-tab:hover { color: var(--text); }
@@ -847,7 +847,7 @@ body::after {
 /* Quick action buttons */
 .acc-action {
   width: 100%; padding: 13px 16px; border-radius: var(--r);
-  margin-bottom: 8px; font-family: 'Inter', sans-serif; font-size: 12px;
+  margin-bottom: 8px; font-family: 'JetBrains Mono', monospace; font-size: 12px;
   font-weight: 500; cursor: pointer; transition: all .15s;
   border: 1px solid var(--border); background: var(--bg3);
   color: var(--text); display: flex; align-items: center; gap: 12px;
@@ -891,7 +891,7 @@ body::after {
 .nx-toast {
   position: fixed; bottom: 20px; right: 16px; z-index: 99999;
   padding: 12px 16px; border-radius: 10px; font-size: 12px;
-  font-family: 'Inter', sans-serif; background: var(--bg3);
+  font-family: 'JetBrains Mono', monospace; background: var(--bg3);
   border: 1px solid var(--border);
   box-shadow: 0 12px 40px rgba(0,0,0,.8);
   pointer-events: none; max-width: min(320px, calc(100vw - 32px));
@@ -936,7 +936,7 @@ body::after {
 .modal-btns { display: flex; flex-direction: column; gap: 10px; }
 .modal-btn {
   width: 100%; padding: 14px; border-radius: var(--r);
-  font-family: 'Inter', sans-serif; font-size: 13px; font-weight: 600;
+  font-family: 'JetBrains Mono', monospace; font-size: 13px; font-weight: 600;
   cursor: pointer; transition: all .15s; border: none; min-height: 48px;
 }
 .modal-btn.cancel  { background: var(--bg3); color: var(--text); border: 1px solid var(--border); }
@@ -974,7 +974,7 @@ body::after {
 .settings-btn {
   padding: 8px 16px; border-radius: 8px; font-size: 11px; cursor: pointer;
   border: 1px solid var(--border); background: rgba(0,212,255,.03);
-  color: var(--text); transition: all .15s; font-family: 'Inter', sans-serif;
+  color: var(--text); transition: all .15s; font-family: 'JetBrains Mono', monospace;
   min-height: 40px; display: inline-flex; align-items: center; gap: 6px;
 }
 .settings-btn:hover:not(:disabled) { border-color: rgba(0,212,255,.25); color: var(--cyan); background: rgba(0,212,255,.05); }
@@ -989,7 +989,7 @@ body::after {
 .redeem-input {
   flex: 1; background: var(--bg3); border: 1px solid var(--border);
   border-radius: 8px; padding: 0 14px; height: 48px;
-  color: white; font-family: 'Inter', sans-serif; font-size: 12px;
+  color: white; font-family: 'JetBrains Mono', monospace; font-size: 12px;
   outline: none; transition: all .18s; min-width: 120px;
 }
 .redeem-input:focus { border-color: rgba(0,212,255,.32); box-shadow: 0 0 0 2px rgba(0,212,255,.06); }

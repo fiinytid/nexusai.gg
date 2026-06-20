@@ -9,7 +9,6 @@ const SESSION_TTL         = 24 * 60 * 60 * 1_000;
 const SESSION_TOKEN_MAX   = 128;
 const MIN_ADMIN_TOKEN_LEN = 16;
 const MAX_BODY_FIELD_LEN  = 50_000;
-const DEDUP_WINDOW        = 500;
 const MAX_LOG_ENTRIES     = 500;
 const MAX_HIST_ENTRIES    = 200;
 const MAX_USER_HIST       = 100;
@@ -23,23 +22,23 @@ const TTL_USER_INFO       = 10 * 60_000;
 const TTL_GAME_INFO       = 15 * 60_000;
 const MAX_BATCH_COMMANDS  = 200;
 const MAX_MULTI_TARGETS   = 20;
+const MAX_AI_FEED_ENTRIES = 300;
+const AI_FEED_DEFAULT_LIMIT = 50;
 
-const DEFAULT_ADMIN_ACTIONS = new Set<string>([
-  "play_test", "run_test", "stop_test", "delete",
-  "delete_instance", "clear_terrain", "revert_place",
-]);
+// NOTE: DEFAULT_ADMIN_ACTIONS and DEDUP_ACTIONS have been removed entirely.
+// There is no longer a server-side "admin-only action name" allowlist, and
+// no command-deduplication step. Every action now goes through the same
+// authorizeCommand() path uniformly; admin gating is handled solely by
+// verifyAdminToken() where individual handlers explicitly require it
+// (currently: none of the renamed actions require it implicitly anymore —
+// see authorizeCommand()'s simplified signature below).
 
 const ALLOWED_ORIGINS = new Set<string>([
   "https://nexusai-rbx.vercel.app",
   "https://nexusai.gg",
+  "http://localhost:3000",
   "https://fine-setter-131.convex.site",
   "https://brazen-lapwing-697.convex.site",
-  "http://localhost:3000",
-
-]);
-
-const DEDUP_ACTIONS = new Set<string>([
-  "delete", "play_test", "clear_terrain", "delete_instance", "revert_place",
 ]);
 
 const VALID_TOOLBOX_TYPES = new Set<string>([
@@ -51,6 +50,67 @@ const INSERTABLE_ASSET_TYPES = new Set<string>([
   "Model", "Plugin", "Package", "Hat", "Shirt", "Pants",
   "TShirt", "Gear", "Animation", "MeshPart", "Unknown",
 ]);
+
+// Action names that the AI/web side may dispatch to the plugin which are
+// considered sensitive enough to require an admin token rather than a
+// per-user session token. This replaces the old DEFAULT_ADMIN_ACTIONS set,
+// but is intentionally NOT a hardcoded constant — it is read from the
+// environment only, so there is no implicit default list baked into the
+// server. If NEXUS_ADMIN_ACTIONS is unset, no action is admin-gated beyond
+// what authorizeCommand() already enforces (same-user ownership).
+function getAdminGatedActions(): Set<string> {
+  const env = process.env.NEXUS_ADMIN_ACTIONS ?? "";
+  if (!env) return new Set();
+  return new Set(env.split(",").map((s) => s.trim()).filter(Boolean));
+}
+
+// ── ACTION NAME MIGRATION ───────────────────────────────────────────────────────
+// Maps legacy action names (still potentially sent by an older plugin build
+// or an older AI/web caller) to their new, clearer snake_case names. Applied
+// once, immediately after parsing the action name out of the request, so the
+// rest of the code only ever sees the new names.
+const ACTION_RENAME_MAP: Record<string, string> = {
+  // Plugin → server (reports)
+  script_content:        "read_script",
+  log_output:             "output_log",
+  output_data:            "output_report",
+  workspace_data:         "workspace_scan",
+  game_scan:              "workspace_scan",
+  search_result:          "toolbox_search_report",
+  descendants:            "descendants_report",
+  object_properties:      "properties_report",
+  set_properties_result:  "properties_set_report",
+  action_list:            "action_list_report",
+  asset_library:          "asset_library_report",
+  assets_listed:          "asset_library_report",
+  asset_id_result:        "asset_id_report",
+  asset_folder_list:      "asset_folder_report",
+  module_deployed:        "module_deploy_report",
+  modules_list:           "module_list_report",
+  terrain_materials:      "terrain_materials_report",
+  runcode_result:         "runcode_report",
+  expression_result:      "expression_report",
+  query_result:           "query_report",
+  mention_resolved:       "mention_report",
+  mention_not_found:      "mention_report",
+  plugin_error:           "plugin_error_report",
+  script_list:            "script_list_report",
+  check_list:             "script_list_report",
+  script_lines:           "script_lines_report",
+  nxai_connect:           "plugin_connect",
+  nxai_disconnect:        "plugin_disconnect",
+
+  // Web/AI → plugin (dispatch)
+  inject_command:         "dispatch_command",
+  batch_commands:         "dispatch_batch",
+  execute_json:           "dispatch_from_text",
+  execute_text:           "dispatch_from_text",
+  multi_target:           "dispatch_multi_target",
+};
+
+function migrateActionName(raw: string): string {
+  return ACTION_RENAME_MAP[raw] ?? raw;
+}
 
 // ── INTERFACES ─────────────────────────────────────────────────────────────────
 interface QueueCommand {
@@ -153,8 +213,20 @@ interface FilterResult {
   removed: string[];
 }
 
-interface RateCheckResult {
-  allowed: boolean;
+// AI feed entry: a single, durable, ordered message that the AI can read
+// later from Convex regardless of which chat/session asks for it. This is
+// what makes read_script / output_log / etc. behave like "messages sent to
+// the AI" instead of just being the most-recent-snapshot data they were
+// before — every event is appended, not overwritten, and is explicitly
+// marked read once retrieved (see ai_feed handling below).
+interface AiFeedEntry {
+  id: string;
+  username: string;
+  kind: string;
+  summary: string;
+  data: unknown;
+  ts: number;
+  read: boolean;
 }
 
 // ── SANITISERS (pure, no side effects) ────────────────────────────────────────
@@ -230,12 +302,6 @@ function sanUrl(val: unknown): string | null {
   } catch {
     return null;
   }
-}
-
-function getAdminActions(): Set<string> {
-  const env = process.env.NEXUS_ADMIN_ACTIONS ?? "";
-  if (!env) return DEFAULT_ADMIN_ACTIONS;
-  return new Set(env.split(",").map((s) => s.trim()).filter(Boolean));
 }
 
 // ── JSON HELPERS ───────────────────────────────────────────────────────────────
@@ -319,7 +385,9 @@ function extractCommandsFromText(text: string): QueueCommand[] {
   function addCmd(cmd: unknown): void {
     if (!cmd || typeof cmd !== "object" || !("action" in cmd)) return;
     const c = cmd as QueueCommand;
-    c.action = String(c.action).toLowerCase().replace(/[^a-z0-9_]/g, "");
+    c.action = migrateActionName(
+      String(c.action).toLowerCase().replace(/[^a-z0-9_]/g, "")
+    );
     if (!c.action) return;
     const key = JSON.stringify(c);
     if (!seen.has(key)) { seen.add(key); all.push(c); }
@@ -329,7 +397,7 @@ function extractCommandsFromText(text: string): QueueCommand[] {
     if (!item || typeof item !== "object") return;
     if (Array.isArray(item)) { for (const sub of item) processItem(sub); return; }
     const obj = item as Record<string, unknown>;
-    if (obj["action"] === "batch_commands" && Array.isArray(obj["commands"])) {
+    if (obj["action"] === "dispatch_batch" && Array.isArray(obj["commands"])) {
       for (const sub of obj["commands"]) {
         if ((sub as QueueCommand)?.action) addCmd(sub);
       }
@@ -454,22 +522,11 @@ function bufToHex(buf: ArrayBuffer): string {
   return Array.from(new Uint8Array(buf), (b) => b.toString(16).padStart(2, "0")).join("");
 }
 
-// SHA-256 hex digest via the standard Web Crypto API. This is available in
-// Convex's default (non-"use node") V8 runtime, so no node:crypto import is
-// required - unlike the previous stub, this actually works.
+// SHA-256 hex digest via the standard Web Crypto API.
 async function sha256Hex(input: string): Promise<string> {
   const data = new TextEncoder().encode(input);
   const digest = await crypto.subtle.digest("SHA-256", data);
   return bufToHex(digest);
-}
-
-// Fast, collision-resistant key for the short-lived command-dedup cache.
-// NOT used for any security-sensitive comparison (see verifyPluginHmac for
-// that). Replaces the previous 32-bit rolling hash, which was mislabeled
-// "hashMd5" despite not being MD5 and having a tiny, easily-collided
-// keyspace.
-async function hashForDedup(input: string): Promise<string> {
-  return (await sha256Hex(input)).substring(0, 32);
 }
 
 // ── TOKEN VERIFICATION ─────────────────────────────────────────────────────────
@@ -519,9 +576,7 @@ async function verifyPluginHmac(request: Request, rawBody: string): Promise<bool
   }
 }
 
-// Lightweight replay guard for the X-Nexus-Nonce header. Reuses the existing
-// generic dedup mutation rather than requiring a new storage table - a nonce
-// is just a hash that must not be seen twice within the window.
+// Lightweight replay guard for the X-Nexus-Nonce header.
 async function checkNonceReplay(ctx: ActionCtx, request: Request): Promise<boolean> {
   const nonce = (request.headers.get("x-nexus-nonce") ?? "").trim();
   if (!nonce) return true; // nonce is optional unless the client opts into signing
@@ -549,6 +604,10 @@ function getRobloxApiKey(): string | null {
 }
 
 // ── AUTHORISATION ──────────────────────────────────────────────────────────────
+// Simplified from the original: there is no more hardcoded admin-action
+// allowlist (DEFAULT_ADMIN_ACTIONS is gone). Admin gating now comes solely
+// from the optional NEXUS_ADMIN_ACTIONS env var via getAdminGatedActions().
+// Ownership + session-token verification logic is unchanged.
 async function authorizeCommand(
   ctx: ActionCtx,
   request: Request,
@@ -567,7 +626,7 @@ async function authorizeCommand(
       error: "Forbidden: you may only target your own session.",
     };
 
-  if (action && getAdminActions().has(action))
+  if (action && getAdminGatedActions().has(action))
     return {
       ok: false,
       status: 403,
@@ -587,12 +646,7 @@ async function authorizeCommand(
   // connected) - there is nothing to verify against yet, so allow through.
   if (!session) return { ok: true };
 
-  // BUGFIX: a session now exists for this user, so a valid token is
-  // mandatory. Previously, simply omitting the X-Session-Token header
-  // skipped verification entirely (the check below never ran), which let
-  // anyone who knew/guessed a username impersonate that user's session and
-  // push arbitrary commands into their queue. A session existing must now
-  // always require a matching token.
+  // A session exists for this user, so a valid token is mandatory.
   if (!candidate)
     return { ok: false, status: 401, error: "Session token required." };
 
@@ -612,12 +666,13 @@ function filterBatch(
   if (isAdmin) {
     return { safe: sanArr<QueueCommand>(commands, MAX_BATCH_COMMANDS), removed: [] };
   }
-  const adminActions = getAdminActions();
+  const adminGated = getAdminGatedActions();
   const safe: QueueCommand[] = [];
   const removed: string[] = [];
   for (const cmd of sanArr<QueueCommand>(commands, MAX_BATCH_COMMANDS)) {
-    if (adminActions.has(cmd?.action)) removed.push(sanStr(cmd.action, 50));
-    else safe.push(cmd);
+    const act = migrateActionName(String(cmd?.action ?? ""));
+    if (adminGated.has(act)) removed.push(sanStr(act, 50));
+    else safe.push({ ...cmd, action: act });
   }
   return { safe, removed };
 }
@@ -805,7 +860,6 @@ async function validateAsset(
 
   let assetData: Record<string, unknown> | null = null;
 
-  // Try catalog API first, fall back to economy API
   for (const url of [
     `https://catalog.roblox.com/v1/catalog/items/${id}/details`,
     `https://economy.roblox.com/v2/assets/${id}/details`,
@@ -816,7 +870,6 @@ async function validateAsset(
     } catch (_) {}
   }
 
-  // Final fallback: asset delivery check
   if (!assetData) {
     try {
       const r = await safeFetch(
@@ -1020,7 +1073,6 @@ async function searchDocs(
   const cached = await ctx.runQuery(internal.store.getCacheEntry, { key: cacheKey });
   if (cached) return JSON.parse(cached) as DocsResult;
 
-  // Try live Roblox creator docs API
   try {
     const params = new URLSearchParams({
       query: q,
@@ -1063,7 +1115,6 @@ async function searchDocs(
     }
   } catch (_) {}
 
-  // Fallback: local index
   const index  = getLocalDocsIndex();
   const tokens = q.toLowerCase().split(/\s+/).filter(Boolean);
   const scored = index
@@ -1158,6 +1209,41 @@ async function dispatchWebhook(
   } catch (_) {}
 }
 
+// ── AI FEED (durable, ordered "messages to the AI") ─────────────────────────────
+// This is the mechanism that makes read_script / output_log / and other
+// plugin → server reports behave like messages sent to the AI rather than
+// just overwritten snapshots:
+//
+//   1. Every report-type action (read_script, output_log, workspace_scan,
+//      etc.) still saves its latest snapshot via saveData() as before, AND
+//      ALSO appends a small AiFeedEntry to a per-user, time-ordered feed
+//      table in Convex (internal.store.pushAiFeedEntry).
+//   2. The AI (in any chat/session, via the API or an MCP tool that calls
+//      this same Convex endpoint) can call GET ?ai_feed=1&user=... at any
+//      time to retrieve every entry that hasn't been read yet, oldest
+//      first, and those entries are atomically marked read so the next
+//      fetch doesn't repeat them. This is the standard "outbox" pattern
+//      for bridging a system that cannot push into a chat with a consumer
+//      that pulls on its own schedule.
+//   3. Nothing is ever lost: even if the AI never asks, the snapshot saved
+//      via saveData() is still retrievable through the existing
+//      get_script / get_output endpoints. The feed is additive.
+async function pushAiFeed(
+  ctx: ActionCtx,
+  username: string,
+  kind: string,
+  summary: string,
+  data: unknown
+): Promise<void> {
+  await ctx.runMutation(internal.store.pushAiFeedEntry, {
+    username,
+    kind,
+    summary: sanStr(summary, 300),
+    data: JSON.stringify(data ?? {}),
+    ts: Date.now(),
+  });
+}
+
 // ── PROJECT ────────────────────────────────────────────────────────────────────
 async function getProject(ctx: ActionCtx, u: string): Promise<ProjectData> {
   const d = await loadData(ctx, u, "project");
@@ -1222,33 +1308,16 @@ async function getSessionStats(ctx: ActionCtx, username: string) {
   };
 }
 
-// ── DEDUP ──────────────────────────────────────────────────────────────────────
-async function isDuplicateCommand(
-  ctx: ActionCtx,
-  cmd: QueueCommand
-): Promise<boolean> {
-  if (!DEDUP_ACTIONS.has(cmd?.action)) return false;
-  const hash = await hashForDedup(
-    JSON.stringify({
-      action: cmd.action,
-      name:   cmd.name,
-      code:   String(cmd.code ?? "").substring(0, 100),
-    })
-  );
-  return ctx.runMutation(internal.store.checkAndSetDedup, {
-    hash,
-    windowMs: DEDUP_WINDOW,
-  });
-}
-
 // ── QUEUE ──────────────────────────────────────────────────────────────────────
+// NOTE: command deduplication (DEDUP_ACTIONS / hashForDedup / isDuplicateCommand)
+// has been removed entirely. Every pushQueue() call now always enqueues the
+// command — there is no silent drop based on a short-lived hash window.
 async function pushQueue(
   ctx: ActionCtx,
   u: string,
   cmd: QueueCommand,
   priority = "normal"
 ): Promise<boolean> {
-  if (await isDuplicateCommand(ctx, cmd)) return false;
   const isPriority = priority === "critical" || priority === "high";
   await ctx.runMutation(internal.store.pushQueueItem, {
     username:   u,
@@ -1392,6 +1461,51 @@ async function handleGet(
 
   const u = san(q["user"] ?? "");
 
+  // ── AI FEED: the durable inbox of "messages to the AI" ───────────────────────
+  // GET ?ai_feed=1&user=<username>            → unread entries (oldest first),
+  //                                               marked read once returned.
+  // GET ?ai_feed=1&user=<username>&peek=1     → same, but does NOT mark read.
+  // GET ?ai_feed=1&user=<username>&all=1      → entire feed history (read + unread),
+  //                                               for catching up / debugging.
+  if (q["ai_feed"] != null) {
+    if (!u) return errResp(cors, 400, '"user" parameter is required.');
+    const limit = sanInt(q["limit"], AI_FEED_DEFAULT_LIMIT, 1, MAX_AI_FEED_ENTRIES);
+
+    if (q["all"] === "1") {
+      const entries = await ctx.runQuery(internal.store.getAiFeedEntries, {
+        username: u,
+        limit,
+        unreadOnly: false,
+      });
+      return jsonResp({ ok: true, user: u, entries, count: entries.length, mode: "all" }, 200, cors);
+    }
+
+    const entries = await ctx.runQuery(internal.store.getAiFeedEntries, {
+      username: u,
+      limit,
+      unreadOnly: true,
+    });
+
+    if (q["peek"] !== "1" && entries.length > 0) {
+      await ctx.runMutation(internal.store.markAiFeedRead, {
+        username: u,
+        ids: entries.map((e: AiFeedEntry) => e.id),
+      });
+    }
+
+    return jsonResp(
+      {
+        ok:      true,
+        user:    u,
+        entries,
+        count:   entries.length,
+        mode:    q["peek"] === "1" ? "peek" : "unread_consumed",
+      },
+      200,
+      cors
+    );
+  }
+
   // Webhook info
   if (q["get_webhook"] != null) {
     const wh = await ctx.runQuery(internal.store.getWebhook, { username: u });
@@ -1402,32 +1516,44 @@ async function handleGet(
   if (q["get_project"] != null)
     return jsonResp({ ok: true, ...(await getProject(ctx, u)) }, 200, cors);
 
-  // Output data
-  if (q["get_output"] != null) {
-    const d = await loadData(ctx, u, "output");
+  // Output report (renamed from "get_output", which now refers to the live
+  // Studio output log captured via the output_log action — see below)
+  if (q["get_output_data"] != null) {
+    const d = await loadData(ctx, u, "output_report");
     return jsonResp({ ok: true, ...(d ?? { outputs: [] }) }, 200, cors);
+  }
+
+  // Studio Output log (captured by the plugin's get_output action, reported
+  // to the server as "output_log")
+  if (q["get_output"] != null) {
+    const raw  = await ctx.runQuery(internal.store.getData, { username: u, key: "output_log" });
+    let logs   = raw ? (JSON.parse(raw) as Record<string, unknown>[]) : [];
+    const since = sanInt(q["since"], 0, 0, Number.MAX_SAFE_INTEGER);
+    if (since) logs = logs.filter((l) => ((l["ts"] as number) ?? 0) > since);
+    if (q["level"]) logs = logs.filter((l) => l["level"] === q["level"] || l["type"] === q["level"]);
+    return jsonResp({ ok: true, logs, count: logs.length }, 200, cors);
   }
 
   // Generic data getters
   const dataGetterKeys: Record<string, string> = {
-    get_workspace:      "game_scan",
-    get_script:         "script_content",
-    get_script_list:    "script_list",
-    get_script_lines:   "script_lines",
-    get_search:         "search",
-    get_game_scan:      "game_scan",
-    get_descendants:    "descendants",
-    get_properties:     "properties",
-    get_action_list:    "action_list",
-    get_asset_lib:      "asset_lib",
-    get_asset_id:       "asset_id",
-    get_asset_folder:   "asset_folder",
-    get_module_list:    "module_list",
-    get_module_deploy:  "module_deploy",
-    get_terrain:        "terrain",
-    get_runcode_result: "runcode_result",
-    get_expr_result:    "expr_result",
-    get_query_result:   "query_result",
+    get_workspace:        "workspace_scan",
+    get_script:           "read_script",
+    get_script_list:      "script_list_report",
+    get_script_lines:     "script_lines_report",
+    get_search:           "toolbox_search_report",
+    get_workspace_scan:   "workspace_scan",
+    get_descendants:      "descendants_report",
+    get_properties:       "properties_report",
+    get_action_list:      "action_list_report",
+    get_asset_lib:        "asset_library_report",
+    get_asset_id:         "asset_id_report",
+    get_asset_folder:     "asset_folder_report",
+    get_module_list:      "module_list_report",
+    get_module_deploy:    "module_deploy_report",
+    get_terrain:          "terrain_materials_report",
+    get_runcode_result:   "runcode_report",
+    get_expr_result:      "expression_report",
+    get_query_result:     "query_report",
   };
 
   for (const [param, key] of Object.entries(dataGetterKeys)) {
@@ -1440,7 +1566,7 @@ async function handleGet(
 
   // Plugin errors
   if (q["get_plugin_errors"] != null) {
-    const raw    = await ctx.runQuery(internal.store.getData, { username: u, key: "plugin_errors" });
+    const raw    = await ctx.runQuery(internal.store.getData, { username: u, key: "plugin_error_report" });
     const errors = raw ? (JSON.parse(raw) as unknown[]) : [];
     return jsonResp({ ok: true, errors, count: errors.length }, 200, cors);
   }
@@ -1476,16 +1602,6 @@ async function handleGet(
       200,
       cors
     );
-  }
-
-  // Log service
-  if (q["get_logsvc"] != null) {
-    const raw  = await ctx.runQuery(internal.store.getData, { username: u, key: "logsvc" });
-    let logs   = raw ? (JSON.parse(raw) as Record<string, unknown>[]) : [];
-    const since = sanInt(q["since"], 0, 0, Number.MAX_SAFE_INTEGER);
-    if (since) logs = logs.filter((l) => ((l["ts"] as number) ?? 0) > since);
-    if (q["level"]) logs = logs.filter((l) => l["level"] === q["level"] || l["type"] === q["level"]);
-    return jsonResp({ ok: true, logs, count: logs.length }, 200, cors);
   }
 
   // Admin: raw logs
@@ -1588,10 +1704,6 @@ async function handlePost(
   request: Request,
   cors: Record<string, string>
 ): Promise<Response> {
-  // Read the raw text first - HMAC must be checked against the exact bytes
-  // the client sent. Re-serializing the parsed JS object before checking a
-  // signature (the previous behaviour) can never match a correctly
-  // generated signature.
   const rawBody = await request.text().catch(() => "");
   let body: Record<string, unknown>;
   try {
@@ -1601,11 +1713,6 @@ async function handlePost(
   }
 
   const ip = getClientIp(request);
-  // BUGFIX: previously defaulted to the literal string "anon" whenever no
-  // "_user"/"user" field was supplied, meaning every anonymous caller shared
-  // one global rate-limit bucket - a single abusive anonymous client could
-  // exhaust it and lock out every other anonymous user. Fall back to a
-  // per-IP bucket instead.
   const hasIdentity = !!(body["_user"] ?? body["user"]);
   const ratUser = hasIdentity ? san(body["_user"] ?? body["user"]) : `ip_${ip || "unknown"}`;
 
@@ -1625,25 +1732,25 @@ async function handlePost(
   });
   if (!okBurst) return rateLimitResp(cors, 5);
 
-  // HMAC + replay verification (both now real checks - see helpers above)
+  // HMAC + replay verification
   if (!(await verifyPluginHmac(request, rawBody)))
     return errResp(cors, 401, "Invalid HMAC signature.", { hint: "Check PLUGIN_HMAC_SECRET." });
 
   if (!(await checkNonceReplay(ctx, request)))
     return errResp(cors, 401, "Nonce already used (possible replay).");
 
-  const rawAction    = sanStr(String(body["action"] ?? body["type"] ?? ""), 80);
+  const rawAction    = migrateActionName(sanStr(String(body["action"] ?? body["type"] ?? ""), 80));
   const resolvedUser = san(body["_user"] ?? "");
 
   // ── Plugin connect / disconnect ──────────────────────────────────────────────
-  if (rawAction === "nxai_connect") {
+  if (rawAction === "plugin_connect") {
     const token   = sanStr(String(body["token"] ?? body["session_token"] ?? ""), SESSION_TOKEN_MAX).trim();
     const placeId = body["place_id"] ? sanStr(String(body["place_id"]), 30) : null;
     const userId  = body["user_id"]  ? sanStr(String(body["user_id"]),  20) : null;
     if (token.length >= 16) await setSessionDb(ctx, resolvedUser, token, placeId, userId);
     await ctx.runMutation(internal.store.bumpPoll, { username: resolvedUser });
     await ctx.runMutation(internal.store.pushLog, {
-      action: "nxai_connect",
+      action: "plugin_connect",
       user:   resolvedUser,
       details: JSON.stringify({ placeId, userId }),
     });
@@ -1662,7 +1769,7 @@ async function handlePost(
     );
   }
 
-  if (rawAction === "nxai_disconnect") {
+  if (rawAction === "plugin_disconnect") {
     const sess = await ctx.runQuery(internal.store.getSession, {
       username: san(resolvedUser),
     });
@@ -1677,36 +1784,18 @@ async function handlePost(
       });
     }
     await ctx.runMutation(internal.store.pushLog, {
-      action: "nxai_disconnect",
+      action: "plugin_disconnect",
       user:   resolvedUser,
     });
     return jsonResp({ ok: true, status: "ok" }, 200, cors);
   }
 
-  // ── Plugin data callbacks ────────────────────────────────────────────────────
-  if (rawAction === "game_scan") {
-    const d = { data: sanObj(body["data"]), ts: (body["ts"] as number) ?? Date.now(), user: resolvedUser };
-    await saveData(ctx, resolvedUser, "game_scan",  d);
-    await saveData(ctx, resolvedUser, "workspace",  d);
-    return jsonResp({ ok: true, status: "ok", ts: d.ts }, 200, cors);
-  }
-
-  if (rawAction === "workspace_data") {
-    await saveData(ctx, resolvedUser, "workspace", { ...body, _ts: Date.now() });
-    return jsonResp({ ok: true, status: "ok" }, 200, cors);
-  }
-
-  if (rawAction === "output_data") {
-    await saveData(ctx, resolvedUser, "output", {
-      outputs: sanArr(body["outputs"], 200),
-      ts: Date.now(),
-    });
-    return jsonResp({ ok: true, status: "ok" }, 200, cors);
-  }
-
-  if (rawAction === "script_content") {
-    await saveData(ctx, resolvedUser, "script_content", {
-      name:      sanStr(body["name"]        ?? "", 100),
+  // ── read_script: plugin reports a script's source. This is forwarded to
+  //    the AI feed as a real message, not just an overwritten snapshot. ─────────
+  if (rawAction === "read_script") {
+    const name      = sanStr(body["name"]        ?? "", 100);
+    const reportData = {
+      name,
       parent:    sanStr(body["parentName"]  ?? body["parent"] ?? "", 100),
       fullPath:  sanStr(body["fullPath"]    ?? "", 200),
       class:     sanStr(body["class"]       ?? body["scriptType"] ?? "Script", 30),
@@ -1714,18 +1803,40 @@ async function handlePost(
       lineCount: sanInt(body["lineCount"], 0, 0, 99_999),
       disabled:  !!body["disabled"],
       updatedAt: Date.now(),
-    });
+    };
+    await saveData(ctx, resolvedUser, "read_script", reportData);
+    await pushAiFeed(
+      ctx,
+      resolvedUser,
+      "read_script",
+      `Script "${name}" (${reportData.class}, ${reportData.lineCount} lines) was read from Studio.`,
+      reportData
+    );
     await ctx.runMutation(internal.store.pushLog, {
-      action:  "script_read",
+      action:  "read_script",
       user:    resolvedUser,
-      details: sanStr(String(body["name"] ?? ""), 50),
+      details: name,
     });
-    return jsonResp({ ok: true, status: "ok", name: sanStr(String(body["name"] ?? ""), 50) }, 200, cors);
+    return jsonResp({ ok: true, status: "ok", name }, 200, cors);
   }
 
-  if (rawAction === "script_list" || rawAction === "check_list") {
+  if (rawAction === "workspace_scan") {
+    const d = { data: sanObj(body["data"]), ts: (body["ts"] as number) ?? Date.now(), user: resolvedUser };
+    await saveData(ctx, resolvedUser, "workspace_scan", d);
+    return jsonResp({ ok: true, status: "ok", ts: d.ts }, 200, cors);
+  }
+
+  if (rawAction === "output_report") {
+    await saveData(ctx, resolvedUser, "output_report", {
+      outputs: sanArr(body["outputs"], 200),
+      ts: Date.now(),
+    });
+    return jsonResp({ ok: true, status: "ok" }, 200, cors);
+  }
+
+  if (rawAction === "script_list_report") {
     const count = sanInt(body["total"] ?? body["count"], 0, 0, 99_999);
-    await saveData(ctx, resolvedUser, "script_list", {
+    await saveData(ctx, resolvedUser, "script_list_report", {
       parent:    sanStr(body["parent"] ?? "all", 100),
       scripts:   sanArr(body["scripts"] ?? body["entries"]),
       count,
@@ -1734,15 +1845,15 @@ async function handlePost(
       updatedAt: Date.now(),
     });
     await ctx.runMutation(internal.store.pushLog, {
-      action:  rawAction,
+      action:  "script_list_report",
       user:    resolvedUser,
       details: String(count),
     });
     return jsonResp({ ok: true, status: "ok", count }, 200, cors);
   }
 
-  if (rawAction === "script_lines") {
-    await saveData(ctx, resolvedUser, "script_lines", {
+  if (rawAction === "script_lines_report") {
+    await saveData(ctx, resolvedUser, "script_lines_report", {
       name:      sanStr(body["name"] ?? "", 100),
       lineStart: sanInt(body["lineStart"], 1, 1, 99_999),
       lineEnd:   sanInt(body["lineEnd"],   1, 1, 99_999),
@@ -1752,44 +1863,46 @@ async function handlePost(
     return jsonResp({ ok: true, status: "ok" }, 200, cors);
   }
 
-  if (rawAction === "log_output") {
+  // ── output_log: plugin reports captured Studio Output entries. Also
+  //    forwarded to the AI feed so the AI can react to errors/warnings. ────────
+  if (rawAction === "output_log") {
     const logs = sanArr(body["logs"], 100);
     await ctx.runMutation(internal.store.pushLogSvc, {
       username: resolvedUser,
       newLogs:  JSON.stringify(logs),
     });
+    if (logs.length > 0) {
+      const errorCount = logs.filter(
+        (l: any) => l?.level === "ERROR" || l?.level === "WARN"
+      ).length;
+      await pushAiFeed(
+        ctx,
+        resolvedUser,
+        "output_log",
+        `Studio output captured: ${logs.length} entries (${errorCount} warning/error).`,
+        { logs, count: logs.length }
+      );
+    }
     return jsonResp({ ok: true, status: "ok", received: logs.length }, 200, cors);
   }
 
-  if (rawAction === "mention_resolved") {
+  if (rawAction === "mention_report") {
+    const found = rawAction === "mention_report" && body["object"] != null;
     await ctx.runMutation(internal.store.pushMention, {
       username: resolvedUser,
       item: JSON.stringify({
         mention: sanStr(body["mention"] ?? "", 100),
-        object:  sanObj(body["object"]),
-        found:   true,
+        object:  body["object"] != null ? sanObj(body["object"]) : null,
+        found:   body["object"] != null,
         ts:      Date.now(),
       }),
     });
     return jsonResp({ ok: true, status: "ok" }, 200, cors);
   }
 
-  if (rawAction === "mention_not_found") {
-    await ctx.runMutation(internal.store.pushMention, {
-      username: resolvedUser,
-      item: JSON.stringify({
-        mention: sanStr(body["mention"] ?? "", 100),
-        object:  null,
-        found:   false,
-        ts:      Date.now(),
-      }),
-    });
-    return jsonResp({ ok: true, status: "ok" }, 200, cors);
-  }
-
-  if (rawAction === "search_result") {
+  if (rawAction === "toolbox_search_report") {
     const count = sanInt(body["count"], 0, 0, 99_999);
-    await saveData(ctx, resolvedUser, "search", {
+    await saveData(ctx, resolvedUser, "toolbox_search_report", {
       query:   sanStr(body["query"] ?? "", 200),
       results: sanArr(body["results"]),
       count,
@@ -1797,8 +1910,8 @@ async function handlePost(
     return jsonResp({ ok: true, status: "ok", count }, 200, cors);
   }
 
-  if (rawAction === "descendants") {
-    await saveData(ctx, resolvedUser, "descendants", {
+  if (rawAction === "descendants_report") {
+    await saveData(ctx, resolvedUser, "descendants_report", {
       target:      sanStr(body["target"] ?? "", 100),
       descendants: sanArr(body["descendants"]),
       count:       sanInt(body["count"], 0, 0, 99_999),
@@ -1806,47 +1919,47 @@ async function handlePost(
     return jsonResp({ ok: true, status: "ok" }, 200, cors);
   }
 
-  if (rawAction === "object_properties") {
-    await saveData(ctx, resolvedUser, "properties", {
+  if (rawAction === "properties_report") {
+    await saveData(ctx, resolvedUser, "properties_report", {
       name:       sanStr(body["name"] ?? "", 100),
       properties: sanObj(body["properties"]),
     });
     return jsonResp({ ok: true, status: "ok" }, 200, cors);
   }
 
-  if (rawAction === "set_properties_result") {
-    await saveData(ctx, resolvedUser, "properties", {
+  if (rawAction === "properties_set_report") {
+    await saveData(ctx, resolvedUser, "properties_report", {
       name:       sanStr(body["name"] ?? body["instance"] ?? "", 100),
       properties: sanObj(body["properties"] ?? body["changed"] ?? {}),
       count:      sanInt(body["count"], 0, 0, 9_999),
       updatedAt:  Date.now(),
     });
     await ctx.runMutation(internal.store.pushLog, {
-      action:  "set_properties_result",
+      action:  "properties_set_report",
       user:    resolvedUser,
       details: sanStr(String(body["name"] ?? ""), 50),
     });
     return jsonResp({ ok: true, status: "ok" }, 200, cors);
   }
 
-  if (rawAction === "action_list") {
-    await saveData(ctx, resolvedUser, "action_list", {
+  if (rawAction === "action_list_report") {
+    await saveData(ctx, resolvedUser, "action_list_report", {
       actions: sanArr(body["actions"]),
       count:   sanInt(body["count"], 0, 0, 9_999),
     });
     return jsonResp({ ok: true, status: "ok" }, 200, cors);
   }
 
-  if (rawAction === "asset_library" || rawAction === "assets_listed") {
-    await saveData(ctx, resolvedUser, "asset_lib", {
+  if (rawAction === "asset_library_report") {
+    await saveData(ctx, resolvedUser, "asset_library_report", {
       category: sanStr(body["category"] ?? "all", 50),
       data:     sanObj(body["data"] ?? body["summary"]),
     });
     return jsonResp({ ok: true, status: "ok" }, 200, cors);
   }
 
-  if (rawAction === "asset_id_result") {
-    await saveData(ctx, resolvedUser, "asset_id", {
+  if (rawAction === "asset_id_report") {
+    await saveData(ctx, resolvedUser, "asset_id_report", {
       category: sanStr(body["category"] ?? "", 50),
       sub:      sanStr(body["sub"]      ?? "", 50),
       name:     sanStr(body["name"]     ?? "", 100),
@@ -1855,16 +1968,16 @@ async function handlePost(
     return jsonResp({ ok: true, status: "ok" }, 200, cors);
   }
 
-  if (rawAction === "asset_folder_list") {
-    await saveData(ctx, resolvedUser, "asset_folder", {
+  if (rawAction === "asset_folder_report") {
+    await saveData(ctx, resolvedUser, "asset_folder_report", {
       folder:   sanStr(body["folder"] ?? "all", 50),
       contents: sanObj(body["contents"]),
     });
     return jsonResp({ ok: true, status: "ok" }, 200, cors);
   }
 
-  if (rawAction === "module_deployed") {
-    await saveData(ctx, resolvedUser, "module_deploy", {
+  if (rawAction === "module_deploy_report") {
+    await saveData(ctx, resolvedUser, "module_deploy_report", {
       name:   sanStr(body["name"]   ?? "", 100),
       parent: sanStr(body["parent"] ?? "", 100),
       source: sanStr(body["source"] ?? "", 100),
@@ -1872,8 +1985,8 @@ async function handlePost(
     return jsonResp({ ok: true, status: "ok" }, 200, cors);
   }
 
-  if (rawAction === "modules_list") {
-    await saveData(ctx, resolvedUser, "module_list", {
+  if (rawAction === "module_list_report") {
+    await saveData(ctx, resolvedUser, "module_list_report", {
       folder:  sanStr(body["folder"] ?? "modulescripts", 100),
       modules: sanArr(body["modules"]),
       count:   sanInt(body["count"], 0, 0, 999),
@@ -1881,15 +1994,17 @@ async function handlePost(
     return jsonResp({ ok: true, status: "ok" }, 200, cors);
   }
 
-  if (rawAction === "terrain_materials") {
-    await saveData(ctx, resolvedUser, "terrain", {
+  if (rawAction === "terrain_materials_report") {
+    await saveData(ctx, resolvedUser, "terrain_materials_report", {
       materials: sanArr(body["materials"]),
       count:     sanInt(body["count"], 0, 0, 999),
     });
     return jsonResp({ ok: true, status: "ok" }, 200, cors);
   }
 
-  if (rawAction === "runcode_result") {
+  // ── runcode_report: result of a RunCode/run_code action. Forwarded to the
+  //    AI feed since it's the direct output of code the AI asked to run. ───────
+  if (rawAction === "runcode_report") {
     const result = {
       mode:    sanStr(body["mode"] ?? "pipeline", 20),
       success: !!body["success"],
@@ -1897,36 +2012,45 @@ async function handlePost(
       log:     sanArr(body["log"], 200),
       ts:      Date.now(),
     };
-    await saveData(ctx, resolvedUser, "runcode_result", result);
+    await saveData(ctx, resolvedUser, "runcode_report", result);
+    await pushAiFeed(
+      ctx,
+      resolvedUser,
+      "runcode_report",
+      `run_code (${result.mode}) finished: ${result.success ? "success" : "failed"}.`,
+      result
+    );
     await ctx.runMutation(internal.store.pushLog, {
-      action:  "runcode_result",
+      action:  "runcode_report",
       user:    resolvedUser,
       details: JSON.stringify({ mode: result.mode, success: result.success }),
     });
     return jsonResp({ ok: true, status: "ok", mode: result.mode, success: result.success }, 200, cors);
   }
 
-  if (rawAction === "expression_result") {
+  if (rawAction === "expression_report") {
     const result = {
       expression: sanStr(body["expression"] ?? "", 300),
       result:     body["result"] != null ? String(body["result"]).substring(0, 2000) : null,
       ts:         Date.now(),
     };
-    await saveData(ctx, resolvedUser, "expr_result", result);
+    await saveData(ctx, resolvedUser, "expression_report", result);
     return jsonResp({ ok: true, status: "ok", expression: result.expression }, 200, cors);
   }
 
-  if (rawAction === "query_result") {
+  if (rawAction === "query_report") {
     const result = {
       results: sanArr(body["results"], 200),
       count:   sanInt(body["count"], 0, 0, 99_999),
       ts:      Date.now(),
     };
-    await saveData(ctx, resolvedUser, "query_result", result);
+    await saveData(ctx, resolvedUser, "query_report", result);
     return jsonResp({ ok: true, status: "ok", count: result.count }, 200, cors);
   }
 
-  if (rawAction === "plugin_error") {
+  // ── plugin_error_report: forwarded to the AI feed so problems surface
+  //    proactively the next time the AI checks in. ────────────────────────────
+  if (rawAction === "plugin_error_report") {
     const errorEntry = {
       actionName: sanStr(body["actionName"] ?? body["action_name"] ?? "unknown", 80),
       message:    sanStr(body["message"]    ?? body["error"]       ?? "", 500),
@@ -1937,16 +2061,23 @@ async function handlePost(
       username: resolvedUser,
       item:     JSON.stringify(errorEntry),
     });
+    await pushAiFeed(
+      ctx,
+      resolvedUser,
+      "plugin_error_report",
+      `Plugin error in "${errorEntry.actionName}": ${errorEntry.message.substring(0, 120)}`,
+      errorEntry
+    );
     await ctx.runMutation(internal.store.pushLog, {
-      action:  "plugin_error",
+      action:  "plugin_error_report",
       user:    resolvedUser,
       details: errorEntry.message.substring(0, 80),
     });
     return jsonResp({ ok: true, status: "ok" }, 200, cors);
   }
 
-  // ── inject_command: web → plugin single-command injection ────────────────────
-  if (rawAction === "inject_command") {
+  // ── dispatch_command: web → plugin single-command injection ──────────────────
+  if (rawAction === "dispatch_command") {
     const sender = san(body["_user"]         ?? "");
     const target = san(body["_target_user"]  ?? sender);
     const cmd      = sanObj(body["command"]);
@@ -1955,7 +2086,7 @@ async function handlePost(
     if (!target)
       return jsonResp({ ok: false, status: "error", error: '"_user" or "_target_user" is required.', pushed: 0 }, 200, cors);
 
-    const act = sanAction(cmd["action"]);
+    const act = migrateActionName(sanAction(cmd["action"]));
     if (!act)
       return jsonResp({ ok: false, status: "error", error: '"command.action" is required.', pushed: 0 }, 200, cors);
 
@@ -2074,14 +2205,14 @@ async function handlePost(
     );
   }
 
-  // ── Control: multi_target (admin only) ───────────────────────────────────────
-  if (rawAction === "multi_target" && Array.isArray(body["targets"])) {
+  // ── Control: dispatch_multi_target (admin only) ──────────────────────────────
+  if (rawAction === "dispatch_multi_target" && Array.isArray(body["targets"])) {
     if (!verifyAdminToken(request))
-      return errResp(cors, 401, "Admin token required for multi_target.");
+      return errResp(cors, 401, "Admin token required for dispatch_multi_target.");
 
     const targets  = sanArr<unknown>(body["targets"], MAX_MULTI_TARGETS).map((t) => san(String(t)));
     const cmd      = sanObj(body["command"]);
-    const act      = sanAction(cmd["action"]);
+    const act      = migrateActionName(sanAction(cmd["action"]));
     const priority = sanPriority(body["priority"]);
 
     if (!act) return errResp(cors, 400, '"command.action" is required.');
@@ -2141,7 +2272,7 @@ async function handlePost(
 
       if (target && Date.now() - lastPollTs < 8_000) {
         await pushQueue(ctx, target, {
-          action:     "search_result_toolbox",
+          action:     "toolbox_search_report",
           keyword,
           assetType,
           assets:     result.assets.slice(0, 20),
@@ -2195,7 +2326,7 @@ async function handlePost(
     if (!assetId) return errResp(cors, 400, '"asset_id" is required.');
     if (!target)  return errResp(cors, 400, '"_user" is required.');
 
-    const auth = await authorizeCommand(ctx, request, body, sender, target, "insert_rbx_model");
+    const auth = await authorizeCommand(ctx, request, body, sender, target, "insert_asset");
     if (!auth.ok) return errResp(cors, auth.status!, auth.error!);
 
     try {
@@ -2204,7 +2335,7 @@ async function handlePost(
         return errResp(cors, 400, `AssetType "${asset.assetType}" cannot be inserted into Workspace.`);
 
       await pushQueue(ctx, target, {
-        action:        "insert_rbx_model",
+        action:        "insert_asset",
         asset_id:      asset.assetId,
         name:          asset.name,
         parent,
@@ -2330,8 +2461,8 @@ async function handlePost(
     }
   }
 
-  // ── batch_commands ───────────────────────────────────────────────────────────
-  if (rawAction === "batch_commands") {
+  // ── dispatch_batch ───────────────────────────────────────────────────────────
+  if (rawAction === "dispatch_batch") {
     const sender   = san(body["_user"] ?? "");
     const target   = san(body["target"] ?? body["_target_user"] ?? sender);
     const priority = sanPriority(body["priority"]);
@@ -2356,7 +2487,7 @@ async function handlePost(
 
     for (const cmd of safe) {
       if (!cmd?.action) continue;
-      const act = sanAction(cmd.action);
+      const act = migrateActionName(sanAction(cmd.action));
       if (!act) { skipped.push(String(cmd.action)); continue; }
       await pushQueue(ctx, target, {
         ...cmd,
@@ -2370,11 +2501,11 @@ async function handlePost(
       pushed++;
     }
 
-    await ctx.runMutation(internal.store.bumpStats,       { user: sender ?? "web", action: "batch_commands" });
-    await ctx.runMutation(internal.store.pushLog,         { action: "batch_commands", user: sender ?? "web", target, details: JSON.stringify({ count: pushed, skipped, priority }) });
-    await ctx.runMutation(internal.store.pushUserHistory, { username: sender, action: "batch_commands", details: `${pushed} commands → ${target}` });
+    await ctx.runMutation(internal.store.bumpStats,       { user: sender ?? "web", action: "dispatch_batch" });
+    await ctx.runMutation(internal.store.pushLog,         { action: "dispatch_batch", user: sender ?? "web", target, details: JSON.stringify({ count: pushed, skipped, priority }) });
+    await ctx.runMutation(internal.store.pushUserHistory, { username: sender, action: "dispatch_batch", details: `${pushed} commands → ${target}` });
 
-    dispatchWebhook(ctx, sender, "batch_commands", { pushed, target }).catch(() => {});
+    dispatchWebhook(ctx, sender, "dispatch_batch", { pushed, target }).catch(() => {});
 
     const lastPollTs = await ctx.runQuery(internal.store.getLastPoll,     { username: target });
     const qc         = await ctx.runQuery(internal.store.countQueueItems, { username: target });
@@ -2386,7 +2517,7 @@ async function handlePost(
         pushed,
         skipped,
         priority,
-        warning:                 removed.length > 0 ? `${removed.length} admin-only action(s) removed.` : undefined,
+        warning:                 removed.length > 0 ? `${removed.length} admin-gated action(s) removed.` : undefined,
         pluginConnected:         Date.now() - lastPollTs < 8_000,
         queueLength:             qc.total,
         required_plugin_version: REQUIRED_PLUGIN_VERSION,
@@ -2396,8 +2527,8 @@ async function handlePost(
     );
   }
 
-  // ── execute_json / execute_text ───────────────────────────────────────────────
-  if (rawAction === "execute_json" || rawAction === "execute_text") {
+  // ── dispatch_from_text ───────────────────────────────────────────────────────
+  if (rawAction === "dispatch_from_text") {
     const sender   = san(body["_user"] ?? "");
     const target   = san(body["_target_user"] ?? sender);
     const priority = sanPriority(body["priority"]);
@@ -2406,7 +2537,7 @@ async function handlePost(
 
     const isAdmin = verifyAdminToken(request);
     if (!isAdmin && sender !== target)
-      return errResp(cors, 403, "Forbidden: execute cannot target another user.");
+      return errResp(cors, 403, "Forbidden: dispatch_from_text cannot target another user.");
     if (!isAdmin) {
       const auth = await authorizeCommand(ctx, request, body, sender, target, null);
       if (!auth.ok) return errResp(cors, auth.status!, auth.error!);
@@ -2418,15 +2549,15 @@ async function handlePost(
     );
 
     const extracted    = extractCommandsFromText(inputText);
-    const adminActions = getAdminActions();
+    const adminGated   = getAdminGatedActions();
     let pushed = 0;
     const skipped: string[] = [];
 
     for (const cmd of extracted) {
       if (!cmd?.action) continue;
-      const act = sanAction(cmd.action);
+      const act = migrateActionName(sanAction(cmd.action));
       if (!act)                          { skipped.push(String(cmd.action)); continue; }
-      if (!isAdmin && adminActions.has(act)) { skipped.push(`[admin-only] ${act}`); continue; }
+      if (!isAdmin && adminGated.has(act)) { skipped.push(`[admin-only] ${act}`); continue; }
       await pushQueue(ctx, target, {
         ...cmd,
         action:       act,
@@ -2439,8 +2570,8 @@ async function handlePost(
       pushed++;
     }
 
-    await ctx.runMutation(internal.store.bumpStats, { user: sender ?? "web", action: "execute_json" });
-    await ctx.runMutation(internal.store.pushLog,   { action: "execute_json", user: sender ?? "web", target, details: JSON.stringify({ count: pushed, skipped }) });
+    await ctx.runMutation(internal.store.bumpStats, { user: sender ?? "web", action: "dispatch_from_text" });
+    await ctx.runMutation(internal.store.pushLog,   { action: "dispatch_from_text", user: sender ?? "web", target, details: JSON.stringify({ count: pushed, skipped }) });
 
     const lastPollTs = await ctx.runQuery(internal.store.getLastPoll,     { username: target });
     const qc         = await ctx.runQuery(internal.store.countQueueItems, { username: target });
@@ -2461,8 +2592,13 @@ async function handlePost(
   }
 
   // ── Generic single-action dispatch ───────────────────────────────────────────
+  // Covers everything else the plugin actually has registered:
+  // create_instance, create_script, edit_script, set_properties, rename,
+  // delete, parent, list, insert_asset, play_test, run_test, stop_test,
+  // terrain, undo, redo, resolve_mention, run_code / RunCode, ping,
+  // get_info, set_project, get_all_actions, none.
   if (rawAction) {
-    const act      = sanAction(rawAction);
+    const act      = migrateActionName(sanAction(rawAction));
     const priority = sanPriority(body["priority"] ?? body["_priority"]);
     const sender   = san(body["_user"] ?? "");
     const target   = san(body["_target_user"] ?? sender);

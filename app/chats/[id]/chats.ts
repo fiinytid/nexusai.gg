@@ -12,7 +12,11 @@ interface ConvMsg {
 }
 interface Conv { id: string; title?: string; time?: number; msgs: ConvMsg[]; projectId?: string | null }
 interface AttachItem  { type: string; name: string; mime?: string; data?: string; preview?: string; text?: string }
-interface Cmd         { action: string; [key: string]: unknown }
+
+// A command/action exactly as the NEXUS AI Studio plugin's ActionsManager
+// expects it: { action: "<one of the 24 official actions>", ...params }
+interface ActionCmd { action: string; [key: string]: unknown }
+
 interface StepMeta    { code: string; name: string; parent: string; type: string }
 interface AppState {
   credits: number; allConvs: Conv[]; convs: Conv[]
@@ -62,19 +66,6 @@ function sanitizeHtml(html: string): string {
     .replace(/<embed[\s\S]*?>/gi, '')
 }
 
-const LUA_DANGEROUS_PATTERNS = [
-  /require\s*\(\s*['"](http|ftp)/i, /loadstring\s*\(/i, /dofile\s*\(/i,
-  /os\.execute\s*\(/i, /io\.(open|read|write)\s*\(/i, /debug\.getinfo\s*\(/i,
-]
-function sanitizeLuaCode(code: string): { ok: boolean; code: string; reason?: string } {
-  if (!code || typeof code !== 'string') return { ok: false, code: '', reason: 'Empty code' }
-  if (code.length > 150000) return { ok: false, code: '', reason: 'Code too large (max 150KB)' }
-  for (const p of LUA_DANGEROUS_PATTERNS) {
-    if (p.test(code)) return { ok: false, code: '', reason: 'Suspicious code pattern blocked' }
-  }
-  return { ok: true, code: code.replace(/\x00/g, '').replace(/[\x01-\x08\x0B\x0C\x0E-\x1F\x7F]/g, '') }
-}
-
 function validateApiResponse(data: unknown): boolean {
   if (!data || typeof data !== 'object') return false
   if (!('content' in (data as Record<string, unknown>))) return false
@@ -95,7 +86,18 @@ function checkClientRateLimit(key: string, maxPerMin = 30): boolean {
 let SESSION: NexusSession | null = null
 let studioConnected = false
 let studioPollTimer: ReturnType<typeof setInterval> | null = null
-const API_URL = 'https://fine-setter-131.convex.site'
+// ── NEXUS AI STUDIO PLUGIN BACKEND (Convex) ───────────────────────────────────
+// All URLs the Studio plugin's backend could be running at — e.g. one for
+// local/dev testing and one for the live production deployment. To switch
+// environments, just change NEXUS_API_ENV below (or edit the array entries);
+// every fetch() in this file reads from API_URL, which always resolves to
+// NEXUS_API_URLS[NEXUS_API_ENV].
+const NEXUS_API_URLS = [
+  'https://fine-setter-131.convex.site', // [0] production
+  'https://brazen-lapwing-697.convex.site', // [1] development
+]
+const NEXUS_API_ENV = 0 // index into NEXUS_API_URLS — 0 = production, 1 = development
+const API_URL = NEXUS_API_URLS[NEXUS_API_ENV] ?? NEXUS_API_URLS[0]
 
 function esc(s: unknown): string {
   return String(s || '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;')
@@ -118,17 +120,18 @@ function hideLoader(): void {
   l.classList.add('hide'); setTimeout(() => { l.style.display = 'none' }, 500)
 }
 
+// Strips fenced code blocks and JSON action blocks from AI text before it
+// is shown to the user (the chat bubble should read like a normal reply,
+// not show the raw action payloads that were sent to Studio).
 function stripAllCode(text: string): string {
   if (!text) return ''
   text = text.replace(/```[a-zA-Z]*\n[\s\S]*?```/g, '').replace(/```[\s\S]*?```/g, '')
-  text = text.replace(/^\s*call:[a-z_]+\([\s\S]*?\)\s*$/gm, '')
-  text = text.replace(/\b(?:inject_script|create_gui|create_remote|batch_commands|edit_script|create_script|create_local_script)\s*\(\{[\s\S]*?\}\)/g, '')
   return text.replace(/\n{3,}/g, '\n\n').trim()
 }
 
 function cleanAIResponse(text: string): string {
   if (!text) return ''
-  text = text.replace(/```json[\s\S]*?```/gi, '').replace(/^\s*call:[a-z_]+\([\s\S]*?\)\s*$/gm, '')
+  text = text.replace(/```json[\s\S]*?```/gi, '')
   return text.replace(/\n{3,}/g, '\n\n').trim()
 }
 
@@ -159,6 +162,15 @@ function _isAbortError(e: unknown): boolean {
   if (!e) return false
   const err = e as { name?: string; message?: string }
   return err.name === 'AbortError' || String(err.message || '').includes('AbortError')
+}
+
+// Generates a short, unique-enough id used to make credit deductions
+// idempotent (so a retried network call never double-charges).
+function _genRequestId(): string {
+  try {
+    return Array.from(crypto.getRandomValues(new Uint8Array(12)))
+      .map((b) => b.toString(16).padStart(2, '0')).join('')
+  } catch { return Date.now().toString(36) + Math.random().toString(36).slice(2) }
 }
 
 function safeMarked(md: string): string {
@@ -237,6 +249,7 @@ const _DOCS_KEYWORDS = [
   'image','scroll','viewport','color','material','mesh','texture','decal',
   'light','fire','smoke','timer','countdown','round','game mode','lobby',
   'match','session','admin','ban','kick','mute','chat','message','broadcast',
+  'terrain','fillblock','fillball','fillregion',
 ]
 function _shouldSearchDocs(txt: string): boolean {
   if (!txt || txt.length < 5) return false
@@ -282,7 +295,7 @@ const UI = {
   dailyAlready:   'Already claimed today.',
   dailyNext:      'Next: ',
   retrying:       'Retrying...',
-  injecting:      'Injecting to Studio...',
+  injecting:      'Sending to Studio...',
   installSteps: [
     'Download from <a href="https://create.roblox.com/store/asset/91870814099475/NEXUS-AI" target="_blank" style="color:var(--cyan)">Creator Store</a>',
     'Save to: <code>C:\\Users\\[Name]\\AppData\\Local\\Roblox\\Plugins\\</code>',
@@ -422,7 +435,9 @@ async function syncToServer(): Promise<void> {
       user: (SESSION.user.username || '').toLowerCase(),
       robloxId: SESSION.user.robloxId,
       data: {
-        // NEVER send credits from client — server owns credits
+        // NEVER send credits from client in a regular sync — server owns
+        // credits. Actual usage deductions go exclusively through
+        // deductCredits() / the dedicated "deduct-credits" action.
         plan: S.plan, model: S.model, lastClaim: S.lastClaim,
         convs: convsTrimmed, projects: S.projects || [], lastSync: Date.now(),
       },
@@ -459,7 +474,7 @@ function startAutoSync(): void {
   _syncTimer = setInterval(() => {
     if (document.hidden) return
     if (!_syncInProgress && !_syncDebounceTimer) syncToServer()
-  }, 180000) // every 3 min (was 5 min — more frequent to keep credits fresh)
+  }, 180000) // every 3 min
 }
 
 async function loadS(): Promise<void> {
@@ -587,6 +602,59 @@ function updatePlayTestUI(): void {
 }
 
 // ── CREDITS ───────────────────────────────────────────────────────────────────
+// Atomically deducts `cost` credits on the SERVER for the request identified
+// by `requestId`, then applies the server's authoritative response to local
+// state. This is what fixes the "credits bounce back to old value" bug:
+// previously the deduction only ever happened in local memory (S.credits -=
+// cost) and was never sent anywhere, so the very next syncToServer() call
+// would overwrite it with the untouched database value. Now the database
+// value itself is updated first, and the UI reflects what the server
+// confirms — so there is nothing left for a later sync to "undo".
+async function deductCredits(cost: number): Promise<boolean> {
+  if (!SESSION || cost <= 0) return true
+  if (isOwner() || isAdmin()) return true
+
+  const requestId = _genRequestId()
+  try {
+    const ctrl = new AbortController(); const tid = setTimeout(() => ctrl.abort(), 10000)
+    const r = await fetch('/api/sync', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'X-Nexus-Nonce': _csrfNonce },
+      signal: ctrl.signal,
+      body: JSON.stringify({
+        action: 'deduct-credits',
+        target: (SESSION.user.username || '').toLowerCase(),
+        cost,
+        requestId,
+      }),
+    })
+    clearTimeout(tid)
+    const d = await r.json().catch(() => null) as { success?: boolean; credits?: number; error?: string } | null
+
+    if (d && typeof d.credits === 'number') {
+      // Server is authoritative — adopt its number directly, do not layer
+      // any further local subtraction on top of it.
+      S.credits = d.credits
+      updateCreds()
+      if (SESSION) {
+        SESSION.data.credits = S.credits
+        try { localStorage.setItem('nexus_session', JSON.stringify(SESSION)) } catch { }
+      }
+    }
+
+    if (!r.ok || !d?.success) {
+      if (d?.error === 'insufficient_credits') toast(UI.creditsExhausted, 'var(--pink)')
+      return false
+    }
+    return true
+  } catch (e) {
+    console.warn('[NEXUS deductCredits] error:', (e as Error).message)
+    // Network failure: do not touch S.credits — better to show a stale
+    // (but real) balance than a fabricated optimistic one.
+    return false
+  }
+}
+
 function updateCreds(): void {
   const _cr = parseFloat(String(S.credits || 0))
   const v = (isOwner() || isAdmin()) ? '\u221e' : (_cr >= 100 ? _cr.toFixed(0) : _cr.toFixed(2))
@@ -668,37 +736,59 @@ async function checkStudio(): Promise<void> {
 async function retryStudio(): Promise<void> { _pollFailCount = 0; toast(UI.reconnectToast); await checkStudio() }
 
 // ══════════════════════════════════════════════════════════════════════════════
-// PART 4 — JSON PARSING PIPELINE
+// PART 4 — ACTION PARSING (24 official NEXUS AI Studio plugin actions)
 // ══════════════════════════════════════════════════════════════════════════════
+//
+// The AI is instructed (via the system prompt) to express every Studio
+// command as a fenced ```json block containing either:
+//   { "action": "<name>", ...params }
+// or a batch:
+//   { "actions": [ { "action": "<name>", ...params }, ... ] }
+//
+// This is the exact shape the plugin's ActionsManager:dispatch() /
+// :dispatchBatch() expect — see Features/ActionsManager in the Studio
+// plugin. There is intentionally no support left for the old free-form
+// Lua-block injection or call-style syntax (inject_script(...), etc.) —
+// those actions no longer exist in the plugin and have been removed.
 
+// The 24 actions the Studio plugin's ActionsManager actually registers.
+// Keeping this list in sync with Features/ActionsManager.lua's
+// ACTION_MODULES + built-in inline handlers is what lets the client
+// validate/label actions without guessing at names that no longer exist.
+const NEXUS_ACTIONS = [
+  'create_instance', 'create_script', 'edit_script', 'read_script',
+  'set_properties', 'rename', 'delete', 'parent', 'list',
+  'insert_asset', 'play_test', 'terrain', 'undo', 'redo',
+  'resolve_mention', 'RunCode', 'run_code', 'get_output',
+  'ping', 'get_info', 'set_project', 'get_all_actions',
+  'run_test', 'stop_test', 'none',
+] as const
+
+const _NEXUS_ACTIONS_SET = new Set<string>(NEXUS_ACTIONS)
+
+function isKnownAction(name: string): boolean {
+  return _NEXUS_ACTIONS_SET.has(name)
+}
+
+// Strips Lua engine-call syntax (e.g. Vector3.new(1,2,3)) down to plain
+// JSON-compatible arrays/strings, in case a model still emits them despite
+// instructions. Harmless no-op for clean JSON.
 function _stripLuaExpressions(str: string): string {
   if (typeof str !== 'string') return str
-  str = str.replace(/UDim2\.new\s*\(\s*([-\d.\s,]+)\s*\)/g, (_, args) => '[' + args.split(',').map((p: string) => parseFloat(p.trim()) || 0).join(',') + ']')
   str = str.replace(/Vector3\.new\s*\(\s*([-\d.\s,]+)\s*\)/g, (_, args) => '[' + args.split(',').map((p: string) => parseFloat(p.trim()) || 0).join(',') + ']')
   str = str.replace(/Color3\.fromRGB\s*\(\s*([\d.\s,]+)\s*\)/g, (_, args) => '[' + args.split(',').map((p: string) => parseInt(p.trim()) || 0).join(',') + ']')
   str = str.replace(/Color3\.new\s*\([^)]*\)/g, 'null')
-  str = str.replace(/Vector2\.new\s*\(\s*([-\d.\s,]+)\s*\)/g, (_, args) => '[' + args.split(',').map((p: string) => parseFloat(p.trim()) || 0).join(',') + ']')
-  str = str.replace(/UDim\.new\s*\(\s*([-\d.\s,]+)\s*\)/g, (_, args) => '[' + args.split(',').map((p: string) => parseFloat(p.trim()) || 0).join(',') + ']')
-  str = str.replace(/BrickColor\.new\s*\(\s*"([^"]+)"\s*\)/g, '"$1"').replace(/BrickColor\.new\s*\(\s*'([^']+)'\s*\)/g, '"$1"')
-  str = str.replace(/Enum\.[A-Za-z]+\.([A-Za-z]+)/g, '"$1"')
-  str = str.replace(/CFrame\.[a-zA-Z]*\s*\([^)]*\)/g, 'null')
-  str = str.replace(/NumberRange\.new\s*\([^)]*\)/g, 'null').replace(/NumberSequence\.new\s*\([^)]*\)/g, 'null').replace(/ColorSequence\.new\s*\([^)]*\)/g, 'null')
-  str = str.replace(/\b[A-Z][a-zA-Z]+\.[a-zA-Z]+\s*\([^)]{0,200}\)/g, 'null')
   return str
 }
 
-function _normalizeCmd(obj: unknown): Cmd | null {
+function _normalizeCmd(obj: unknown): ActionCmd | null {
   if (!obj || typeof obj !== 'object' || Array.isArray(obj)) return null
   const o = obj as Record<string, unknown>
-  const actionName = String(o.action || o.command || o.type || '').trim()
+  const actionName = String(o.action || '').trim()
   if (!actionName || actionName.length === 0 || actionName.length > 80) return null
-  if (!/^[a-z_][a-z0-9_]*$/.test(actionName)) return null
-  const result: Cmd = { action: actionName }
-  if (o.params && typeof o.params === 'object' && !Array.isArray(o.params)) {
-    Object.keys(o.params as Record<string, unknown>).forEach((k) => { if (k !== 'action' && k !== 'command' && k !== 'type') result[k] = (o.params as Record<string, unknown>)[k] })
-  }
-  Object.keys(o).forEach((k) => { if (k !== 'action' && k !== 'command' && k !== 'type' && k !== 'params') result[k] = o[k] })
-  if (result.code && !result.source) { result.source = result.code; delete result.code }
+  if (!isKnownAction(actionName)) return null
+  const result: ActionCmd = { action: actionName }
+  Object.keys(o).forEach((k) => { if (k !== 'action') result[k] = o[k] })
   return result
 }
 
@@ -712,7 +802,6 @@ function _jsonSanitize(str: string): string {
     if (c === '"') { inStr = !inStr; out += c; i++; continue }
     if (!inStr && c === '/' && str[i+1] === '/') { while (i < str.length && str[i] !== '\n') i++; continue }
     if (!inStr && c === '/' && str[i+1] === '*') { i += 2; while (i < str.length && !(str[i] === '*' && str[i+1] === '/')) i++; i += 2; continue }
-    if (!inStr && c === '-' && str[i+1] === '-') { while (i < str.length && str[i] !== '\n') i++; continue }
     if (inStr) {
       if (c === '\n') { out += '\\n'; i++; continue } if (c === '\r') { out += '\\r'; i++; continue }
       if (c === '\t') { out += '\\t'; i++; continue } if (code < 0x20) { out += '\\u' + ('000' + code.toString(16)).slice(-4); i++; continue }
@@ -749,313 +838,111 @@ function _tryParseJson(raw: string): unknown {
   return null
 }
 
-function _parseBareArgs(argsStr: string): Record<string, unknown> | null {
-  if (!argsStr?.trim()) return null
-  try {
-    let json = '{' + argsStr.trim() + '}'
-    json = json.replace(/([{,]\s*)([a-zA-Z_][a-zA-Z0-9_]*)(\s*:)/g, '$1"$2"$3')
-    json = json.replace(/:\s*'([^'\\]*(?:\\.[^'\\]*)*)'/g, ':"$1"')
-    json = _stripLuaExpressions(json)
-    const result = _tryParseJson(json)
-    if (result && typeof result === 'object' && !Array.isArray(result)) return result as Record<string, unknown>
-    const result2 = _tryParseJson(_jsonRepair(json))
-    if (result2 && typeof result2 === 'object' && !Array.isArray(result2)) return result2 as Record<string, unknown>
-  } catch { }
-  return null
-}
-
-const _LUA_ACTION_PATTERNS = [
-  /^\s*create_remote\s*\(/m, /^\s*inject_script\s*\(/m, /^\s*create_gui\s*\(/m,
-  /^\s*create_frame\s*\(/m, /^\s*batch_commands\s*\(/m, /^\s*create_script\s*\(/m,
-  /^\s*create_local_script\s*\(/m, /^\s*create_module\s*\(/m, /^\s*edit_script\s*\(/m,
-  /^\s*create_part\s*\(/m, /^\s*set_property\s*\(/m, /^\s*create_text_label\s*\(/m,
-  /^\s*inject_quick_script\s*\(/m, /^\s*set_lighting\s*\(/m, /^\s*create_npc\s*\(/m,
-]
-
-function isActionCallBlock(code: string): boolean {
-  let count = 0
-  for (const p of _LUA_ACTION_PATTERNS) { if (p.test(code)) { count++; if (count >= 2) return true } }
-  if (count === 1) {
-    const hasRealLua = /\bgame:GetService\b|\blocal\s+\w+\s*=\s*Instance\.new\b|\bPlayers\.LocalPlayer\b|\bscript\.Parent\b|\btask\.spawn\b|\btask\.wait\b/.test(code)
-    if (!hasRealLua) return true
-  }
-  return false
-}
-
-function parseLuaBlocks(text: string): string[] {
-  const blocks: string[] = []
-  const re = /```(?:lua|luau)\s*([\s\S]*?)```/gi; let m: RegExpExecArray | null
+// Parses every ```json fenced block in the AI's reply, extracting valid
+// NEXUS AI action commands (single `{action:...}` objects or
+// `{actions:[...]}` batches). Anything that doesn't resolve to one of the
+// 24 known action names is silently dropped.
+function parseActionBlocks(text: string): ActionCmd[] {
+  const cmds: ActionCmd[] = []
+  const re = /```(?:json|JSON|Json)\s*\n?([\s\S]*?)```/g
+  let m: RegExpExecArray | null
   while ((m = re.exec(text)) !== null) {
-    const c = m[1].trim(); if (c.length < 10) continue
-    if (isActionCallBlock(c)) continue
-    if (/--\s*Command\s*Batch\s*Start/i.test(c)) continue
-    if (/^\s*batch_commands\s*\(\s*\{/.test(c)) continue
-    if (/^\s*\{\s*["']?action["']?\s*[=:]\s*["']/.test(c)) continue
-    if (/^\s*(local\s+\w+\s*=\s*)?Instance\.new\(["']Remote(Event|Function)["']\)/.test(c) && c.split('\n').filter((l) => l.trim() && !l.trim().startsWith('--')).length <= 6) continue
-    blocks.push(c)
-  }
-  return blocks
-}
+    const raw = m[1].trim()
+    if (!raw || raw.length < 5 || raw.length > 50000) continue
+    const parsed = _tryParseJson(raw)
+    if (!parsed) continue
 
-function parseJsonBlocks(text: string): Cmd[] {
-  const cmds: Cmd[] = []
-  const re = /```(?:json|JSON|Json)\s*\n?([\s\S]*?)```/g; let m: RegExpExecArray | null
-  while ((m = re.exec(text)) !== null) {
-    const raw = m[1].trim(); if (!raw || raw.length < 5 || raw.length > 50000) continue
-    if (/^\s*(local\s+|function\s+[a-zA-Z]|game:Get|return\s+\{)/.test(raw) && !/"action"/.test(raw) && !/"command"/.test(raw)) continue
-    let processed = _stripLuaExpressions(raw)
-    processed = processed.replace(/([{,\[]\s*)([a-zA-Z_][a-zA-Z0-9_]*)(\s*=\s*(?![=>]))/g, '$1"$2": ')
-    const fnMatch = processed.match(/^\s*([a-z_][a-z0-9_]{2,49})\s*\(\s*(\{[\s\S]+\})\s*\)\s*;?\s*$/)
-    if (fnMatch) {
-      const fnName = fnMatch[1], bodyStr = fnMatch[2], fnParsed = _tryParseJson(bodyStr)
-      if (fnParsed && typeof fnParsed === 'object') {
-        if (fnName === 'batch_commands') {
-          const fp = fnParsed as Record<string, unknown>
-          const batchArr = fp.commands || fp.actions || (Array.isArray(fnParsed) ? fnParsed : null)
-          if (Array.isArray(batchArr)) { batchArr.forEach((sub) => { const norm = _normalizeCmd(sub); if (norm) cmds.push(norm) }); continue }
-        } else { const fnCmd = Object.assign({ action: fnName }, Array.isArray(fnParsed) ? {} : fnParsed); const norm = _normalizeCmd(fnCmd); if (norm) { cmds.push(norm); continue } }
-      }
-    }
-    const parsed = _tryParseJson(processed); if (!parsed) continue
     let items: unknown[] = []
-    if (Array.isArray(parsed)) items = parsed
-    else {
+    if (Array.isArray(parsed)) {
+      items = parsed
+    } else {
       const p = parsed as Record<string, unknown>
-      if (p.batch_commands && Array.isArray(p.batch_commands)) items = p.batch_commands
-      else if (p.commands && Array.isArray(p.commands)) items = p.commands
-      else if (p.actions && Array.isArray(p.actions)) items = p.actions
-      else if (p.action || p.command || p.type) items = [parsed]
-      else {
-        let foundArr = false
-        Object.keys(p).forEach((k) => { if (!foundArr && Array.isArray(p[k]) && (p[k] as unknown[]).length > 0) { const first = (p[k] as unknown[])[0]; if (first && typeof first === 'object' && ((first as Record<string, unknown>).action || (first as Record<string, unknown>).command || (first as Record<string, unknown>).type)) { items = p[k] as unknown[]; foundArr = true } } })
-        if (!foundArr && Object.keys(p).length > 0) Object.keys(p).forEach((k) => { if (/^[a-z_][a-z0-9_]*$/.test(k) && typeof p[k] === 'object' && !Array.isArray(p[k])) { const candidate = Object.assign({ action: k }, p[k] as Record<string, unknown>); if (_normalizeCmd(candidate)) items.push(candidate) } })
-      }
+      if (Array.isArray(p.actions)) items = p.actions
+      else if (p.action) items = [parsed]
     }
+
     items.forEach((item) => {
-      if (!item || typeof item !== 'object') return
-      const it = item as Record<string, unknown>
-      if (!Array.isArray(item)) {
-        if (it.batch_commands && Array.isArray(it.batch_commands)) { (it.batch_commands as unknown[]).forEach((sub) => { const norm = _normalizeCmd(sub); if (norm) cmds.push(norm) }); return }
-        if (it.commands && Array.isArray(it.commands)) { (it.commands as unknown[]).forEach((sub) => { const norm = _normalizeCmd(sub); if (norm) cmds.push(norm) }); return }
-      }
-      const norm = _normalizeCmd(item); if (norm) cmds.push(norm)
+      const norm = _normalizeCmd(item)
+      if (norm) cmds.push(norm)
     })
   }
   return cmds
 }
 
-const _NEXUS_ACTION_FNS = [
-  'create_script','create_local_script','create_module','inject_script','edit_script',
-  'read_script','read_script_lines','rename_script','duplicate_script','disable_script','enable_script',
-  'batch_inject','check_list','create_remote','set_property','set_properties','batch_set_property',
-  'get_properties','set_service_property','get_service_properties',
-  'delete','clone_object','rename_object','batch_rename','parent_to','batch_parent',
-  'select_object','select_multiple','lock_object','unlock_object','set_visible','toggle_visible',
-  'toggle_anchored','set_primary_part','copy_properties','replace_all',
-  'add_collection_tag','remove_collection_tag','get_tags','find_tagged',
-  'create_folder','create_instance','create_value','create_configuration',
-  'create_part','create_model','move_object','rotate_object','resize_object',
-  'group_parts','ungroup_model','align_objects','snap_to_grid','randomize_colors',
-  'batch_create','weld_model','scale_model','anchor_model','unanchor_model',
-  'anchor_all','unanchor_all','break_joints',
-  'create_gui','create_frame','create_scrolling_frame','create_canvas_group',
-  'create_text_label','create_text_button','create_text_box','create_image_label','create_image_button',
-  'create_proximity_prompt','create_click_detector',
-  'create_ui_list_layout','create_ui_grid_layout','create_ui_padding','create_ui_corner',
-  'create_ui_stroke','create_ui_gradient','create_ui_size_constraint','create_ui_aspect_ratio','create_ui_scale',
-  'add_highlight','remove_highlight','add_drag_detector',
-  'set_lighting','create_sky','create_atmosphere','add_effect','remove_effect',
-  'change_baseplate','set_gravity','set_camera',
-  'fill_terrain','replace_terrain','clear_terrain',
-  'terraform_flat','terraform_hills','terraform_island','terraform_mountain','create_river',
-  'create_fire','remove_fire','create_smoke','remove_smoke','create_sparkles',
-  'create_light','create_explosion','create_force_field','create_particle','create_trail',
-  'create_sound','place_decal','place_texture',
-  'create_weld','create_attachment','create_motor6d','create_constraint',
-  'create_spawn_location','create_seat','create_team','create_animation',
-  'create_animation_controller','create_tool','create_npc',
-  'create_wall','create_platform','create_tree','create_tycoon_plot','create_checkpoint',
-  'insert_model','play_test','stop_test','run_test',
-  'scan_workspace','workspace_stats','get_descendants','list_children',
-  'find_by_class','count_instances','search_instances','resolve_mention',
-  'batch_commands','get_place_info','get_studio_theme','print_output',
-  'ping','get_info','request_scan','clear_workspace','undo','redo',
-  'save_waypoint','get_all_actions','set_project','run_lua','none',
-  'create_billboard_gui','create_scroll_frame','create_viewport_frame',
-  'delete_object','get_theme','inject_quick_script',
-]
+// Fallback: if no fenced ```json block was found at all, try to locate a
+// bare JSON object/array containing an "action" key anywhere in the text.
+function parseAllCommands(text: string): ActionCmd[] {
+  const cmds = parseActionBlocks(text)
+  if (cmds.length > 0) return cmds
 
-function parseCallBlocks(text: string): Cmd[] {
-  const cmds: Cmd[] = []
-  const SKIP_FNS = new Set(['function','require','print','warn','error','typeof','instanceof',
-    'Object','Array','String','Number','Boolean','Math','JSON','Promise',
-    'fetch','console','setTimeout','setInterval','parseInt','parseFloat',
-    'task','game','workspace','script','Instance','pcall','xpcall'])
-  let luaActionText = ''
-  const reLua = /```(?:lua|luau)\s*([\s\S]*?)```/gi; let mLua: RegExpExecArray | null
-  while ((mLua = reLua.exec(text)) !== null) {
-    const block = mLua[1].trim()
-    if (isActionCallBlock(block)) { _extractActionsFromLuaBlock(block).forEach((cmd) => cmds.push(cmd)); luaActionText += '\n' + block }
-  }
-  const textNoBlocks = text.replace(/```[\s\S]*?```/g, ''); const searchText = textNoBlocks + '\n' + luaActionText
-  const re1 = /call:([a-z_]+)\(\s*(\{[\s\S]+?\})\s*\)/g; let m: RegExpExecArray | null
-  while ((m = re1.exec(searchText)) !== null) {
-    const params = _tryParseJson(_stripLuaExpressions(m[2]))
-    if (m[1] && params) { const cmd = Object.assign({ action: m[1] }, params); const norm = _normalizeCmd(cmd); if (norm) cmds.push(norm) }
-  }
-  const re2 = /\b([a-z_][a-z0-9_]{2,49})\s*\(\s*(\{[\s\S]*?\})\s*\)/g
-  while ((m = re2.exec(textNoBlocks)) !== null) {
-    const fnName = m[1]; if (SKIP_FNS.has(fnName)) continue
-    const params2 = _tryParseJson(_stripLuaExpressions(m[2])); if (!params2 || typeof params2 !== 'object') continue
-    const p2 = params2 as Record<string, unknown>
-    if (fnName === 'batch_commands') { const batchCmds = p2.commands || p2.actions || (Array.isArray(params2) ? params2 : null); if (Array.isArray(batchCmds)) batchCmds.forEach((sub) => { const norm = _normalizeCmd(sub); if (norm) cmds.push(norm) }) }
-    else { const cmd2 = Object.assign({ action: fnName }, Array.isArray(params2) ? {} : params2); const norm2 = _normalizeCmd(cmd2); if (norm2) cmds.push(norm2) }
-  }
-  const reBare = new RegExp(`\\b(${_NEXUS_ACTION_FNS.join('|')})\\s*\\(([^)]{0,3000})\\)`, 'g')
-  while ((m = reBare.exec(textNoBlocks)) !== null) {
-    const fnNameBare = m[1], argsRaw = m[2].trim()
-    if (argsRaw.startsWith('{') || argsRaw.length < 4) continue
-    const paramsBare = _parseBareArgs(argsRaw); if (!paramsBare) continue
-    const cmdBare = Object.assign({ action: fnNameBare }, paramsBare); const normBare = _normalizeCmd(cmdBare)
-    if (normBare && !cmds.some((c) => c.action === normBare.action && (c.name || '') === (normBare.name || ''))) cmds.push(normBare)
-  }
-  const seen: Record<string, boolean> = {}
-  return cmds.filter((cmd) => { const key = (cmd.action || '') + '|' + (cmd.name || '') + '|' + (cmd.parent || ''); if (seen[key]) return false; seen[key] = true; return true })
-}
-
-function _extractActionsFromLuaBlock(blockCode: string): Cmd[] {
-  const cmds: Cmd[] = []; let pos = 0; const code = blockCode
-  const SKIP_FNS = new Set(['function','require','print','warn','error','local','if','for','while','end','do','then','return','and','or','not','true','false','nil','table','string','math','tostring','tonumber','type','pairs','ipairs','next','select','unpack','pcall','xpcall','rawget','rawset','task','game','workspace','script'])
-  while (pos < code.length) {
-    const searchStr = code.slice(pos); const re = /\b([a-z_][a-z0-9_]{3,49})\s*\(\s*\{/g; re.lastIndex = 0
-    const m = re.exec(searchStr); if (!m) break
-    const fnName = m[1]; if (SKIP_FNS.has(fnName)) { pos += m.index + m[0].length; continue }
-    const braceStart = pos + m.index + m[0].length - 1
-    let depth = 0, inStr = false, strChar = '', inLongStr = false, bodyEnd = -1
-    for (let bi = braceStart; bi < code.length; bi++) {
-      const ch = code[bi]
-      if (!inStr && ch === '[' && code[bi+1] === '[') { inLongStr = true; bi += 1; continue }
-      if (inLongStr && ch === ']' && code[bi+1] === ']') { inLongStr = false; bi += 1; continue }
-      if (inLongStr) continue
-      if (!inStr && (ch === '"' || ch === "'")) { inStr = true; strChar = ch; continue }
-      if (inStr && ch === strChar && code[bi-1] !== '\\') { inStr = false; continue }
-      if (inStr) continue
-      if (ch === '{') depth++; else if (ch === '}') { depth--; if (depth === 0) { bodyEnd = bi; break } }
-    }
-    if (bodyEnd < 0) { pos += m.index + m[0].length; continue }
-    const body = code.slice(braceStart, bodyEnd + 1)
-    if (body.indexOf('[[') >= 0) {
-      const nameM = body.match(/name\s*=\s*["']([^"']+)["']/)
-      const parentM = body.match(/parent\s*=\s*["']([^"']+)["']/)
-      const typeM = body.match(/script_type\s*=\s*["']([^"']+)["']/)
-      const srcM = body.match(/source\s*=\s*\[\[([^\]]*(?:\][^\]][^\]]*)*)\]\]/)
-      if (fnName === 'inject_script' && nameM) {
-        const cmd: Cmd = { action: 'inject_script', name: nameM[1], parent: parentM ? parentM[1] : 'ServerScriptService', script_type: typeM ? typeM[1] : 'Script', source: srcM ? srcM[1].trim() : '' }
-        if (cmd.source && String(cmd.source).length > 5) cmds.push(cmd)
-      }
-    } else {
-      const stripped = _stripLuaExpressions(body)
-      const parsed2 = _tryParseJson(stripped) || _tryParseJson(_jsonRepair(stripped))
-      if (parsed2 && typeof parsed2 === 'object' && !Array.isArray(parsed2)) { const cmd2 = Object.assign({ action: fnName }, parsed2); const norm = _normalizeCmd(cmd2); if (norm) cmds.push(norm) }
-    }
-    pos = bodyEnd + 1
+  const jsonMatches = text.match(/(\[[\s\S]*?"action"[\s\S]*?\]|\{[\s\S]*?"action"[\s\S]*?\})/g)
+  if (jsonMatches) {
+    jsonMatches.forEach((raw) => {
+      if (raw.length > 30000) return
+      const parsed = _tryParseJson(raw.trim())
+      if (!parsed) return
+      const items = Array.isArray(parsed) ? parsed : [parsed]
+      items.forEach((item) => {
+        const norm = _normalizeCmd(item)
+        if (norm && !cmds.some((e) => e.action === norm.action && JSON.stringify(e) === JSON.stringify(norm))) {
+          cmds.push(norm)
+        }
+      })
+    })
   }
   return cmds
 }
 
-function parseAllCommands(text: string): Cmd[] {
-  const cmds = parseJsonBlocks(text); const callCmds = parseCallBlocks(text)
-  callCmds.forEach((cmd) => { if (!cmds.some((e) => e.action === cmd.action && (e.name || '') === (cmd.name || ''))) cmds.push(cmd) })
-  if (cmds.length === 0) {
-    const jsonMatches = text.match(/(\[[\s\S]*?"action"[\s\S]*?\]|\{[\s\S]*?"action"[\s\S]*?\})/g)
-    if (jsonMatches) jsonMatches.forEach((raw) => { if (raw.length > 30000) return; const parsed = _tryParseJson(raw.trim()); if (!parsed) return; const items = Array.isArray(parsed) ? parsed : [parsed]; items.forEach((item) => { if (!item || !(item as Record<string, unknown>).action) return; const norm = _normalizeCmd(item); if (norm && !cmds.some((e) => e.action === norm.action && (e.name || '') === (norm.name || ''))) cmds.push(norm) }) })
+// Human-readable one-line label for a parsed action, used in the
+// "thinking steps" UI and the final "Built in Studio" summary list.
+function makeStepLabel(cmd: ActionCmd): string | null {
+  const a = cmd.action || ''
+  const nm = String(cmd.name || cmd.target || '')
+  switch (a) {
+    case 'create_instance':  return `Create ${String(cmd.class_name || 'Instance')}: ${nm || '?'}`
+    case 'create_script':    return `Create ${String(cmd.type || cmd.script_type || 'Script')}: ${nm || '?'}`
+    case 'edit_script':      return `Edit script: ${nm}`
+    case 'read_script':      return `Read script: ${nm}`
+    case 'set_properties':   return `Set property: ${nm}${cmd.property ? '.' + String(cmd.property) : ''}`
+    case 'rename':            return `Rename: ${nm} → ${String(cmd.new_name || '?')}`
+    case 'delete':            return `Delete: ${nm || String(cmd.class || '')}`
+    case 'parent':             return `Reparent: ${nm} → ${String(cmd.parent || '?')}`
+    case 'list':                return 'List instances/scripts'
+    case 'insert_asset':     return `Insert asset: ${String(cmd.asset_id || cmd.id || '?')}`
+    case 'play_test':
+    case 'run_test':           return UI.testRunning
+    case 'stop_test':          return 'Stop play test'
+    case 'terrain':            return `Terrain: ${String(cmd.op || 'fill_block')}`
+    case 'undo':                return 'Undo last change'
+    case 'redo':                return 'Redo last change'
+    case 'resolve_mention':  return `Resolve @${nm}`
+    case 'RunCode':
+    case 'run_code':            return `RunCode: ${String(cmd.mode || 'pipeline')}`
+    case 'get_output':        return 'Read Studio output log'
+    case 'ping':                return 'Health check'
+    case 'get_info':           return 'Get plugin info'
+    case 'set_project':       return 'Set project info'
+    case 'get_all_actions':  return 'List available actions'
+    case 'none':                return null
+    default:                     return a + (nm ? ': ' + nm : '')
   }
-  if (cmds.length === 0) {
-    const batchMatch = text.match(/"commands"\s*:\s*(\[[\s\S]*?\])/)
-    if (batchMatch) { const batchParsed = _tryParseJson(batchMatch[1]); if (Array.isArray(batchParsed)) batchParsed.forEach((item) => { const norm = _normalizeCmd(item); if (norm && !cmds.some((e) => e.action === norm.action && (e.name || '') === (norm.name || ''))) cmds.push(norm) }) }
-  }
-  if (cmds.length === 0) {
-    const inlineRe = new RegExp(`\\b(${_NEXUS_ACTION_FNS.join('|')})\\s*\\([\\s\\S]{0,500}?\\)`, 'g'); let mInline: RegExpExecArray | null
-    while ((mInline = inlineRe.exec(text)) !== null) {
-      const fnInline = mInline[1]; const argsInline = mInline[0].slice(fnInline.length).replace(/^\s*\(/, '').replace(/\)\s*$/, '').trim()
-      let parsed3: unknown = null
-      if (argsInline.startsWith('{')) { parsed3 = _tryParseJson(_stripLuaExpressions(argsInline)) } else { parsed3 = _parseBareArgs(argsInline) }
-      if (parsed3 && typeof parsed3 === 'object') { const cmdInline = Object.assign({ action: fnInline }, parsed3); const normInline = _normalizeCmd(cmdInline); if (normInline && !cmds.some((e) => e.action === normInline.action && (e.name || '') === (normInline.name || ''))) cmds.push(normInline) }
-    }
-  }
-  return cmds
-}
-
-function detectScriptParent(code: string): { parent: string; type: string } {
-  const c = code || '', first200 = c.slice(0, 200), trimmed = c.trim()
-  const typeHint = c.match(/--\s*script_type:\s*(\w+)/i); const parentHint = c.match(/--\s*parent:\s*([\w.]+)/i)
-  let type = 'Script', parent = 'ServerScriptService'
-  const isModule = (/^\s*local\s+\w+\s*=\s*\{\s*\}/.test(trimmed) && /\breturn\s+\w+\s*$/.test(trimmed)) || /^return\s*\{/.test(trimmed) || /^--\s*@?(module|modulescript)/im.test(first200)
-  if (isModule) { parent = 'ReplicatedStorage'; type = 'ModuleScript' }
-  else if (/Players\.LocalPlayer|PlayerGui|LocalUserInputService|UserInputService|StarterPlayerScripts/i.test(c) || (/ScreenGui|StarterGui/i.test(c) && !/ServerScriptService|DataStoreService|PlayerAdded/i.test(c))) {
-    if (/ReplicatedFirst|LoadingScreen_Client/i.test(c) || /ReplicatedFirst/i.test(first200)) { parent = 'ReplicatedFirst'; type = 'LocalScript' }
-    else if (/StarterCharacterScripts/i.test(c)) { parent = 'StarterCharacterScripts'; type = 'LocalScript' }
-    else { parent = 'StarterPlayerScripts'; type = 'LocalScript' }
-  } else if (/DataStoreService|PlayerAdded|OnServerEvent|FireClient|ServerStorage|HttpService:GetAsync/i.test(c)) { parent = 'ServerScriptService'; type = 'Script' }
-  else if (/ReplicatedFirst/i.test(first200)) { parent = 'ReplicatedFirst'; type = 'LocalScript' }
-  else if (/Players\.LocalPlayer/i.test(first200)) { parent = 'StarterPlayerScripts'; type = 'LocalScript' }
-  if (typeHint) type = typeHint[1]; if (parentHint) parent = parentHint[1]
-  return { parent, type }
-}
-
-function makeScriptName(prompt: string, i: number, code?: string): string {
-  if (code) { const nm = code.match(/--\s*name:\s*([\w_]+)/i); if (nm?.[1] && nm[1].length > 2) return nm[1] }
-  const l = (prompt || '').toLowerCase()
-  const kw: [string, string][] = [['loading','LoadingScreen_Client'],['shop gui','ShopGUI_Client'],['shop','ShopSystem_Server'],['leaderboard','Leaderboard_Server'],['admin','AdminSystem_Server'],['coin','CoinSystem_Server'],['inventory','InventorySystem'],['npc','NPCBehavior_Server'],['datastore','DataStore_Module'],['zombie','ZombieAI_Server'],['vehicle','VehicleSystem'],['tycoon','TycoonPlot'],['round','RoundSystem_Server'],['hud','HUD_Client'],['gui','GUIScript_Client'],['chat','ChatSystem_Client'],['badge','BadgeManager_Server'],['team','TeamSystem_Server']]
-  for (const [k, v] of kw) { if (l.includes(k)) return v + (i > 0 ? '_' + (i + 1) : '') }
-  return 'GameScript' + (i > 0 ? '_' + (i + 1) : '')
-}
-
-function makeStepLabel(cmd: Cmd): string | null {
-  const a = cmd.action || '', nm = String(cmd.name || '')
-  if (a === 'inject_script') return 'Create ' + (cmd.script_type || 'Script') + ': ' + (nm || '?')
-  if (a === 'create_script') return 'Create Script: ' + nm
-  if (a === 'create_local_script') return 'Create LocalScript: ' + nm
-  if (a === 'create_module') return 'Create ModuleScript: ' + nm
-  if (a === 'edit_script') return 'Edit Script: ' + nm
-  if (a === 'read_script' || a === 'read_script_lines') return 'Read script: ' + nm
-  if (a === 'rename_script') return 'Rename: ' + nm + ' → ' + (cmd.new_name || '?')
-  if (a === 'create_remote') return 'Create ' + (cmd.type || cmd.remote_type || 'RemoteEvent') + ': ' + nm
-  if (a === 'set_property' || a === 'set_properties') return 'Set property: ' + nm + (cmd.property ? '.' + String(cmd.property) : '')
-  if (a === 'delete' || a === 'delete_object') return 'Delete: ' + nm
-  if (a === 'create_gui') return 'Create GUI: ' + nm
-  if (a === 'create_frame') return 'Create Frame: ' + nm
-  if (a === 'create_text_label') return 'Create TextLabel: ' + nm
-  if (a === 'create_text_button') return 'Create TextButton: ' + nm
-  if (a === 'create_text_box') return 'Create TextBox: ' + nm
-  if (a === 'create_image_label') return 'Create ImageLabel: ' + nm
-  if (a === 'create_image_button') return 'Create ImageButton: ' + nm
-  if (a === 'create_ui_corner') return 'UICorner → ' + (String(cmd.parent || '') || nm)
-  if (a === 'create_ui_padding') return 'UIPadding → ' + (String(cmd.parent || '') || nm)
-  if (a === 'create_ui_gradient') return 'UIGradient → ' + (String(cmd.parent || '') || nm)
-  if (a === 'create_ui_stroke') return 'UIStroke → ' + (String(cmd.parent || '') || nm)
-  if (a === 'create_ui_list_layout') return 'UIListLayout → ' + (String(cmd.parent || '') || nm)
-  if (a === 'create_ui_grid_layout') return 'UIGridLayout → ' + (String(cmd.parent || '') || nm)
-  if (a === 'set_lighting') return 'Set lighting'
-  if (a === 'create_part') return 'Create Part: ' + nm
-  if (a === 'create_model') return 'Create Model: ' + nm
-  if (a === 'create_npc') return 'Create NPC: ' + nm
-  if (a === 'create_tool') return 'Create Tool: ' + nm
-  if (a === 'scan_workspace' || a === 'request_scan') return 'Scan workspace'
-  if (a === 'play_test' || a === 'run_test') return 'Start play test'
-  if (a === 'stop_test') return 'Stop play test'
-  if (a === 'batch_commands') return 'Batch (' + ((cmd.commands as unknown[] || []).length) + ' cmds)'
-  if (a === 'none') return null
-  return a + (nm ? ': ' + nm : '')
 }
 
 // ══════════════════════════════════════════════════════════════════════════════
 // PART 5 — FETCH HELPERS + AUTO INJECT PIPELINE
 // ══════════════════════════════════════════════════════════════════════════════
 
+// True if `url` points at one of the configured NEXUS AI plugin backends
+// (see NEXUS_API_URLS above) — used to decide whether to attach the
+// plugin-only auth headers below, regardless of which environment's
+// domain is currently active.
+function _isNexusBackendUrl(url: string): boolean {
+  return NEXUS_API_URLS.some((base) => base && url.startsWith(base))
+}
+
 async function fetchRetry(url: string, opts: RequestInit, tries = 3): Promise<Response | null> {
   const headers = opts.headers as Record<string, string>
-  if (headers && url.includes('convex.site')) {
+  if (headers && _isNexusBackendUrl(url)) {
     headers['X-Nexus-Nonce'] = _csrfNonce
     if (isAdmin() || isOwner()) headers['X-Admin-Token'] = _adminToken || generateAdminToken()
   }
@@ -1099,7 +986,10 @@ async function safeFetchWithRetry(bodyData: Record<string, unknown>, signal?: Ab
   return null
 }
 
-async function _injectCommand(cmdToSend: Cmd, user: string, signal?: AbortSignal): Promise<{ ok: boolean; data?: unknown; error?: string }> {
+// Sends a single action command to the Studio plugin via the polling
+// backend. The plugin picks this up on its next poll (Config.POLL_INTERVAL,
+// 3s) and runs it through ActionsManager:dispatch().
+async function _injectCommand(cmdToSend: ActionCmd, user: string, signal?: AbortSignal): Promise<{ ok: boolean; data?: unknown; error?: string }> {
   const r = await safeFetchWithRetry({ type: 'inject_command', command: cmdToSend, _user: user, _target_user: user }, signal, 2)
   if (!r) return { ok: false, error: 'No response (network error)' }
   let rd: { status?: string; pushed?: number; error?: string }
@@ -1108,80 +998,72 @@ async function _injectCommand(cmdToSend: Cmd, user: string, signal?: AbortSignal
   return { ok: false, error: rd.error ? rd.error.slice(0, 120) : ('HTTP ' + r.status) }
 }
 
-async function autoInjectToStudio(aiResponse: string, userPrompt: string): Promise<string[] | null> {
+// Parses every action the AI emitted, sends each one to Studio in order
+// (with a "thinking steps" UI showing progress), and returns a plain-text
+// summary list for display under the chat bubble.
+async function autoInjectToStudio(aiResponse: string, _userPrompt: string): Promise<string[] | null> {
   if (!studioConnected) return null
   const summary: string[] = [], user = (SESSION?.user.username ?? '').toLowerCase()
-  const jsonCmds = parseAllCommands(aiResponse); const luaBlocks = parseLuaBlocks(aiResponse)
+  const cmds = parseAllCommands(aiResponse)
+  if (!cmds.length) return null
 
-  interface AllCmd { type: 'json' | 'lua' | 'playtest'; cmd?: Cmd; code?: string; info?: { parent: string; type: string }; name?: string; sid?: number | null }
-  const allCmds: AllCmd[] = []
-  jsonCmds.forEach((cmd) => { if (!cmd.action || cmd.action === 'none') return; allCmds.push({ type: 'json', cmd }) })
-  luaBlocks.forEach((code, i) => {
-    const sanR = sanitizeLuaCode(code); if (!sanR.ok) return
-    const info = detectScriptParent(sanR.code)
-    const tm = sanR.code.match(/--\s*script_type:\s*(\w+)/i); if (tm) info.type = tm[1]
-    const pm = sanR.code.match(/--\s*parent:\s*([\w.]+)/i); if (pm) info.parent = pm[1]
-    allCmds.push({ type: 'lua', code: sanR.code, info, name: makeScriptName(userPrompt, i, sanR.code) })
+  const hasPlayTest = cmds.some((c) => c.action === 'play_test' || c.action === 'run_test')
+  const hasStopTest = cmds.some((c) => c.action === 'stop_test')
+  if (S.playTestEnabled && !hasPlayTest && !hasStopTest) {
+    cmds.push({ action: 'run_test', duration: S.playTestDuration })
+  }
+
+  const planSteps: { cmd: ActionCmd; sid: number | null }[] = []
+  cmds.forEach((cmd) => {
+    if (cmd.action === 'none') return
+    const lbl = makeStepLabel(cmd)
+    if (!lbl) return
+    const sub = String(cmd.parent || cmd.target || '')
+    const sid = addStep(lbl, 'pending', sub)
+    planSteps.push({ cmd, sid })
   })
-  if (!allCmds.length) return null
-  const hasPlayTest = jsonCmds.some((c) => c.action === 'play_test' || c.action === 'run_test')
-  const hasStopTest = jsonCmds.some((c) => c.action === 'stop_test')
-  if (S.playTestEnabled && !hasPlayTest && !hasStopTest) allCmds.push({ type: 'playtest' })
-  const planSteps: (AllCmd & { sid: number | null })[] = []
-  allCmds.forEach((item) => {
-    let lbl: string | null, sub = ''
-    if (item.type === 'json') { lbl = makeStepLabel(item.cmd!); if (!lbl) return; sub = String(item.cmd!.parent || item.cmd!.theme || '') }
-    else if (item.type === 'lua') { lbl = 'Create ' + item.info!.type + ': ' + item.name; sub = item.info!.parent }
-    else { lbl = UI.testRunning; sub = 'auto play_test' }
-    const sid = lbl ? addStep(lbl, 'pending', sub, item.type === 'lua' ? { code: item.code!, name: item.name!, parent: item.info!.parent, type: item.info!.type } : undefined) : null
-    planSteps.push({ ...item, sid })
-  })
+
   const cntEl = document.getElementById('stepsCount'); if (cntEl) cntEl.textContent = '(0/' + planSteps.length + ')'
   let doneCount = 0
+
   for (let pi = 0; pi < planSteps.length; pi++) {
     const step = planSteps[pi]; if (!S.gen) break
     const sig = S.cancelCtrl?.signal; if (sig?.aborted) break
     if (!step.sid) { doneCount++; continue }
     updateStep(step.sid, 'running'); await _sleep(120)
-    if (step.type === 'lua') {
-      const cmdPayload: Cmd = { action: 'inject_script', name: step.name!, parent: step.info!.parent, script_type: step.info!.type, source: step.code! }
-      const res = await _injectCommand(cmdPayload, user, sig)
-      if (res.ok) { updateStep(step.sid, 'done', step.info!.type + ': ' + step.name, step.info!.parent); summary.push(step.info!.type + ': ' + step.name!); await _sleep(600) }
-      else { updateStep(step.sid, 'error', String(res.error || 'inject failed').slice(0, 100)); await _sleep(400) }
-    } else if (step.type === 'playtest') {
-      try { await safeFetchWithRetry({ type: 'batch_commands', commands: [{ action: 'play_test', duration: S.playTestDuration }], _user: user, _target_user: user }, sig, 1); await _sleep(5000); updateStep(step.sid, 'done', UI.testDone) }
-      catch (e) { if (_isAbortError(e)) return null; updateStep(step.sid, 'error', String((e as Error).message || '').slice(0, 80)) }
+
+    const cmd = step.cmd, a = cmd.action || ''
+    const res = await _injectCommand(cmd, user, sig)
+
+    if (res.ok) {
+      if (a === 'play_test' || a === 'run_test') {
+        updateStep(step.sid, 'running', UI.testRunning); _playTestActive = true
+      } else if (a === 'stop_test') {
+        updateStep(step.sid, 'done'); _playTestActive = false
+      } else if (a === 'read_script' || a === 'list' || a === 'get_output' || a === 'resolve_mention') {
+        updateStep(step.sid, 'info'); await _sleep(300)
+      } else {
+        updateStep(step.sid, 'done')
+        const lbl2 = makeStepLabel(cmd); if (lbl2) summary.push(lbl2)
+        let postDelay = 400
+        if (a === 'set_properties') postDelay = 900
+        else if (a === 'create_instance' || a === 'create_script' || a === 'RunCode' || a === 'run_code') postDelay = 750
+        else if (a === 'terrain' || a === 'insert_asset') postDelay = 600
+        await _sleep(postDelay)
+      }
     } else {
-      const cmd = step.cmd!, a = cmd.action || ''
-      const cmdToSend: Cmd = { ...cmd }; if (cmdToSend.code && !cmdToSend.source) { cmdToSend.source = cmdToSend.code; delete cmdToSend.code }
-      const res2 = await _injectCommand(cmdToSend, user, sig)
-      if (res2.ok) {
-        if (a === 'play_test' || a === 'run_test') { updateStep(step.sid, 'running', UI.testRunning); _playTestActive = true }
-        else if (a === 'stop_test') { updateStep(step.sid, 'done'); _playTestActive = false }
-        else if (a === 'read_script' || a === 'scan_workspace' || a === 'request_scan') { updateStep(step.sid, 'info'); await _sleep(300) }
-        else {
-          updateStep(step.sid, 'done'); const lbl2 = makeStepLabel(cmd); if (lbl2) summary.push(lbl2)
-          let _postDelay = 400
-          if (['set_property','set_properties','batch_set_property','set_service_property'].includes(a)) _postDelay = 900
-          else if (['create_gui','create_frame','create_scrolling_frame','create_canvas_group','create_script','create_local_script','create_module','inject_script','create_text_label','create_text_button','create_text_box','create_image_label','create_image_button','create_remote','create_folder','create_instance'].includes(a)) _postDelay = 750
-          else if (['create_ui_corner','create_ui_padding','create_ui_gradient','create_ui_stroke','create_ui_list_layout','create_ui_grid_layout','create_ui_size_constraint','create_ui_aspect_ratio','create_ui_scale'].includes(a)) _postDelay = 600
-          await _sleep(_postDelay)
-        }
-      } else { updateStep(step.sid, 'error', String(res2.error || 'rejected').slice(0, 100)); await _sleep(400) }
+      updateStep(step.sid, 'error', String(res.error || 'rejected').slice(0, 100)); await _sleep(400)
     }
+
     doneCount++; if (cntEl) cntEl.textContent = '(' + doneCount + '/' + planSteps.length + ')'
   }
+
   return summary.length > 0 ? summary : null
 }
 
 // ── SYSTEM PROMPT ──────────────────────────────────────────────────────────────
-let _sysPromptReady = true; let _sysPromptLoadPromise: Promise<void> | null = null
+let _sysPromptReady = true
 function _fallbackBuildSysPrompt(): string { return '' }
-function _loadSysPromptScript(): Promise<void> {
-  if (_sysPromptLoadPromise) return _sysPromptLoadPromise
-  _sysPromptLoadPromise = new Promise<void>((resolve) => { _sysPromptReady = true; resolve() })
-  return _sysPromptLoadPromise
-}
 
 function buildApiMsgs(): { role: string; content: string | unknown[] }[] {
   const cv = S.convs.find((x) => x.id === S.curConv); if (!cv) return []
@@ -1298,7 +1180,6 @@ async function send(): Promise<void> {
   }
   if (!S.gen || S.cancelCtrl?.signal.aborted) { _resetGenState(); return }
   let msgs = buildApiMsgs()
-  if (!_sysPromptReady) await _loadSysPromptScript()
   let sysPrompt = buildSysPrompt({
     session: SESSION ? { user: { username: SESSION.user.username, displayName: SESSION.user.username } } : null,
     settings: { credits: S.credits, plan: S.plan, currentProjectName: S.currentProjectName, playTestEnabled: S.playTestEnabled, playTestDuration: S.playTestDuration },
@@ -1333,30 +1214,38 @@ async function send(): Promise<void> {
     aiText = '**' + UI.errorPrefix + '**\n\n' + errMsg + '\n\nSuggestion: try another model.'
   } else { aiText = aiResult.data!.content || '' }
   const hasError = aiText && (aiText.startsWith('**Failed') || aiText.startsWith('**Error'))
+
+  // ── CREDIT DEDUCTION (server-authoritative) ─────────────────────────
+  // Cost scales with the number of actions the AI emitted, same formula as
+  // before, but the actual subtraction now happens on the server via
+  // deductCredits() — see PART 3 for why this fixes the "credits revert"
+  // bug. The UI is updated with whatever the server confirms, not with a
+  // value computed purely in memory.
   if (!isOwner() && !isAdmin() && aiText && !hasError) {
     const _baseCost = S.model.cost || 0
     if (_baseCost > 0) {
-      const _numActions = parseAllCommands(aiText).length + parseLuaBlocks(aiText).length
+      const _numActions = parseAllCommands(aiText).length
       const _totalCost = isPureGreeting(lastPrompt) ? 1 : parseFloat((_baseCost + Math.max(0, _numActions - 1) * 0.5).toFixed(2))
-      if (_totalCost > 0) { S.credits = parseFloat(Math.max(0, S.credits - _totalCost).toFixed(2)); updateCreds() }
+      if (_totalCost > 0) { await deductCredits(_totalCost) }
     }
   }
+
   let studioSummary: string[] | null = null, displayText = ''
   if (studioConnected && !hasError) {
-    const _preCmds = parseAllCommands(aiText), _preLuas = parseLuaBlocks(aiText)
-    if (_preCmds.length > 0 || _preLuas.length > 0) {
-      const _totalActions = _preCmds.length + _preLuas.length
+    const _preCmds = parseAllCommands(aiText)
+    if (_preCmds.length > 0) {
+      const _totalActions = _preCmds.length
       if (showThinking) { clearSteps(); const _injectSummaryStep = addStep('Sending ' + _totalActions + ' action(s) to Studio...', 'running', 'One by one, please wait'); setStepTitle(UI.buildingInStudio); await _sleep(200); if (_injectSummaryStep) updateStep(_injectSummaryStep, 'done') }
       studioSummary = await autoInjectToStudio(aiText, lastPrompt)
       if (!S.gen || _localCancelSignal?.aborted) { _resetGenState(); const cancelMsg: ConvMsg = { role: 'ai', content: 'Process cancelled.', time: Date.now() }; cv.msgs.push(cancelMsg); appendMsg(cancelMsg); saveS(); return }
     } else {
       if (showThinking) { finalizeSteps(); await _sleep(300); removeStepsCard() }
-      displayText = cleanAIResponse(aiText) + '\n\n> ⚠️ No scripts/commands detected.'
+      displayText = cleanAIResponse(aiText) + '\n\n> ⚠️ No actions detected.'
       const aiMsg0: ConvMsg & { _rawContent: string } = { role: 'ai', content: displayText, time: Date.now(), _rawContent: aiText }
       cv.msgs.push(aiMsg0); appendMsg(aiMsg0); _resetGenState(); saveS(); return
     }
     displayText = stripAllCode(aiText)
-    if (!displayText || displayText.length < 20) displayText = studioSummary?.length ? 'Successfully injected to Studio:\n' + studioSummary.map((s) => '• ' + s).join('\n') : 'Inject complete. Check Explorer in Studio.'
+    if (!displayText || displayText.length < 20) displayText = studioSummary?.length ? 'Successfully sent to Studio:\n' + studioSummary.map((s) => '• ' + s).join('\n') : 'Done. Check Explorer in Studio.'
     if (!_playTestActive) { if (showThinking) { finalizeSteps(); await _sleep(400); removeStepsCard() } }
     else { document.getElementById('stepsCancel')?.remove() }
   } else { displayText = cleanAIResponse(aiText); if (showThinking) { finalizeSteps(); await _sleep(300); removeStepsCard() } }
@@ -1940,7 +1829,7 @@ async function initApp(): Promise<void> {
   const unEl = document.getElementById('sbUn'); if (unEl) unEl.textContent = '@' + (u.username || '-')
   const suEl = document.getElementById('settingsUsername'); if (suEl) suEl.textContent = '@' + (u.username || '-')
   updateRoleDisplay(); updateCreds(); updatePlayTestUI(); updateLoader(58, UI.loaderLoadData)
-  await _loadSysPromptScript(); await loadKeys(); await loadAdminIds(); await loadInboxCount()
+  await loadKeys(); await loadAdminIds(); await loadInboxCount()
   updateLoader(72, UI.loaderConnecting); applyLang(); updateModelUI()
   updateLoader(84, UI.loaderConnecting); startStudioPoll(); startAutoSync()
   updateLoader(93, UI.loaderConnecting); renderConvs()

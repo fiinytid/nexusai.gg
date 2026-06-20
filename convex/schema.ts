@@ -93,4 +93,13 @@ export default defineSchema({
     value:     v.string(),
     expiresAt: v.number(),
   }).index("by_key", ["key"]),
+
+  aiFeed: defineTable({
+    username: v.string(),
+    kind:     v.string(),
+    summary:  v.string(),
+    data:     v.string(),
+    ts:       v.number(),
+    read:     v.boolean(),
+  }).index("by_username_ts", ["username", "ts"]),
 });
