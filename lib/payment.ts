@@ -1,18 +1,33 @@
-// lib/payment.ts — NEXUS AI Payment System (SECURE v6 — TypeScript)
+// lib/payment.ts — NEXUS AI Payment System (SECURE v7 — TypeScript)
+//
+// Changes v7 (Gmail mobile fix):
+//   • Email template rebuilt to be fully fluid/responsive on Gmail Android app
+//     (root cause of v6 bug: fixed pixel-width tables with separate left/right
+//     borders on inner rows caused "ghost side panels" to appear once the
+//     table could not shrink to fit a phone screen width)
+//   • Outer table now uses width="100%" with max-width via inline style instead
+//     of a hard width="580" — Gmail Android respects this layout pattern
+//   • Removed per-row left/right border duplication; borders now live on a
+//     single outer wrapper only, eliminating the misaligned "side panel" look
+//   • Added a real <meta name="viewport"> + mobile-safe wrapper div with
+//     width:100% so content reflows instead of overflowing horizontally
+//   • All header bar segments now use percentage widths (33.33%) instead of
+//     fixed pixel widths, so the 3-color top bar no longer breaks into
+//     stacked rows on narrow screens
+//   • All remaining Indonesian comments translated to English
+//   • No change to endpoint behaviour, response shape, or business logic
 //
 // Changes v6 (JS → TS):
 //   • Full TypeScript strict types — no implicit 'any'
 //   • Package, PaymentRecord, PostBody, PatchBody, SendEmailParams interfaces
-//   • RobloxThumbnailResponse interface untuk avatar helper
-//   • verifyAdminToken diganti ke _security.ts (konsisten dengan modul lain)
-//   • Rate limiter lokal dihapus — pakai checkRateLimit dari _security.ts
-//   • setInterval cleanup tidak dibutuhkan lagi (pakai opportunistic prune _security)
-//   • buildPaymentEmail parameter destructuring dianotasi dengan interface
-//   • sendEmail return type ExplicitEmailResult interface
-//   • Semua catch (err) → err: unknown dengan narrowing
-//   • Tidak ada perubahan behaviour / endpoint / response shape
-// Email HTML v2: Gmail-compatible (no border-radius on td, no overflow:hidden,
-//   no linear-gradient, table-based layout only)
+//   • RobloxThumbnailResponse interface for the avatar helper
+//   • verifyAdminToken moved to _security.ts (consistent with other modules)
+//   • Local rate limiter removed — now uses checkRateLimit from _security.ts
+//   • setInterval cleanup no longer needed (uses opportunistic prune in _security)
+//   • buildPaymentEmail parameters destructured with an explicit interface
+//   • sendEmail return type uses an explicit EmailResult interface
+//   • All catch (err) blocks → err: unknown with proper narrowing
+//   • No change to behaviour / endpoints / response shape
 
 import { readFileSync, writeFileSync, existsSync } from 'fs';
 import crypto from 'crypto';
@@ -226,6 +241,18 @@ async function resolveAvatar(rawAvatar: string, userId: string): Promise<string>
 }
 
 // ─── EMAIL BUILDER ────────────────────────────────────────────────────────────
+//
+// Mobile-safe rules followed below (Gmail Android app specifically):
+//   1. The outer-most table uses width="100%" and style max-width:600px so it
+//      naturally shrinks to fit any phone screen instead of overflowing.
+//   2. No element inside the email is wider than its parent — every inner
+//      table uses width="100%", never a fixed pixel width larger than the
+//      content area.
+//   3. Borders are applied to a SINGLE outer wrapper table per section, never
+//      duplicated across many small <td> elements with their own left/right
+//      borders. That duplication is what produced the stray "side panels".
+//   4. The 3-color top/bottom accent bars use percentage widths (33.33%)
+//      instead of fixed pixel widths so they can never wrap into extra rows.
 
 /**
  * Gmail-compatible avatar block.
@@ -279,306 +306,311 @@ function buildPaymentEmail({
 <html lang="en">
 <head>
   <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width,initial-scale=1.0">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta name="color-scheme" content="light">
+  <meta name="supported-color-schemes" content="light">
   <title>NEXUS AI — New Payment Received</title>
 </head>
-<body style="margin:0;padding:0;background-color:#030312;">
+<body style="margin:0;padding:0;background-color:#030312;width:100%;">
 
-<!--[if mso]><table width="100%" cellpadding="0" cellspacing="0" border="0"><tr><td><![endif]-->
-<table cellpadding="0" cellspacing="0" border="0" width="100%"
-       style="background-color:#030312;margin:0;padding:0;">
+<!--[if mso]>
+<table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0">
+<tr><td>
+<![endif]-->
+
+<table role="presentation" cellpadding="0" cellspacing="0" border="0" width="100%"
+       style="background-color:#030312;margin:0;padding:0;width:100%;">
   <tr>
-    <td align="center" style="padding:28px 12px;">
+    <td align="center" style="padding:20px 10px;">
 
-      <table cellpadding="0" cellspacing="0" border="0" width="580"
-             style="max-width:580px;width:100%;">
+      <!-- MAIN CONTAINER: fluid width, capped at 600px on desktop -->
+      <table role="presentation" cellpadding="0" cellspacing="0" border="0" width="100%"
+             style="width:100%;max-width:600px;margin:0 auto;">
 
-        <!-- ══ HEADER TOP COLOR BAR ══ -->
+        <!-- ══ TOP ACCENT BAR (3 equal % columns — never stacks on mobile) ══ -->
         <tr>
-          <td width="194" height="4" bgcolor="#8800ff" style="font-size:0;line-height:0;">&nbsp;</td>
-          <td width="193" height="4" bgcolor="#00e5ff" style="font-size:0;line-height:0;">&nbsp;</td>
-          <td width="193" height="4" bgcolor="#00ffaa" style="font-size:0;line-height:0;">&nbsp;</td>
-        </tr>
-
-        <!-- ══ HEADER ══ -->
-        <tr>
-          <td colspan="3" bgcolor="#0b0c24"
-              style="padding:26px 28px 8px;border-left:1px solid #1a2a4a;
-                     border-right:1px solid #1a2a4a;text-align:center;">
-            <p style="margin:0 0 4px;font-family:${FONT_MONO};font-size:10px;
-                      font-weight:700;color:#8800ff;letter-spacing:5px;
-                      text-transform:uppercase;">&#9670; NEXUS STUDIO &#9670;</p>
-            <p style="margin:0;font-family:${FONT_MONO};font-size:28px;
-                      font-weight:900;letter-spacing:5px;color:#00e5ff;">NEXUS AI</p>
-          </td>
-        </tr>
-        <tr>
-          <td colspan="3" bgcolor="#0b0c24"
-              style="padding:0 28px 24px;border-left:1px solid #1a2a4a;
-                     border-right:1px solid #1a2a4a;text-align:center;">
-            <table cellpadding="0" cellspacing="0" border="0" align="center">
+          <td style="line-height:0;font-size:0;">
+            <table role="presentation" cellpadding="0" cellspacing="0" border="0" width="100%" style="width:100%;">
               <tr>
-                <td bgcolor="#002a18"
-                    style="color:#00ffaa;border:1px solid #005a30;
-                           padding:5px 18px;font-family:${FONT_SANS};
-                           font-size:10px;font-weight:700;letter-spacing:2px;
-                           text-transform:uppercase;">
-                  &#128179; NEW PAYMENT RECEIVED
-                </td>
+                <td width="34%" height="4" bgcolor="#8800ff" style="font-size:0;line-height:0;">&nbsp;</td>
+                <td width="33%" height="4" bgcolor="#00e5ff" style="font-size:0;line-height:0;">&nbsp;</td>
+                <td width="33%" height="4" bgcolor="#00ffaa" style="font-size:0;line-height:0;">&nbsp;</td>
               </tr>
             </table>
           </td>
         </tr>
 
-        <!-- ══ BODY ══ -->
+        <!-- ══ OUTER FRAME: single bordered wrapper, no per-row side borders ══ -->
         <tr>
-          <td colspan="3" bgcolor="#07081e"
-              style="padding:24px 24px 8px;border-left:1px solid #1a2a4a;
-                     border-right:1px solid #1a2a4a;">
+          <td bgcolor="#0b0c24" style="border:1px solid #1a2a4a;border-top:none;">
 
-            <!-- USER CARD -->
-            <table cellpadding="0" cellspacing="0" border="0" width="100%"
-                   style="margin-bottom:18px;">
-              <!-- top border line -->
+            <!-- HEADER -->
+            <table role="presentation" cellpadding="0" cellspacing="0" border="0" width="100%" style="width:100%;">
               <tr>
-                <td bgcolor="#00e5ff" height="2" style="font-size:0;line-height:0;">&nbsp;</td>
-              </tr>
-              <tr>
-                <td bgcolor="#0c0e26"
-                    style="padding:22px 20px 20px;border-left:1px solid #1a2a50;
-                           border-right:1px solid #1a2a50;text-align:center;">
-                  ${avatarBlock}
-                  <p style="margin:0 0 3px;font-family:${FONT_SANS};font-size:17px;
-                            font-weight:700;color:#ffffff;letter-spacing:1px;">
-                    @${displayName}
-                  </p>
-                  <p style="margin:0;font-family:${FONT_MONO};font-size:10px;
-                            color:#3a5a7a;letter-spacing:1px;">
-                    Roblox UID:&nbsp;<span style="color:#5a7aaa;">${displayUid}</span>
-                  </p>
+                <td style="padding:26px 20px 8px;text-align:center;">
+                  <p style="margin:0 0 4px;font-family:${FONT_MONO};font-size:10px;
+                            font-weight:700;color:#8800ff;letter-spacing:5px;
+                            text-transform:uppercase;">&#9670; NEXUS STUDIO &#9670;</p>
+                  <p style="margin:0;font-family:${FONT_MONO};font-size:26px;
+                            font-weight:900;letter-spacing:4px;color:#00e5ff;">NEXUS AI</p>
                 </td>
               </tr>
               <tr>
-                <td bgcolor="#1a2a50" height="1" style="font-size:0;line-height:0;">&nbsp;</td>
-              </tr>
-            </table>
-
-            <!-- PAYMENT DETAILS TABLE -->
-            <table cellpadding="0" cellspacing="0" border="0" width="100%"
-                   style="margin-bottom:18px;">
-              <!-- top accent bar -->
-              <tr>
-                <td colspan="2" bgcolor="#00ffaa" height="3"
-                    style="font-size:0;line-height:0;">&nbsp;</td>
-              </tr>
-              <!-- section title -->
-              <tr>
-                <td colspan="2" bgcolor="#060d1e"
-                    style="padding:14px 20px 8px;border-left:1px solid #0a3a1a;
-                           border-right:1px solid #0a3a1a;">
-                  <p style="margin:0;font-family:${FONT_MONO};font-size:10px;font-weight:700;
-                            color:#00ffaa;letter-spacing:3px;text-transform:uppercase;">
-                    &#128179; PAYMENT DETAILS
-                  </p>
-                </td>
-              </tr>
-              <!-- row: package -->
-              <tr>
-                <td bgcolor="#060d1e" width="120"
-                    style="padding:10px 20px;font-family:${FONT_MONO};font-size:10px;
-                           color:#3a5a7a;border-left:1px solid #0a3a1a;
-                           border-bottom:1px solid #0a1e2a;">
-                  PACKAGE
-                </td>
-                <td bgcolor="#060d1e"
-                    style="padding:10px 20px 10px 0;font-family:${FONT_SANS};font-size:13px;
-                           color:#ffffff;font-weight:700;border-right:1px solid #0a3a1a;
-                           border-bottom:1px solid #0a1e2a;">
-                  ${esc(pkg.label, 70)}
-                </td>
-              </tr>
-              <!-- row: credits -->
-              <tr>
-                <td bgcolor="#060d1e"
-                    style="padding:10px 20px;font-family:${FONT_MONO};font-size:10px;
-                           color:#3a5a7a;border-left:1px solid #0a3a1a;
-                           border-bottom:1px solid #0a1e2a;">
-                  CREDITS
-                </td>
-                <td bgcolor="#060d1e"
-                    style="padding:10px 20px 10px 0;font-family:${FONT_MONO};font-size:20px;
-                           color:#ffd600;font-weight:700;border-right:1px solid #0a3a1a;
-                           border-bottom:1px solid #0a1e2a;">
-                  ${pkg.cr} CR
-                </td>
-              </tr>
-              <!-- row: method -->
-              <tr>
-                <td bgcolor="#060d1e"
-                    style="padding:10px 20px;font-family:${FONT_MONO};font-size:10px;
-                           color:#3a5a7a;border-left:1px solid #0a3a1a;
-                           border-bottom:1px solid #0a1e2a;">
-                  METHOD
-                </td>
-                <td bgcolor="#060d1e"
-                    style="padding:10px 20px 10px 0;font-family:${FONT_SANS};font-size:12px;
-                           color:#00e5ff;font-weight:700;text-transform:uppercase;
-                           letter-spacing:1px;border-right:1px solid #0a3a1a;
-                           border-bottom:1px solid #0a1e2a;">
-                  ${esc(method.toUpperCase(), 20)}
-                </td>
-              </tr>
-              <!-- row: total -->
-              <tr>
-                <td bgcolor="#060d1e"
-                    style="padding:14px 20px;font-family:${FONT_SANS};font-size:12px;
-                           color:#ffffff;font-weight:700;letter-spacing:1px;
-                           border-left:1px solid #0a3a1a;border-bottom:1px solid #0a3a1a;">
-                  TOTAL PAID
-                </td>
-                <td bgcolor="#060d1e"
-                    style="padding:14px 20px 14px 0;font-family:${FONT_MONO};font-size:22px;
-                           color:#00ffaa;font-weight:700;border-right:1px solid #0a3a1a;
-                           border-bottom:1px solid #0a3a1a;">
-                  ${esc(paymentFmt, 30)}
-                </td>
-              </tr>
-              <!-- ACTION REQUIRED box -->
-              <tr>
-                <td colspan="2" bgcolor="#060d1e"
-                    style="padding:12px 16px 16px;border-left:1px solid #0a3a1a;
-                           border-right:1px solid #0a3a1a;border-bottom:1px solid #0a3a1a;">
-                  <table cellpadding="0" cellspacing="0" border="0" width="100%">
+                <td style="padding:0 20px 22px;text-align:center;">
+                  <table role="presentation" cellpadding="0" cellspacing="0" border="0" align="center" style="margin:0 auto;">
                     <tr>
-                      <td bgcolor="#1a1200"
-                          style="padding:14px 16px;border:1px solid #3a2a00;">
-                        <p style="margin:0 0 8px;font-family:${FONT_SANS};font-size:10px;
-                                  font-weight:700;color:#ffd600;letter-spacing:2px;
+                      <td bgcolor="#002a18"
+                          style="color:#00ffaa;border:1px solid #005a30;
+                                 padding:5px 16px;font-family:${FONT_SANS};
+                                 font-size:10px;font-weight:700;letter-spacing:2px;
+                                 text-transform:uppercase;white-space:nowrap;">
+                        &#128179; NEW PAYMENT RECEIVED
+                      </td>
+                    </tr>
+                  </table>
+                </td>
+              </tr>
+            </table>
+
+            <!-- BODY -->
+            <table role="presentation" cellpadding="0" cellspacing="0" border="0" width="100%"
+                   style="width:100%;background-color:#07081e;">
+              <tr>
+                <td style="padding:20px 16px 6px;">
+
+                  <!-- USER CARD -->
+                  <table role="presentation" cellpadding="0" cellspacing="0" border="0" width="100%"
+                         style="width:100%;background-color:#0c0e26;border:1px solid #1a2a50;margin-bottom:16px;">
+                    <tr>
+                      <td bgcolor="#00e5ff" height="2" style="font-size:0;line-height:0;">&nbsp;</td>
+                    </tr>
+                    <tr>
+                      <td style="padding:20px 16px;text-align:center;">
+                        ${avatarBlock}
+                        <p style="margin:0 0 3px;font-family:${FONT_SANS};font-size:16px;
+                                  font-weight:700;color:#ffffff;letter-spacing:0.5px;
+                                  word-break:break-word;">
+                          @${displayName}
+                        </p>
+                        <p style="margin:0;font-family:${FONT_MONO};font-size:10px;
+                                  color:#3a5a7a;letter-spacing:1px;">
+                          Roblox UID:&nbsp;<span style="color:#5a7aaa;">${displayUid}</span>
+                        </p>
+                      </td>
+                    </tr>
+                  </table>
+
+                  <!-- PAYMENT DETAILS -->
+                  <table role="presentation" cellpadding="0" cellspacing="0" border="0" width="100%"
+                         style="width:100%;background-color:#060d1e;border:1px solid #0a3a1a;margin-bottom:16px;">
+                    <tr>
+                      <td bgcolor="#00ffaa" height="3" style="font-size:0;line-height:0;">&nbsp;</td>
+                    </tr>
+                    <tr>
+                      <td style="padding:14px 16px 6px;">
+                        <p style="margin:0;font-family:${FONT_MONO};font-size:10px;font-weight:700;
+                                  color:#00ffaa;letter-spacing:3px;text-transform:uppercase;">
+                          &#128179; PAYMENT DETAILS
+                        </p>
+                      </td>
+                    </tr>
+
+                    <tr>
+                      <td style="padding:10px 16px;border-bottom:1px solid #0a1e2a;">
+                        <table role="presentation" cellpadding="0" cellspacing="0" border="0" width="100%" style="width:100%;">
+                          <tr>
+                            <td style="font-family:${FONT_MONO};font-size:10px;color:#3a5a7a;
+                                       white-space:nowrap;padding-right:10px;vertical-align:top;">PACKAGE</td>
+                            <td align="right" style="font-family:${FONT_SANS};font-size:13px;
+                                       color:#ffffff;font-weight:700;word-break:break-word;">
+                              ${esc(pkg.label, 70)}
+                            </td>
+                          </tr>
+                        </table>
+                      </td>
+                    </tr>
+
+                    <tr>
+                      <td style="padding:10px 16px;border-bottom:1px solid #0a1e2a;">
+                        <table role="presentation" cellpadding="0" cellspacing="0" border="0" width="100%" style="width:100%;">
+                          <tr>
+                            <td style="font-family:${FONT_MONO};font-size:10px;color:#3a5a7a;
+                                       white-space:nowrap;padding-right:10px;">CREDITS</td>
+                            <td align="right" style="font-family:${FONT_MONO};font-size:18px;
+                                       color:#ffd600;font-weight:700;">
+                              ${pkg.cr} CR
+                            </td>
+                          </tr>
+                        </table>
+                      </td>
+                    </tr>
+
+                    <tr>
+                      <td style="padding:10px 16px;border-bottom:1px solid #0a1e2a;">
+                        <table role="presentation" cellpadding="0" cellspacing="0" border="0" width="100%" style="width:100%;">
+                          <tr>
+                            <td style="font-family:${FONT_MONO};font-size:10px;color:#3a5a7a;
+                                       white-space:nowrap;padding-right:10px;">METHOD</td>
+                            <td align="right" style="font-family:${FONT_SANS};font-size:12px;
+                                       color:#00e5ff;font-weight:700;text-transform:uppercase;
+                                       letter-spacing:1px;">
+                              ${esc(method.toUpperCase(), 20)}
+                            </td>
+                          </tr>
+                        </table>
+                      </td>
+                    </tr>
+
+                    <tr>
+                      <td style="padding:12px 16px;border-bottom:1px solid #0a3a1a;">
+                        <table role="presentation" cellpadding="0" cellspacing="0" border="0" width="100%" style="width:100%;">
+                          <tr>
+                            <td style="font-family:${FONT_SANS};font-size:12px;color:#ffffff;
+                                       font-weight:700;letter-spacing:1px;white-space:nowrap;
+                                       padding-right:10px;vertical-align:middle;">TOTAL PAID</td>
+                            <td align="right" style="font-family:${FONT_MONO};font-size:20px;
+                                       color:#00ffaa;font-weight:700;">
+                              ${esc(paymentFmt, 30)}
+                            </td>
+                          </tr>
+                        </table>
+                      </td>
+                    </tr>
+
+                    <!-- ACTION REQUIRED box -->
+                    <tr>
+                      <td style="padding:12px 14px 14px;">
+                        <table role="presentation" cellpadding="0" cellspacing="0" border="0" width="100%"
+                               style="width:100%;background-color:#1a1200;border:1px solid #3a2a00;">
+                          <tr>
+                            <td style="padding:13px 14px;">
+                              <p style="margin:0 0 8px;font-family:${FONT_SANS};font-size:10px;
+                                        font-weight:700;color:#ffd600;letter-spacing:2px;
+                                        text-transform:uppercase;">
+                                &#9889; ACTION REQUIRED
+                              </p>
+                              <p style="margin:0;font-family:${FONT_SANS};font-size:12px;
+                                        color:#b8cce8;line-height:1.7;word-break:break-word;">
+                                Add <strong style="color:#ffd600;font-size:15px;">${pkg.cr} CR</strong>
+                                to account <strong style="color:#ffffff;">@${displayName}</strong>
+                                <span style="color:#3a5a7a;">(UID: ${displayUid})</span>
+                                after verifying the transfer.
+                              </p>
+                            </td>
+                          </tr>
+                        </table>
+                      </td>
+                    </tr>
+                  </table>
+
+                  ${note ? `
+                  <!-- TRANSFER NOTE -->
+                  <table role="presentation" cellpadding="0" cellspacing="0" border="0" width="100%"
+                         style="width:100%;background-color:#06080f;border:1px solid #0e1e3a;
+                                border-left:4px solid #8800ff;margin-bottom:16px;">
+                    <tr>
+                      <td style="padding:13px 14px;">
+                        <p style="margin:0 0 8px;font-family:${FONT_MONO};font-size:9px;
+                                  font-weight:700;color:#8800ff;letter-spacing:3px;
                                   text-transform:uppercase;">
-                          &#9889; ACTION REQUIRED
+                          &#128203; TRANSFER NOTE
                         </p>
                         <p style="margin:0;font-family:${FONT_SANS};font-size:12px;
-                                  color:#b8cce8;line-height:1.7;">
-                          Add <strong style="color:#ffd600;font-size:15px;">${pkg.cr} CR</strong>
-                          to account <strong style="color:#ffffff;">@${displayName}</strong>
-                          <span style="color:#3a5a7a;">(UID: ${displayUid})</span>
-                          after verifying the transfer.
+                                  color:#b0c8e8;line-height:1.7;word-break:break-word;">
+                          ${esc(note, 300)}
                         </p>
                       </td>
                     </tr>
-                  </table>
-                </td>
-              </tr>
-            </table>
+                  </table>` : ''}
 
-            ${note ? `
-            <!-- TRANSFER NOTE -->
-            <table cellpadding="0" cellspacing="0" border="0" width="100%"
-                   style="margin-bottom:18px;">
-              <tr>
-                <td width="4" bgcolor="#8800ff" style="font-size:0;">&nbsp;</td>
-                <td bgcolor="#06080f"
-                    style="padding:14px 16px;border-top:1px solid #0e1e3a;
-                           border-right:1px solid #0e1e3a;border-bottom:1px solid #0e1e3a;">
-                  <p style="margin:0 0 8px;font-family:${FONT_MONO};font-size:9px;
-                            font-weight:700;color:#8800ff;letter-spacing:3px;
-                            text-transform:uppercase;">
-                    &#128203; TRANSFER NOTE
-                  </p>
-                  <p style="margin:0;font-family:${FONT_SANS};font-size:12px;
-                            color:#b0c8e8;line-height:1.7;">
-                    ${esc(note, 300)}
-                  </p>
-                </td>
-              </tr>
-            </table>` : ''}
-
-            <!-- TRANSACTION META -->
-            <table cellpadding="0" cellspacing="0" border="0" width="100%"
-                   style="margin-bottom:24px;">
-              <tr>
-                <td colspan="2" bgcolor="#04050f"
-                    style="padding:14px 18px;border:1px solid #0a0f20;
-                           border-bottom:1px solid #0a0f1e;">
-                  <table cellpadding="0" cellspacing="0" border="0" width="100%">
+                  <!-- TRANSACTION META -->
+                  <table role="presentation" cellpadding="0" cellspacing="0" border="0" width="100%"
+                         style="width:100%;background-color:#04050f;border:1px solid #0a0f20;margin-bottom:20px;">
                     <tr>
-                      <td style="vertical-align:top;">
-                        <p style="margin:0 0 3px;font-family:${FONT_MONO};font-size:9px;
-                                  color:#1e3050;letter-spacing:1px;text-transform:uppercase;">
-                          Transaction ID
-                        </p>
-                        <p style="margin:0;font-family:${FONT_MONO};font-size:11px;
-                                  color:#4a6a9a;word-break:break-all;">
-                          ${esc(transactionId, 60)}
-                        </p>
+                      <td style="padding:13px 16px;border-bottom:1px solid #0a0f1e;">
+                        <table role="presentation" cellpadding="0" cellspacing="0" border="0" width="100%" style="width:100%;">
+                          <tr>
+                            <td style="vertical-align:top;width:60%;">
+                              <p style="margin:0 0 3px;font-family:${FONT_MONO};font-size:9px;
+                                        color:#1e3050;letter-spacing:1px;text-transform:uppercase;">
+                                Transaction ID
+                              </p>
+                              <p style="margin:0;font-family:${FONT_MONO};font-size:11px;
+                                        color:#4a6a9a;word-break:break-all;">
+                                ${esc(transactionId, 60)}
+                              </p>
+                            </td>
+                            <td align="right" style="vertical-align:top;width:40%;">
+                              <p style="margin:0 0 3px;font-family:${FONT_MONO};font-size:9px;
+                                        color:#1e3050;letter-spacing:1px;text-transform:uppercase;">
+                                Submitted
+                              </p>
+                              <p style="margin:0;font-family:${FONT_MONO};font-size:11px;
+                                        color:#4a6a9a;word-break:break-word;">
+                                ${formattedAt}
+                              </p>
+                            </td>
+                          </tr>
+                        </table>
                       </td>
-                      <td align="right" style="white-space:nowrap;padding-left:16px;vertical-align:top;">
+                    </tr>
+                    <tr>
+                      <td style="padding:12px 16px;">
                         <p style="margin:0 0 3px;font-family:${FONT_MONO};font-size:9px;
                                   color:#1e3050;letter-spacing:1px;text-transform:uppercase;">
-                          Submitted
+                          Payment Status
                         </p>
-                        <p style="margin:0;font-family:${FONT_MONO};font-size:11px;
-                                  color:#4a6a9a;">
-                          ${formattedAt}
+                        <p style="margin:0;font-family:${FONT_SANS};font-size:12px;font-weight:700;
+                                  color:#ffd600;letter-spacing:1px;text-transform:uppercase;">
+                          &#9203; AWAITING CONFIRMATION
                         </p>
                       </td>
                     </tr>
                   </table>
-                </td>
-              </tr>
-              <tr>
-                <td colspan="2" bgcolor="#04050f"
-                    style="padding:12px 18px;border-left:1px solid #0a0f20;
-                           border-right:1px solid #0a0f20;border-bottom:1px solid #0a0f20;">
-                  <p style="margin:0 0 3px;font-family:${FONT_MONO};font-size:9px;
-                            color:#1e3050;letter-spacing:1px;text-transform:uppercase;">
-                    Payment Status
-                  </p>
-                  <p style="margin:0;font-family:${FONT_SANS};font-size:12px;font-weight:700;
-                            color:#ffd600;letter-spacing:1px;text-transform:uppercase;">
-                    &#9203; AWAITING CONFIRMATION
-                  </p>
+
                 </td>
               </tr>
             </table>
 
+          </td>
+        </tr>
+
+        <!-- ══ BOTTOM ACCENT BAR ══ -->
+        <tr>
+          <td style="line-height:0;font-size:0;">
+            <table role="presentation" cellpadding="0" cellspacing="0" border="0" width="100%" style="width:100%;">
+              <tr>
+                <td width="34%" height="1" bgcolor="#8800ff" style="font-size:0;line-height:0;">&nbsp;</td>
+                <td width="33%" height="1" bgcolor="#00e5ff" style="font-size:0;line-height:0;">&nbsp;</td>
+                <td width="33%" height="1" bgcolor="#00ffaa" style="font-size:0;line-height:0;">&nbsp;</td>
+              </tr>
+            </table>
           </td>
         </tr>
 
         <!-- ══ FOOTER ══ -->
         <tr>
-          <td colspan="3" bgcolor="#03040e"
-              style="padding:0;border-left:1px solid #0f1830;
-                     border-right:1px solid #0f1830;border-bottom:1px solid #0f1830;">
-            <!-- divider bar -->
-            <table cellpadding="0" cellspacing="0" border="0" width="100%">
-              <tr>
-                <td width="194" height="1" bgcolor="#8800ff" style="font-size:0;">&nbsp;</td>
-                <td width="193" height="1" bgcolor="#00e5ff" style="font-size:0;">&nbsp;</td>
-                <td width="193" height="1" bgcolor="#00ffaa" style="font-size:0;">&nbsp;</td>
-              </tr>
-            </table>
-            <table cellpadding="0" cellspacing="0" border="0" width="100%">
-              <tr>
-                <td style="padding:18px 24px;text-align:center;">
-                  <p style="margin:0 0 4px;font-family:${FONT_MONO};font-size:9px;
-                            color:#1e2a4a;letter-spacing:3px;text-transform:uppercase;">
-                    NEXUS AI &nbsp;&middot;&nbsp; NEXUS STUDIO
-                  </p>
-                  <p style="margin:0;font-family:${FONT_SANS};font-size:10px;color:#141e30;">
-                    Automated notification — do not reply to this email.
-                  </p>
-                </td>
-              </tr>
-            </table>
+          <td bgcolor="#03040e" style="border:1px solid #0f1830;border-top:none;padding:18px 20px;text-align:center;">
+            <p style="margin:0 0 4px;font-family:${FONT_MONO};font-size:9px;
+                      color:#1e2a4a;letter-spacing:3px;text-transform:uppercase;">
+              NEXUS AI &nbsp;&middot;&nbsp; NEXUS STUDIO
+            </p>
+            <p style="margin:0;font-family:${FONT_SANS};font-size:10px;color:#141e30;">
+              Automated notification — do not reply to this email.
+            </p>
           </td>
         </tr>
 
       </table>
+      <!-- /MAIN CONTAINER -->
+
     </td>
   </tr>
 </table>
-<!--[if mso]></td></tr></table><![endif]-->
+
+<!--[if mso]>
+</td></tr></table>
+<![endif]-->
 
 </body>
 </html>`;
@@ -820,7 +852,7 @@ const handler: HandlerFn = async (req: AdaptedRequest, res: AdaptedResponse) => 
           name:         owner,
           amount:       fmtIDR(pkg.idr),
           reference:    cleanNote || `NEXUS-${cleanUsername}-${pkg.cr}CR`,
-          message:      `Transfer ${fmtIDR(pkg.idr)} via ${cleanMethod.toUpperCase()} ke ${maskNumber(paymentNumber)} (${owner}).`,
+          message:      `Transfer ${fmtIDR(pkg.idr)} via ${cleanMethod.toUpperCase()} to ${maskNumber(paymentNumber)} (${owner}).`,
         },
       },
     });

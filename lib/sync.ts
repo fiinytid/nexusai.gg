@@ -1,9 +1,25 @@
 // lib/sync.ts — NEXUS AI User Data Sync (TypeScript)
+//
+// Changes in this version:
+//   • Added integrated redeem-code management actions directly in the sync handler:
+//       admin-create-code  — create a new redeem code (with CODE, credits, maxUses, expiry)
+//       admin-delete-code  — permanently delete a redeem code by code string
+//       admin-list-codes   — list all redeem codes
+//       admin-get-code     — fetch a single code record by code string
+//       admin-update-code  — patch credits / maxUses / expiresInDays / label on an existing code
+//       admin-reset-uses   — zero out the use counter on a code
+//       admin-regenerate   — issue a new random code string with the same settings
+//       redeem-code        — user action: redeem a code and credit the user's account
+//   • All admin redeem actions require verifyAdminToken (Authorization header)
+//   • redeem-code is rate-limited per IP and per username (brute-force protection)
+//   • All comments and messages in English
+//   • No changes to existing sync / CRUD / storage logic
 
+import crypto from 'crypto';
 import type { SupabaseClient }                             from '@supabase/supabase-js';
 import type { HandlerFn, AdaptedRequest, AdaptedResponse } from '../app/api/[...slug]/route';
-import { deleteUserInbox } from './inbox';
-import { sanitizeStr, checkRateLimit }  from './_security';
+import { deleteUserInbox }                                 from './inbox';
+import { sanitizeStr, checkRateLimit, verifyAdminToken }  from './_security';
 
 // ═══════════════════════════════════════════════════════════════════════════
 // TYPES
@@ -112,6 +128,30 @@ interface PostBody {
   [key: string]: unknown;
 }
 
+// ─── Redeem code types ─────────────────────────────────────────────────────
+
+/** Full record stored at nexus:code:<CODE> */
+interface CodeRecord {
+  code:      string;
+  credits:   number;
+  maxUses:   number;
+  uses:      number;
+  expiresAt: string | null;
+  createdAt: string;
+  label?:    string;
+}
+
+/** Lightweight summary stored in the master list key */
+interface CodeListEntry {
+  code:      string;
+  credits:   number;
+  maxUses:   number;
+  uses:      number;
+  expiresAt: string | null;
+  createdAt: string;
+  label?:    string;
+}
+
 // ─── Raw Supabase response shapes ─────────────────────────────────────────
 
 interface SbRowGet {
@@ -161,6 +201,12 @@ const MAX_DEDUCT_COST = 1_000;
 // retried network request never double-charges the same AI response).
 const DEDUCT_DEDUPE_TTL_MS = 10 * 60 * 1000; // 10 minutes
 
+// Redeem code constants
+const CODES_LIST_KEY        = 'nexus:code_list' as const;
+const MAX_CODE_CREDITS      = 10_000;
+const MAX_CODE_USES         = 10_000;
+const CODE_USED_TTL_SECONDS = 86_400 * 365 * 3; // 3 years
+
 // ═══════════════════════════════════════════════════════════════════════════
 // UTILITIES
 // ═══════════════════════════════════════════════════════════════════════════
@@ -206,6 +252,67 @@ function safeDeductCost(value: unknown): number | null {
   return parseFloat(n.toFixed(4));
 }
 
+// ─── Redeem code utilities ─────────────────────────────────────────────────
+
+/**
+ * Validate and normalise a redeem code string.
+ * Accepts 6–12 uppercase alphanumeric characters.
+ * Returns the normalised code, or null if invalid.
+ */
+function validateCode(code: unknown): string | null {
+  const upper = String(code ?? '').toUpperCase().trim().replace(/\s/g, '');
+  if (!/^[A-Z0-9]{6,12}$/.test(upper)) return null;
+  return upper;
+}
+
+/**
+ * Generate a cryptographically-random 8-character code.
+ * Excludes ambiguous characters: 0, O, I, 1, L.
+ */
+function generateRandomCode(): string {
+  const chars = 'ABCDEFGHJKMNPQRSTUVWXYZ23456789';
+  const bytes = crypto.randomBytes(8);
+  let code    = '';
+  for (const byte of bytes) {
+    code += chars[byte % chars.length];
+  }
+  return code.substring(0, 8);
+}
+
+/**
+ * Build a CodeListEntry summary from a full CodeRecord.
+ */
+function toListEntry(record: CodeRecord): CodeListEntry {
+  return {
+    code:      record.code,
+    credits:   record.credits,
+    maxUses:   record.maxUses,
+    uses:      record.uses,
+    expiresAt: record.expiresAt,
+    createdAt: record.createdAt,
+    ...(record.label ? { label: record.label } : {}),
+  };
+}
+
+/**
+ * Parse and validate an expiresInDays value.
+ * Returns an ISO expiry string, null (never expires), or throws a descriptive Error.
+ */
+function parseExpiry(expiresInDays: unknown): string | null {
+  if (
+    expiresInDays === undefined ||
+    expiresInDays === null      ||
+    expiresInDays === ''
+  ) {
+    return null; // never expires
+  }
+  const days = parseInt(String(expiresInDays), 10);
+  if (isNaN(days) || days < 1 || days > 3_650) {
+    throw new Error('expiresInDays must be between 1 and 3650.');
+  }
+  return new Date(Date.now() + days * 86_400_000).toISOString();
+}
+
 // ═══════════════════════════════════════════════════════════════════════════
 // SUPABASE — async lazy init (Promise-based lock, no double-init races)
 // ═══════════════════════════════════════════════════════════════════════════
@@ -237,7 +344,7 @@ async function _doInitSB(): Promise<SupabaseClient | null> {
     const { createClient } = await import('@supabase/supabase-js');
     const client = createClient(url, key, {
       auth:   { persistSession: false, autoRefreshToken: false },
-      global: { headers: { 'X-Client-Info': 'nexus-sync/18' } },
+      global: { headers: { 'X-Client-Info': 'nexus-sync/19' } },
     });
 
     _sb.client    = client;
@@ -541,6 +648,46 @@ async function kvDel(username: string): Promise<void> {
   }
 }
 
+// ─── KV raw key helpers (for redeem code storage) ─────────────────────────
+
+async function kvRawGet<T>(key: string): Promise<T | null> {
+  const kv = await getKV();
+  if (!kv) return null;
+  try {
+    const val = await withTimeout(kv.get(key), TIMEOUT_OP, 'kvRawGet');
+    return val == null ? null : (val as T);
+  } catch (e: unknown) {
+    console.warn('[kv] kvRawGet error:', e instanceof Error ? e.message : e);
+    return null;
+  }
+}
+
+async function kvRawSet(key: string, value: unknown, opts?: { ex?: number }): Promise<boolean> {
+  const kv = await getKV();
+  if (!kv) return false;
+  try {
+    await withTimeout(kv.set(key, value, opts), TIMEOUT_OP, 'kvRawSet');
+    return true;
+  } catch (e: unknown) {
+    console.warn('[kv] kvRawSet error:', e instanceof Error ? e.message : e);
+    return false;
+  }
+}
+
+async function kvRawDel(key: string): Promise<void> {
+  const kv = await getKV();
+  if (!kv) return;
+  try {
+    const delFn =
+      typeof kv.del    === 'function' ? kv.del.bind(kv)    :
+      typeof kv.delete === 'function' ? kv.delete.bind(kv) :
+      null;
+    if (delFn) await withTimeout(delFn(key), TIMEOUT_OP, 'kvRawDel');
+  } catch (e: unknown) {
+    console.warn('[kv] kvRawDel error (non-fatal):', e instanceof Error ? e.message : e);
+  }
+}
+
 // ═══════════════════════════════════════════════════════════════════════════
 // STORAGE ABSTRACTION
 // ═══════════════════════════════════════════════════════════════════════════
@@ -669,12 +816,6 @@ function stripConvsForProject(data: UserData, projectId: string): UserData {
 // ═══════════════════════════════════════════════════════════════════════════
 // OWNER / ADMIN ROLE RESOLUTION (role-tagging only — NOT an auth gate)
 // ═══════════════════════════════════════════════════════════════════════════
-//
-// These helpers decide whether a *stored user record* should be tagged as
-// owner/admin (e.g. to grant unlimited credits in their own data). They are
-// not used to authorize who may call the admin actions below — per this
-// version's requirements, there is no authorization check on those routes
-// at all.
 
 function parseIdList(envStr: string | undefined): IdEntry[] {
   return (envStr ?? '')
@@ -792,7 +933,7 @@ const handler: HandlerFn = async (req: AdaptedRequest, res: AdaptedResponse) => 
   // ══════════════════════════════════════════════════════════
   if (req.method === 'GET') {
 
-    // NOTE: no token check — reachable by anyone who hits this URL.
+    // GET ?admin_ids=1 — no token check.
     if (req.query['admin_ids'] === '1') {
       return res.status(200).json({
         admin_ids: getAdminIds().map(a => a.id).filter(Boolean),
@@ -875,6 +1016,42 @@ const handler: HandlerFn = async (req: AdaptedRequest, res: AdaptedResponse) => 
       }
     }
 
+    // GET ?codes=1 — admin: list all redeem codes.
+    if (req.query['codes'] === '1') {
+      if (!verifyAdminToken(req)) {
+        return res.status(401).json({ error: 'Unauthorized.' });
+      }
+      if (!checkRateLimit(`sync_codes_get:${ip}`, 30)) {
+        return res.status(429).json({ error: 'Rate limit exceeded.' });
+      }
+      try {
+        const codes = (await kvRawGet<CodeListEntry[]>(CODES_LIST_KEY)) ?? [];
+        return res.status(200).json({ codes });
+      } catch (e: unknown) {
+        console.error('[sync] GET codes error:', e instanceof Error ? e.message : e);
+        return res.status(500).json({ error: 'Failed to retrieve code list.' });
+      }
+    }
+
+    // GET ?code=<CODE> — admin: fetch a single redeem code record.
+    if (req.query['code']) {
+      if (!verifyAdminToken(req)) {
+        return res.status(401).json({ error: 'Unauthorized.' });
+      }
+      const singleCode = validateCode(req.query['code']);
+      if (!singleCode) {
+        return res.status(400).json({ error: 'Invalid code format.' });
+      }
+      try {
+        const record = await kvRawGet<CodeRecord>(`nexus:code:${singleCode}`);
+        if (!record) return res.status(404).json({ error: 'Code not found.' });
+        return res.status(200).json({ code: record });
+      } catch (e: unknown) {
+        console.error('[sync] GET single code error:', e instanceof Error ? e.message : e);
+        return res.status(500).json({ error: 'Failed to retrieve code.' });
+      }
+    }
+
     if (!userKey) return res.status(200).json(null);
 
     try {
@@ -904,11 +1081,10 @@ const handler: HandlerFn = async (req: AdaptedRequest, res: AdaptedResponse) => 
 
     const { user, robloxId: bodyRobloxId, data, action } = body;
 
-    // ── ADMIN-STYLE ACTIONS — NO TOKEN CHECK ───────────────
-    // Anyone who can reach this route and knows the body shape can call
-    // these. See the security note at the top of this file.
+    // ── ACTIONS ────────────────────────────────────────────
     if (action) {
 
+      // ── Helper: perform a read-modify-write on a user record ──
       async function adminUpdate(
         target:   unknown,
         updateFn: (existing: UserData) => UserData,
@@ -929,9 +1105,501 @@ const handler: HandlerFn = async (req: AdaptedRequest, res: AdaptedResponse) => 
         }
       }
 
-      const ab = body as AdminUpdateBody;
+      const ab = body as AdminUpdateBody & Record<string, unknown>;
 
       switch (action) {
+
+        // ────────────────────────────────────────────────────────────────
+        // REDEEM CODE MANAGEMENT ACTIONS
+        // All actions below require a valid admin token.
+        // ────────────────────────────────────────────────────────────────
+
+        // admin-create-code: create a new redeem code.
+        // Body: { action, code?, credits, maxUses, expiresInDays?, label? }
+        // If `code` is provided and valid it is used as the code string;
+        // otherwise a random 8-character code is generated automatically.
+        case 'admin-create-code': {
+          if (!verifyAdminToken(req)) {
+            return res.status(401).json({ error: 'Unauthorized.' });
+          }
+          if (!checkRateLimit(`sync_code_create:${ip}`, 10)) {
+            return res.status(429).json({ error: 'Rate limit exceeded.' });
+          }
+
+          const { credits, maxUses, expiresInDays, label } = ab as {
+            credits?:       unknown;
+            maxUses?:       unknown;
+            expiresInDays?: unknown;
+            label?:         unknown;
+          };
+
+          // Validate credits (1 – 10 000)
+          const cr = parseFloat(String(credits ?? ''));
+          if (isNaN(cr) || cr <= 0 || cr > MAX_CODE_CREDITS) {
+            return res.status(400).json({
+              error: `credits must be between 1 and ${MAX_CODE_CREDITS}.`,
+            });
+          }
+
+          // Validate maxUses (1 – 10 000)
+          const mu = parseInt(String(maxUses ?? ''), 10);
+          if (isNaN(mu) || mu <= 0 || mu > MAX_CODE_USES) {
+            return res.status(400).json({
+              error: `maxUses must be between 1 and ${MAX_CODE_USES}.`,
+            });
+          }
+
+          // Validate optional expiry
+          let expiresAt: string | null;
+          try {
+            expiresAt = parseExpiry(expiresInDays);
+          } catch (e: unknown) {
+            return res.status(400).json({
+              error: e instanceof Error ? e.message : String(e),
+            });
+          }
+
+          // Determine final code string
+          const customCode = ab.code ? validateCode(ab.code) : null;
+          if (ab.code && !customCode) {
+            return res.status(400).json({
+              error: 'Invalid code format. Must be 6–12 uppercase alphanumeric characters.',
+            });
+          }
+
+          // If a custom code was provided, make sure it doesn't already exist
+          if (customCode) {
+            const existingCode = await kvRawGet<CodeRecord>(`nexus:code:${customCode}`);
+            if (existingCode) {
+              return res.status(409).json({ error: 'A code with that string already exists.' });
+            }
+          }
+
+          const codeStr   = customCode ?? generateRandomCode();
+          const cleanLabel = label ? sanitizeStr(String(label), 60) : undefined;
+
+          try {
+            const newCode: CodeRecord = {
+              code:      codeStr,
+              credits:   parseFloat(cr.toFixed(4)),
+              maxUses:   mu,
+              uses:      0,
+              expiresAt,
+              createdAt: new Date().toISOString(),
+              ...(cleanLabel ? { label: cleanLabel } : {}),
+            };
+
+            await kvRawSet(`nexus:code:${codeStr}`, newCode);
+
+            const codes = (await kvRawGet<CodeListEntry[]>(CODES_LIST_KEY)) ?? [];
+            codes.push(toListEntry(newCode));
+            await kvRawSet(CODES_LIST_KEY, codes);
+
+            return res.status(200).json({ success: true, code: newCode });
+          } catch (e: unknown) {
+            console.error('[sync] admin-create-code error:', e instanceof Error ? e.message : e);
+            return res.status(500).json({ error: 'Failed to create code.' });
+          }
+        }
+
+        // admin-update-code: patch credits / maxUses / expiresInDays / label
+        // on an existing code without deleting and re-creating it.
+        // Body: { action, code, credits?, maxUses?, expiresInDays?, label? }
+        case 'admin-update-code': {
+          if (!verifyAdminToken(req)) {
+            return res.status(401).json({ error: 'Unauthorized.' });
+          }
+          if (!checkRateLimit(`sync_code_update:${ip}`, 20)) {
+            return res.status(429).json({ error: 'Rate limit exceeded.' });
+          }
+
+          const code = validateCode(ab.code);
+          if (!code) return res.status(400).json({ error: 'Invalid code format.' });
+
+          try {
+            const existing = await kvRawGet<CodeRecord>(`nexus:code:${code}`);
+            if (!existing) return res.status(404).json({ error: 'Code not found.' });
+
+            const { credits, maxUses, expiresInDays, label } = ab as {
+              credits?:       unknown;
+              maxUses?:       unknown;
+              expiresInDays?: unknown;
+              label?:         unknown;
+            };
+
+            let newCredits = existing.credits;
+            if (credits !== undefined) {
+              const cr = parseFloat(String(credits));
+              if (isNaN(cr) || cr <= 0 || cr > MAX_CODE_CREDITS) {
+                return res.status(400).json({
+                  error: `credits must be between 1 and ${MAX_CODE_CREDITS}.`,
+                });
+              }
+              newCredits = parseFloat(cr.toFixed(4));
+            }
+
+            let newMaxUses = existing.maxUses;
+            if (maxUses !== undefined) {
+              const mu = parseInt(String(maxUses), 10);
+              if (isNaN(mu) || mu <= 0 || mu > MAX_CODE_USES) {
+                return res.status(400).json({
+                  error: `maxUses must be between 1 and ${MAX_CODE_USES}.`,
+                });
+              }
+              newMaxUses = mu;
+            }
+
+            let newExpiresAt = existing.expiresAt;
+            if (expiresInDays !== undefined) {
+              try {
+                newExpiresAt = parseExpiry(expiresInDays);
+              } catch (e: unknown) {
+                return res.status(400).json({
+                  error: e instanceof Error ? e.message : String(e),
+                });
+              }
+            }
+
+            const newLabel = label !== undefined
+              ? (label ? sanitizeStr(String(label), 60) : undefined)
+              : existing.label;
+
+            const updated: CodeRecord = {
+              ...existing,
+              credits:   newCredits,
+              maxUses:   newMaxUses,
+              expiresAt: newExpiresAt,
+              ...(newLabel ? { label: newLabel } : {}),
+            };
+
+            await kvRawSet(`nexus:code:${code}`, updated);
+
+            // Patch master list entry in-place (non-critical)
+            try {
+              const codes = (await kvRawGet<CodeListEntry[]>(CODES_LIST_KEY)) ?? [];
+              const idx   = codes.findIndex(c => c.code === code);
+              if (idx !== -1) {
+                codes[idx] = toListEntry(updated);
+                await kvRawSet(CODES_LIST_KEY, codes);
+              }
+            } catch { /* non-critical */ }
+
+            return res.status(200).json({ success: true, code: updated });
+          } catch (e: unknown) {
+            console.error('[sync] admin-update-code error:', e instanceof Error ? e.message : e);
+            return res.status(500).json({ error: 'Failed to update code.' });
+          }
+        }
+
+        // admin-delete-code: permanently delete a redeem code.
+        // Body: { action, code }
+        case 'admin-delete-code': {
+          if (!verifyAdminToken(req)) {
+            return res.status(401).json({ error: 'Unauthorized.' });
+          }
+          if (!checkRateLimit(`sync_code_del:${ip}`, 20)) {
+            return res.status(429).json({ error: 'Rate limit exceeded.' });
+          }
+
+          const code = validateCode(ab.code);
+          if (!code) return res.status(400).json({ error: 'Invalid code format.' });
+
+          try {
+            const codes    = (await kvRawGet<CodeListEntry[]>(CODES_LIST_KEY)) ?? [];
+            const newCodes = codes.filter(c => c.code !== code);
+            await kvRawSet(CODES_LIST_KEY, newCodes);
+            await kvRawDel(`nexus:code:${code}`);
+            return res.status(200).json({ success: true, deleted: code });
+          } catch (e: unknown) {
+            console.error('[sync] admin-delete-code error:', e instanceof Error ? e.message : e);
+            return res.status(500).json({ error: 'Failed to delete code.' });
+          }
+        }
+
+        // admin-regenerate: issue a new random code string with the same
+        // credits / maxUses / expiresAt / label. The old code is deleted.
+        // Useful when a code has been accidentally leaked.
+        // Body: { action, code }
+        case 'admin-regenerate': {
+          if (!verifyAdminToken(req)) {
+            return res.status(401).json({ error: 'Unauthorized.' });
+          }
+          if (!checkRateLimit(`sync_code_regen:${ip}`, 10)) {
+            return res.status(429).json({ error: 'Rate limit exceeded.' });
+          }
+
+          const oldCode = validateCode(ab.code);
+          if (!oldCode) return res.status(400).json({ error: 'Invalid code format.' });
+
+          try {
+            const existing = await kvRawGet<CodeRecord>(`nexus:code:${oldCode}`);
+            if (!existing) return res.status(404).json({ error: 'Code not found.' });
+
+            const newCodeStr = generateRandomCode();
+            const regenerated: CodeRecord = {
+              ...existing,
+              code:      newCodeStr,
+              uses:      0,
+              createdAt: new Date().toISOString(),
+            };
+
+            await kvRawSet(`nexus:code:${newCodeStr}`, regenerated);
+            await kvRawDel(`nexus:code:${oldCode}`);
+
+            // Swap master list entry (non-critical)
+            try {
+              const codes = (await kvRawGet<CodeListEntry[]>(CODES_LIST_KEY)) ?? [];
+              const idx   = codes.findIndex(c => c.code === oldCode);
+              if (idx !== -1) {
+                codes[idx] = toListEntry(regenerated);
+              } else {
+                codes.push(toListEntry(regenerated));
+              }
+              await kvRawSet(CODES_LIST_KEY, codes);
+            } catch { /* non-critical */ }
+
+            return res.status(200).json({ success: true, oldCode, code: regenerated });
+          } catch (e: unknown) {
+            console.error('[sync] admin-regenerate error:', e instanceof Error ? e.message : e);
+            return res.status(500).json({ error: 'Failed to regenerate code.' });
+          }
+        }
+
+        // admin-reset-uses: zero out the use counter on a code.
+        // Does NOT clear per-user sentinel keys, so users who already
+        // redeemed will still be blocked unless those keys are deleted.
+        // Body: { action, code }
+        case 'admin-reset-uses': {
+          if (!verifyAdminToken(req)) {
+            return res.status(401).json({ error: 'Unauthorized.' });
+          }
+          if (!checkRateLimit(`sync_code_reset:${ip}`, 20)) {
+            return res.status(429).json({ error: 'Rate limit exceeded.' });
+          }
+
+          const code = validateCode(ab.code);
+          if (!code) return res.status(400).json({ error: 'Invalid code format.' });
+
+          try {
+            const existing = await kvRawGet<CodeRecord>(`nexus:code:${code}`);
+            if (!existing) return res.status(404).json({ error: 'Code not found.' });
+
+            const reset: CodeRecord = { ...existing, uses: 0 };
+            await kvRawSet(`nexus:code:${code}`, reset);
+
+            try {
+              const codes = (await kvRawGet<CodeListEntry[]>(CODES_LIST_KEY)) ?? [];
+              const idx   = codes.findIndex(c => c.code === code);
+              if (idx !== -1) {
+                codes[idx].uses = 0;
+                await kvRawSet(CODES_LIST_KEY, codes);
+              }
+            } catch { /* non-critical */ }
+
+            return res.status(200).json({ success: true, code: reset });
+          } catch (e: unknown) {
+            console.error('[sync] admin-reset-uses error:', e instanceof Error ? e.message : e);
+            return res.status(500).json({ error: 'Failed to reset code uses.' });
+          }
+        }
+
+        // admin-list-codes: list all redeem codes.
+        // Body: { action }
+        case 'admin-list-codes': {
+          if (!verifyAdminToken(req)) {
+            return res.status(401).json({ error: 'Unauthorized.' });
+          }
+          if (!checkRateLimit(`sync_code_list:${ip}`, 30)) {
+            return res.status(429).json({ error: 'Rate limit exceeded.' });
+          }
+          try {
+            const codes = (await kvRawGet<CodeListEntry[]>(CODES_LIST_KEY)) ?? [];
+            return res.status(200).json({ codes });
+          } catch (e: unknown) {
+            console.error('[sync] admin-list-codes error:', e instanceof Error ? e.message : e);
+            return res.status(500).json({ error: 'Failed to retrieve code list.' });
+          }
+        }
+
+        // admin-get-code: fetch a single code record by code string.
+        // Body: { action, code }
+        case 'admin-get-code': {
+          if (!verifyAdminToken(req)) {
+            return res.status(401).json({ error: 'Unauthorized.' });
+          }
+
+          const code = validateCode(ab.code);
+          if (!code) return res.status(400).json({ error: 'Invalid code format.' });
+
+          try {
+            const record = await kvRawGet<CodeRecord>(`nexus:code:${code}`);
+            if (!record) return res.status(404).json({ error: 'Code not found.' });
+            return res.status(200).json({ code: record });
+          } catch (e: unknown) {
+            console.error('[sync] admin-get-code error:', e instanceof Error ? e.message : e);
+            return res.status(500).json({ error: 'Failed to retrieve code.' });
+          }
+        }
+
+        // ── redeem-code: user redeems a code ─────────────────────────────
+        // Validates the code, marks it used for this user (idempotent via a
+        // per-user sentinel key in KV), increments the use counter, and
+        // credits the user's account via a server-side atomic write.
+        //
+        // Rate-limited aggressively on both IP and username to prevent
+        // brute-force attacks against the code namespace.
+        //
+        // Body: { action, code, user, userId? }
+        case 'redeem-code': {
+          // Per-IP rate limit (5 attempts per window)
+          if (!checkRateLimit(`rdm_use:${ip}`, 5)) {
+            return res.status(429).json({
+              error: 'Too many attempts. Please try again in 1 minute.',
+            });
+          }
+
+          const rawCode  = ab.code;
+          const rawUser  = ab.user ?? user;
+
+          if (!rawCode || !rawUser) {
+            return res.status(400).json({ error: 'Both "code" and "user" are required.' });
+          }
+
+          const code = validateCode(rawCode);
+          if (!code) {
+            // Deliberately vague — do not help brute-force attackers
+            return res.status(404).json({ error: 'Invalid or expired code.' });
+          }
+
+          const cleanUser = sanitizeStr(String(rawUser), 50).toLowerCase().trim();
+          if (!cleanUser || !/^[a-z0-9_]{3,50}$/i.test(cleanUser)) {
+            return res.status(400).json({ error: 'Invalid username format.' });
+          }
+
+          // Per-user rate limit (3 attempts per window)
+          if (!checkRateLimit(`rdm_user:${cleanUser}`, 3)) {
+            return res.status(429).json({
+              error: 'Too many attempts for this account. Please wait a moment.',
+            });
+          }
+
+          try {
+            const codeData = await kvRawGet<CodeRecord>(`nexus:code:${code}`);
+
+            // Constant-time-like delay to prevent timing oracle on code existence
+            await new Promise<void>(r => setTimeout(r, 50 + Math.random() * 50));
+
+            if (!codeData) {
+              return res.status(404).json({ error: 'Invalid or expired code.' });
+            }
+
+            // Check expiry
+            if (codeData.expiresAt && new Date(codeData.expiresAt) < new Date()) {
+              return res.status(400).json({ error: 'This code has expired.' });
+            }
+
+            // Check already redeemed by this user
+            const usedKey      = `nexus:code_used:${code}:${cleanUser}`;
+            let alreadyUsed    = false;
+            try {
+              alreadyUsed = !!(await kvRawGet<boolean>(usedKey));
+            } catch { /* treat as not used */ }
+
+            if (alreadyUsed) {
+              return res.status(400).json({ error: 'You have already redeemed this code.' });
+            }
+
+            // Check max uses
+            if (codeData.uses >= codeData.maxUses) {
+              return res.status(400).json({ error: 'This code has reached its usage limit.' });
+            }
+
+            // Validate credits from stored record — never from user input
+            const redeemCredits = parseFloat(String(codeData.credits ?? 0));
+            if (isNaN(redeemCredits) || redeemCredits <= 0 || redeemCredits > MAX_CODE_CREDITS) {
+              return res.status(500).json({
+                error: 'Code data is corrupt. Please contact support.',
+              });
+            }
+
+            // Mark used (TTL: 3 years)
+            await kvRawSet(usedKey, true, { ex: CODE_USED_TTL_SECONDS });
+
+            // Increment use counter
+            const updatedCode: CodeRecord = { ...codeData, uses: codeData.uses + 1 };
+            await kvRawSet(`nexus:code:${code}`, updatedCode);
+
+            // Update master list (non-critical — may be stale if this fails)
+            try {
+              const codes = (await kvRawGet<CodeListEntry[]>(CODES_LIST_KEY)) ?? [];
+              const idx   = codes.findIndex(c => c.code === code);
+              if (idx !== -1) {
+                codes[idx].uses = updatedCode.uses;
+                await kvRawSet(CODES_LIST_KEY, codes);
+              }
+            } catch { /* non-critical */ }
+
+            // Credit the user's account via a server-side read-modify-write.
+            // We update Supabase (primary store) then fire-and-forget KV sync,
+            // exactly like the normal deduct-credits action.
+            const existingUser = await getUser(cleanUser);
+            const currentData  = existingUser ?? {};
+
+            if (currentData.banned) {
+              return res.status(403).json({
+                error:  'Account banned',
+                reason: currentData.banReason ?? 'Violation of ToS',
+              });
+            }
+
+            const currentCredits  = safeCredits(currentData.credits, DEFAULT_NEW_USER_CREDITS);
+            const newCredits      = safeCredits(currentCredits + redeemCredits, currentCredits);
+
+            if (newCredits > MAX_CREDITS) {
+              return res.status(400).json({
+                error: 'Your credits balance is already at the maximum.',
+              });
+            }
+
+            const nextData: UserData = {
+              ...currentData,
+              credits:  newCredits,
+              _updated: Date.now(),
+              ...(!existingUser ? {
+                plan:      'free',
+                roles:     [],
+                banned:    false,
+                banReason: null,
+                _created:  Date.now(),
+              } : {}),
+            };
+
+            try {
+              await setUser(cleanUser, nextData);
+            } catch (e: unknown) {
+              // Credit write failed — roll back the use-counter increment
+              // to avoid double-charging on a retry.
+              const rollback: CodeRecord = { ...updatedCode, uses: codeData.uses };
+              await kvRawSet(`nexus:code:${code}`, rollback).catch(() => undefined);
+              return errResponse(res, e);
+            }
+
+            return res.status(200).json({
+              success:    true,
+              credits:    redeemCredits,
+              newCredits,
+              label:      codeData.label ?? null,
+            });
+
+          } catch (e: unknown) {
+            console.error('[sync] redeem-code error:', e instanceof Error ? e.message : e);
+            return res.status(500).json({ error: 'An error occurred. Please try again.' });
+          }
+        }
+
+        // ────────────────────────────────────────────────────────────────
+        // USER / ACCOUNT MANAGEMENT ACTIONS (unchanged from original)
+        // ────────────────────────────────────────────────────────────────
 
         case 'give-credits': {
           const amt = parseFloat(String(ab.amount ?? ''));
@@ -966,22 +1634,6 @@ const handler: HandlerFn = async (req: AdaptedRequest, res: AdaptedResponse) => 
           return res.status(200).json({ success: true });
         }
 
-        // ── deduct-credits ──────────────────────────────────────────────
-        // Atomic, server-side credit deduction for a single AI request.
-        // This is the missing piece that previously caused the "credits
-        // bounce back to the old value" bug: the client used to compute
-        // a deduction locally and only ever display it — the regular sync
-        // route never accepted a "credits" field from the client (by
-        // design, to stop raw client-side overwrites), so the server
-        // balance was never actually touched. The next sync (debounced,
-        // periodic, or on tab focus) would then read the untouched DB
-        // value and overwrite the client's optimistic number.
-        //
-        // This action fixes that by giving the client an explicit,
-        // narrow, validated way to say "subtract this specific cost for
-        // this specific request" — entirely separate from the generic
-        // data-sync path, and idempotent via requestId so retries/double
-        // sends can never double-charge the same response.
         case 'deduct-credits': {
           const targetUser = ab.target ?? user;
           const cost       = safeDeductCost(ab.cost);
@@ -1008,8 +1660,6 @@ const handler: HandlerFn = async (req: AdaptedRequest, res: AdaptedResponse) => 
 
           const existing = await getUser(tKey);
 
-          // Owner/admin accounts are unlimited — never actually deduct,
-          // just report their effectively-infinite balance back.
           if (existing?.robloxId && isAdminById(existing.robloxId)) {
             return res.status(200).json({
               success:  true,
@@ -1021,13 +1671,10 @@ const handler: HandlerFn = async (req: AdaptedRequest, res: AdaptedResponse) => 
 
           const current = existing ?? {};
 
-          // Idempotency check — if this exact requestId was already
-          // processed within the dedupe window, return the *current*
-          // balance without deducting again.
           const ledger = Array.isArray(current._deductLedger)
             ? (current._deductLedger as { id: string; ts: number }[])
             : [];
-          const cutoff   = Date.now() - DEDUCT_DEDUPE_TTL_MS;
+          const cutoff      = Date.now() - DEDUCT_DEDUPE_TTL_MS;
           const freshLedger = ledger.filter(e => e && typeof e.ts === 'number' && e.ts > cutoff);
           const alreadyDone = freshLedger.some(e => e.id === requestId);
 
@@ -1043,13 +1690,11 @@ const handler: HandlerFn = async (req: AdaptedRequest, res: AdaptedResponse) => 
           const balanceBefore = safeCredits(current.credits, DEFAULT_NEW_USER_CREDITS);
 
           if (balanceBefore < cost) {
-            // Not enough balance — do not deduct, do not go negative.
-            // Report the real balance so the client can correct its UI.
             return res.status(200).json({
-              success:        false,
-              error:          'insufficient_credits',
-              credits:        balanceBefore,
-              deducted:       0,
+              success:  false,
+              error:    'insufficient_credits',
+              credits:  balanceBefore,
+              deducted: 0,
             });
           }
 
@@ -1059,9 +1704,9 @@ const handler: HandlerFn = async (req: AdaptedRequest, res: AdaptedResponse) => 
 
           const next: UserData = {
             ...current,
-            credits:        balanceAfter,
-            _deductLedger:  freshLedger.slice(-200),
-            _updated:       Date.now(),
+            credits:       balanceAfter,
+            _deductLedger: freshLedger.slice(-200),
+            _updated:      Date.now(),
           };
 
           try {
@@ -1174,12 +1819,6 @@ const handler: HandlerFn = async (req: AdaptedRequest, res: AdaptedResponse) => 
           return res.status(200).json({ success: true });
         }
 
-        // ── delete-project: removes a project AND every conversation tied
-        // to it (cascading delete), so no orphaned chat data is left in
-        // Supabase. The dashboard's "delete project" button should call
-        // this action instead of (or in addition to) just resyncing a
-        // trimmed projects[] array, to guarantee server-side cleanup even
-        // if the client crashes mid-operation.
         case 'delete-project': {
           const targetUser = ab.target ?? user;
           const projectId  = sanitizeStr(String((body as Record<string, unknown>).projectId ?? ''), 100);
@@ -1229,11 +1868,10 @@ const handler: HandlerFn = async (req: AdaptedRequest, res: AdaptedResponse) => 
 
       const clientData = data as UserData;
 
-      // Fields the client is allowed to overwrite directly. Notice
+      // Fields the client is allowed to overwrite directly.
       // "credits" is intentionally NOT in this list — credits are only
-      // ever changed through controlled arithmetic (see "deduct-credits"
-      // and the other admin actions above), never by a raw client-sent
-      // number overwriting the stored value.
+      // ever changed through controlled arithmetic (deduct-credits,
+      // redeem-code, and the other admin actions above).
       const SAFE_FIELDS: (keyof UserData)[] = [
         'convs', 'allConvs', 'curConv', 'model', 'guiModel',
         'lastClaim', 'draftText', 'avatar', 'displayName',
@@ -1245,15 +1883,11 @@ const handler: HandlerFn = async (req: AdaptedRequest, res: AdaptedResponse) => 
         if (clientData[f] !== undefined) clientUpdate[f] = clientData[f];
       }
 
-      // If the client's project list dropped one or more projects that
-      // existed before, treat that as a deletion and cascade-clean the
-      // matching conversations server-side. This covers the normal
-      // dashboard flow (resync after removing a project from the array)
-      // without requiring the client to know about the dedicated
-      // 'delete-project' action above.
+      // Cascade-clean conversations when the client's project list
+      // shrinks — same logic as the dedicated delete-project action.
       if (existing && Array.isArray(existing.projects) && Array.isArray(clientUpdate.projects)) {
-        const beforeIds = new Set(existing.projects.map(p => p.id));
-        const afterIds  = new Set(clientUpdate.projects.map(p => p.id));
+        const beforeIds  = new Set(existing.projects.map(p => p.id));
+        const afterIds   = new Set(clientUpdate.projects.map(p => p.id));
         const removedIds = [...beforeIds].filter(id => !afterIds.has(id));
         for (const removedId of removedIds) {
           if (Array.isArray(clientUpdate.convs)) {
@@ -1277,12 +1911,6 @@ const handler: HandlerFn = async (req: AdaptedRequest, res: AdaptedResponse) => 
       let merged: UserData;
 
       if (existing) {
-        // Existing user: credits ALWAYS come from the stored record. The
-        // client never gets to overwrite this value directly — this is
-        // what fixes the "credits reset to 30 on refresh" bug, since a
-        // stale/partial client payload can no longer clobber a real saved
-        // balance. Actual usage-based deductions happen exclusively
-        // through the "deduct-credits" action above.
         merged = {
           ...existing,
           ...clientUpdate,
@@ -1296,9 +1924,6 @@ const handler: HandlerFn = async (req: AdaptedRequest, res: AdaptedResponse) => 
           _updated:    Date.now(),
         };
       } else {
-        // Brand new user — this is the ONLY situation where a client-sent
-        // credits value is allowed to seed the initial balance, and even
-        // then it is validated and bounded.
         merged = {
           ...clientUpdate,
           credits:     clientData.credits !== undefined
