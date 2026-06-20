@@ -98,6 +98,9 @@ interface AdminUpdateBody {
   transactionId?: unknown;
   plan?:          string;
   reason?:        string;
+  // ── deduct-credits fields ──
+  cost?:          unknown;
+  requestId?:     unknown;
   [key: string]:  unknown;
 }
 
@@ -149,6 +152,15 @@ const MIN_CREDITS  = 0;
 const MAX_CREDITS  = 1_000_000;
 const DEFAULT_NEW_USER_CREDITS = 30;
 
+// Bounds for a single deduction request — prevents a single malformed or
+// malicious "deduct-credits" call from draining/corrupting a balance.
+const MIN_DEDUCT_COST = 0;
+const MAX_DEDUCT_COST = 1_000;
+
+// How long a given requestId is remembered for idempotency purposes (so a
+// retried network request never double-charges the same AI response).
+const DEDUCT_DEDUPE_TTL_MS = 10 * 60 * 1000; // 10 minutes
+
 // ═══════════════════════════════════════════════════════════════════════════
 // UTILITIES
 // ═══════════════════════════════════════════════════════════════════════════
@@ -185,6 +197,15 @@ function safeCredits(value: unknown, fallback: number): number {
   return Math.min(MAX_CREDITS, Math.max(MIN_CREDITS, parseFloat(n.toFixed(4))));
 }
 
+// Clamp + validate a single deduction "cost" value. Returns `null` if the
+// input is not a usable positive number within bounds.
+function safeDeductCost(value: unknown): number | null {
+  const n = parseFloat(String(value));
+  if (!Number.isFinite(n) || Number.isNaN(n)) return null;
+  if (n <= MIN_DEDUCT_COST || n > MAX_DEDUCT_COST) return null;
+  return parseFloat(n.toFixed(4));
+}
+
 // ═══════════════════════════════════════════════════════════════════════════
 // SUPABASE — async lazy init (Promise-based lock, no double-init races)
 // ═══════════════════════════════════════════════════════════════════════════
@@ -216,7 +237,7 @@ async function _doInitSB(): Promise<SupabaseClient | null> {
     const { createClient } = await import('@supabase/supabase-js');
     const client = createClient(url, key, {
       auth:   { persistSession: false, autoRefreshToken: false },
-      global: { headers: { 'X-Client-Info': 'nexus-sync/17' } },
+      global: { headers: { 'X-Client-Info': 'nexus-sync/18' } },
     });
 
     _sb.client    = client;
@@ -623,6 +644,13 @@ function trimUserData(data: UserData): UserData {
     }));
   }
   if (Array.isArray(d.projects)) d.projects = d.projects.slice(-100);
+  // Bound the dedupe ledger too, so it can never grow without limit.
+  if (Array.isArray(d._deductLedger)) {
+    const cutoff = Date.now() - DEDUCT_DEDUPE_TTL_MS;
+    d._deductLedger = (d._deductLedger as { id: string; ts: number }[])
+      .filter(e => e && typeof e.ts === 'number' && e.ts > cutoff)
+      .slice(-200);
+  }
   delete d.draftAttach;
   return d;
 }
@@ -938,6 +966,117 @@ const handler: HandlerFn = async (req: AdaptedRequest, res: AdaptedResponse) => 
           return res.status(200).json({ success: true });
         }
 
+        // ── deduct-credits ──────────────────────────────────────────────
+        // Atomic, server-side credit deduction for a single AI request.
+        // This is the missing piece that previously caused the "credits
+        // bounce back to the old value" bug: the client used to compute
+        // a deduction locally and only ever display it — the regular sync
+        // route never accepted a "credits" field from the client (by
+        // design, to stop raw client-side overwrites), so the server
+        // balance was never actually touched. The next sync (debounced,
+        // periodic, or on tab focus) would then read the untouched DB
+        // value and overwrite the client's optimistic number.
+        //
+        // This action fixes that by giving the client an explicit,
+        // narrow, validated way to say "subtract this specific cost for
+        // this specific request" — entirely separate from the generic
+        // data-sync path, and idempotent via requestId so retries/double
+        // sends can never double-charge the same response.
+        case 'deduct-credits': {
+          const targetUser = ab.target ?? user;
+          const cost       = safeDeductCost(ab.cost);
+          const requestId  = sanitizeStr(String(ab.requestId ?? ''), 100);
+
+          if (!targetUser) {
+            return res.status(400).json({ error: 'target (or user) is required' });
+          }
+          if (cost === null) {
+            return res.status(400).json({
+              error: `cost must be a number greater than 0 and at most ${MAX_DEDUCT_COST}`,
+            });
+          }
+          if (!requestId) {
+            return res.status(400).json({
+              error: 'requestId is required (used to prevent duplicate deductions)',
+            });
+          }
+
+          const tKey = normalizeKey(String(targetUser));
+          if (!tKey || tKey.length > 50) {
+            return res.status(400).json({ error: 'target is invalid or too long' });
+          }
+
+          const existing = await getUser(tKey);
+
+          // Owner/admin accounts are unlimited — never actually deduct,
+          // just report their effectively-infinite balance back.
+          if (existing?.robloxId && isAdminById(existing.robloxId)) {
+            return res.status(200).json({
+              success:  true,
+              credits:  MAX_CREDITS,
+              deducted: 0,
+              skipped:  'owner_or_admin',
+            });
+          }
+
+          const current = existing ?? {};
+
+          // Idempotency check — if this exact requestId was already
+          // processed within the dedupe window, return the *current*
+          // balance without deducting again.
+          const ledger = Array.isArray(current._deductLedger)
+            ? (current._deductLedger as { id: string; ts: number }[])
+            : [];
+          const cutoff   = Date.now() - DEDUCT_DEDUPE_TTL_MS;
+          const freshLedger = ledger.filter(e => e && typeof e.ts === 'number' && e.ts > cutoff);
+          const alreadyDone = freshLedger.some(e => e.id === requestId);
+
+          if (alreadyDone) {
+            return res.status(200).json({
+              success:  true,
+              credits:  safeCredits(current.credits, DEFAULT_NEW_USER_CREDITS),
+              deducted: 0,
+              skipped:  'duplicate_request',
+            });
+          }
+
+          const balanceBefore = safeCredits(current.credits, DEFAULT_NEW_USER_CREDITS);
+
+          if (balanceBefore < cost) {
+            // Not enough balance — do not deduct, do not go negative.
+            // Report the real balance so the client can correct its UI.
+            return res.status(200).json({
+              success:        false,
+              error:          'insufficient_credits',
+              credits:        balanceBefore,
+              deducted:       0,
+            });
+          }
+
+          const balanceAfter = safeCredits(balanceBefore - cost, balanceBefore);
+
+          freshLedger.push({ id: requestId, ts: Date.now() });
+
+          const next: UserData = {
+            ...current,
+            credits:        balanceAfter,
+            _deductLedger:  freshLedger.slice(-200),
+            _updated:       Date.now(),
+          };
+
+          try {
+            await setUser(tKey, next);
+          } catch (e: unknown) {
+            return errResponse(res, e);
+          }
+
+          return res.status(200).json({
+            success:  true,
+            credits:  balanceAfter,
+            deducted: cost,
+          });
+        }
+
         case 'confirm-payment': {
           const amt = parseFloat(String(ab.amount ?? ''));
           if (!ab.target || isNaN(amt) || amt <= 0) {
@@ -1092,8 +1231,9 @@ const handler: HandlerFn = async (req: AdaptedRequest, res: AdaptedResponse) => 
 
       // Fields the client is allowed to overwrite directly. Notice
       // "credits" is intentionally NOT in this list — credits are only
-      // ever changed through controlled arithmetic below, never by a raw
-      // client-sent number overwriting the stored value.
+      // ever changed through controlled arithmetic (see "deduct-credits"
+      // and the other admin actions above), never by a raw client-sent
+      // number overwriting the stored value.
       const SAFE_FIELDS: (keyof UserData)[] = [
         'convs', 'allConvs', 'curConv', 'model', 'guiModel',
         'lastClaim', 'draftText', 'avatar', 'displayName',
@@ -1141,7 +1281,8 @@ const handler: HandlerFn = async (req: AdaptedRequest, res: AdaptedResponse) => 
         // client never gets to overwrite this value directly — this is
         // what fixes the "credits reset to 30 on refresh" bug, since a
         // stale/partial client payload can no longer clobber a real saved
-        // balance.
+        // balance. Actual usage-based deductions happen exclusively
+        // through the "deduct-credits" action above.
         merged = {
           ...existing,
           ...clientUpdate,

@@ -4,12 +4,14 @@ import React, { useEffect, useRef } from 'react'
 import Script from 'next/script'
 
 /* ─────────────────────────────────────────────────────────────────────────────
-   CSS — NEXUS AI · v10
-   Changes from v9:
-   - All text → English
-   - UI Editor tab removed entirely
-   - Header: NEXUS AI + BETA badge inline, project name below title (single location)
-   - Cleaner input area & overall polish
+   CSS — NEXUS AI · v11
+   Mobile-first fixes:
+   - Removed all backdrop-filter / blur (causes rendering issues on Android/iOS)
+   - Safe area insets for notch devices
+   - Proper touch targets (min 44px)
+   - Hardware-accelerated sidebar slide
+   - No overflow issues on mobile
+   - All text in English
 ─────────────────────────────────────────────────────────────────────────────── */
 const PAGE_CSS = `
 /* ══════════════════════════════════════════════
@@ -34,31 +36,46 @@ const PAGE_CSS = `
   --dim:    #3a4a7a;
   --b:      rgba(0, 229, 255, 0.12);
   --bb:     rgba(0, 229, 255, 0.30);
-  --r:   8px;
-  --r-s: 6px;
-  --h-xs:  22px;
-  --h-sm:  28px;
-  --h-md:  32px;
-  --h-lg:  36px;
-  --h-xl:  40px;
-  --h-inp: 44px;
-  --sb-w:  252px;
+  --r:      8px;
+  --r-s:    6px;
+  --h-xs:   22px;
+  --h-sm:   28px;
+  --h-md:   32px;
+  --h-lg:   36px;
+  --h-xl:   40px;
+  --h-inp:  44px;
+  --sb-w:   252px;
   --fs-2xs: 8px;
   --fs-xs:  9px;
   --fs-sm:  10px;
   --fs-md:  11px;
-  --fs-base: 13px;
+  --fs-base:13px;
+  /* Safe area for notch/home indicator */
+  --safe-top:    env(safe-area-inset-top, 0px);
+  --safe-bottom: env(safe-area-inset-bottom, 0px);
+  --safe-left:   env(safe-area-inset-left, 0px);
+  --safe-right:  env(safe-area-inset-right, 0px);
 }
 
 html {
   height: 100%;
+  height: 100dvh;
   font-family: 'JetBrains Mono', monospace;
   background: var(--bg);
   color: var(--text);
   font-size: 13px;
   overflow: hidden;
+  /* Prevent iOS rubber-band scroll on the root */
+  overscroll-behavior: none;
 }
-body { height: 100%; overflow: hidden; min-height: 0; }
+body {
+  height: 100%;
+  height: 100dvh;
+  overflow: hidden;
+  min-height: 0;
+  overscroll-behavior: none;
+  -webkit-overflow-scrolling: touch;
+}
 
 body::before {
   content: '';
@@ -86,7 +103,10 @@ body::before {
   transition: opacity .5s ease;
 }
 #pageLoader.hide { opacity: 0; pointer-events: none; }
-.pl-logo { width: 72px; height: 72px; border-radius: 18px; overflow: hidden; border: 2px solid rgba(0,229,255,.4); }
+.pl-logo {
+  width: 72px; height: 72px; border-radius: 18px; overflow: hidden;
+  border: 2px solid rgba(0,229,255,.4);
+}
 .pl-logo img { width: 100%; height: 100%; object-fit: cover; display: block; }
 .pl-title {
   font-family: 'Orbitron', sans-serif;
@@ -94,9 +114,19 @@ body::before {
   background: linear-gradient(135deg, var(--cyan), var(--purple));
   -webkit-background-clip: text; -webkit-text-fill-color: transparent; background-clip: text;
 }
-.pl-bar-wrap { width: 220px; height: 3px; background: rgba(0,229,255,.1); border-radius: 3px; overflow: hidden; }
-.pl-bar { height: 100%; width: 0%; background: linear-gradient(90deg, var(--cyan), var(--purple)); border-radius: 3px; transition: width .35s ease; }
-.pl-txt { font-size: var(--fs-2xs); color: rgba(0,229,255,.5); letter-spacing: 1px; min-height: 16px; text-align: center; }
+.pl-bar-wrap {
+  width: 220px; height: 3px;
+  background: rgba(0,229,255,.1); border-radius: 3px; overflow: hidden;
+}
+.pl-bar {
+  height: 100%; width: 0%;
+  background: linear-gradient(90deg, var(--cyan), var(--purple));
+  border-radius: 3px; transition: width .35s ease;
+}
+.pl-txt {
+  font-size: var(--fs-2xs); color: rgba(0,229,255,.5);
+  letter-spacing: 1px; min-height: 16px; text-align: center;
+}
 
 
 /* ══════════════════════════════════════════════
@@ -113,17 +143,21 @@ body::before {
 #app.sb-hidden { grid-template-columns: 0 1fr; }
 .hidden { display: none !important; }
 
-/* ── Mobile sidebar overlay backdrop ── */
+/* ── Mobile sidebar overlay — NO blur (causes issues on mobile GPUs) ── */
 #sbOverlay {
   display: none;
   position: fixed; inset: 0;
-  background: rgba(0,0,0,.65);
+  background: rgba(0, 0, 0, 0.72);
   z-index: 90;
-  backdrop-filter: blur(2px);
-  -webkit-backdrop-filter: blur(2px);
-  transition: opacity .22s ease;
+  /* NO backdrop-filter — causes blur/rendering bugs on Android & older iOS */
+  opacity: 0;
+  transition: opacity .25s ease;
+  will-change: opacity;
 }
-#sbOverlay.show { display: block; }
+#sbOverlay.show {
+  display: block;
+  opacity: 1;
+}
 
 
 /* ══════════════════════════════════════════════
@@ -135,6 +169,7 @@ body::before {
   overflow: hidden; overflow-y: auto;
   position: relative; z-index: 5;
   width: var(--sb-w); min-width: 0; min-height: 0;
+  -webkit-overflow-scrolling: touch;
 }
 
 .sb-head {
@@ -142,7 +177,10 @@ body::before {
   display: flex; align-items: center; gap: 9px;
   flex-shrink: 0; height: 52px;
 }
-.sb-logo { width: 30px; height: 30px; border-radius: 7px; overflow: hidden; flex-shrink: 0; }
+.sb-logo {
+  width: 30px; height: 30px; border-radius: 7px;
+  overflow: hidden; flex-shrink: 0;
+}
 .sb-logo img { width: 100%; height: 100%; object-fit: cover; display: block; }
 .sb-logo-text {
   font-family: 'Orbitron', sans-serif; font-weight: 900; font-size: 12px; line-height: 1.15;
@@ -156,20 +194,23 @@ body::before {
   border-bottom: 1px solid var(--b); flex-shrink: 0; height: 52px;
 }
 .sb-av {
-  width: 32px; height: 32px; border-radius: 50%;
+  width: 36px; height: 36px; border-radius: 50%;
   border: 1.5px solid var(--cyan2); object-fit: cover;
   background: var(--bg3); flex-shrink: 0;
   cursor: pointer; transition: .2s;
+  /* Larger touch target via padding trick */
+  -webkit-tap-highlight-color: transparent;
 }
 .sb-av:hover { border-color: var(--cyan); transform: scale(1.08); }
 .sb-un   { font-size: var(--fs-md); color: white; font-weight: 500; line-height: 1.3; }
 .sb-role { font-size: var(--fs-2xs); color: var(--dim); line-height: 1; }
 .sb-gear {
   margin-left: auto; flex-shrink: 0;
-  width: var(--h-sm); height: var(--h-sm);
+  width: 36px; height: 36px;
   display: flex; align-items: center; justify-content: center;
   background: none; border: 1px solid transparent; border-radius: var(--r-s);
   color: var(--dim); cursor: pointer; transition: .15s;
+  -webkit-tap-highlight-color: transparent;
 }
 .sb-gear:hover { color: var(--cyan); border-color: var(--b); background: var(--hover); }
 .sb-gear svg { width: 15px; height: 15px; stroke: currentColor; fill: none; stroke-width: 2; }
@@ -180,6 +221,7 @@ body::before {
   border: 1px solid rgba(255,214,0,.18);
   display: flex; align-items: center; justify-content: space-between;
   flex-shrink: 0; cursor: pointer; transition: .15s; height: 52px;
+  -webkit-tap-highlight-color: transparent;
 }
 .creds:hover { border-color: rgba(255,214,0,.35); }
 .creds.low   { border-color: rgba(255,45,107,.4); background: rgba(255,45,107,.06); }
@@ -194,16 +236,18 @@ body::before {
 }
 .sb-nav-btn {
   display: flex; align-items: center; gap: 8px;
-  width: 100%; height: var(--h-md); padding: 0 12px;
+  width: 100%; height: 40px; padding: 0 12px;
   border-radius: var(--r-s);
   font-family: 'JetBrains Mono', monospace; font-size: var(--fs-sm);
   cursor: pointer; border: 1px solid var(--b);
   transition: background .15s, border-color .15s, color .15s;
   white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
   background: var(--card); color: var(--text); flex-shrink: 0;
+  -webkit-tap-highlight-color: transparent;
 }
 .sb-nav-btn svg { width: 13px; height: 13px; stroke: currentColor; fill: none; stroke-width: 2; flex-shrink: 0; }
 .sb-nav-btn:hover       { border-color: var(--cyan2); color: var(--cyan); background: var(--hover); }
+.sb-nav-btn:active      { opacity: .75; }
 .sb-nav-btn.cyan        { color: var(--cyan); border-color: rgba(0,229,255,.18); }
 .sb-nav-btn.cyan:hover  { border-color: var(--cyan); background: rgba(0,229,255,.08); }
 .sb-nav-btn.yellow      { color: var(--yellow); border-color: rgba(255,214,0,.2); background: rgba(255,214,0,.05); }
@@ -221,23 +265,37 @@ body::before {
   padding: 8px 14px 3px; font-size: var(--fs-2xs);
   color: var(--dim); text-transform: uppercase; letter-spacing: 2px; flex-shrink: 0;
 }
-.convs { flex: 1; overflow-y: auto; padding: 3px 8px; min-height: 0; }
+.convs {
+  flex: 1; overflow-y: auto; padding: 3px 8px; min-height: 0;
+  -webkit-overflow-scrolling: touch;
+}
 .ci {
-  padding: 6px 9px; border-radius: var(--r-s);
-  cursor: pointer; display: flex; align-items: center; gap: 6px; transition: background .1s;
+  padding: 8px 9px; border-radius: var(--r-s);
+  cursor: pointer; display: flex; align-items: center; gap: 6px;
+  transition: background .1s;
+  min-height: 40px;
+  -webkit-tap-highlight-color: transparent;
 }
 .ci:hover  { background: var(--hover); }
 .ci.act    { background: rgba(0,229,255,.06); border-left: 2px solid var(--cyan); padding-left: 7px; }
 .ci-title  { font-size: var(--fs-sm); color: var(--text); flex: 1; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .ci-time   { font-size: var(--fs-2xs); color: var(--dim); flex-shrink: 0; }
-.ci-del    { font-size: var(--fs-sm); color: var(--dim); opacity: 0; padding: 2px 5px; cursor: pointer; background: none; border: none; border-radius: 3px; }
+.ci-del    {
+  font-size: var(--fs-sm); color: var(--dim); opacity: 0; padding: 4px 7px;
+  cursor: pointer; background: none; border: none; border-radius: 3px;
+  min-width: 28px; min-height: 28px; display: flex; align-items: center; justify-content: center;
+}
 .ci:hover .ci-del { opacity: 1; }
 .ci-del:hover     { color: var(--pink); background: rgba(255,45,107,.1); }
-.conv-empty { padding: 20px 14px; text-align: center; color: var(--dim); font-size: var(--fs-md); line-height: 1.7; }
+.conv-empty {
+  padding: 20px 14px; text-align: center;
+  color: var(--dim); font-size: var(--fs-md); line-height: 1.7;
+}
 
 .sb-footer {
   padding: 7px 12px; font-size: var(--fs-2xs); color: var(--dim);
   text-align: center; border-top: 1px solid var(--b); flex-shrink: 0; line-height: 1.9;
+  padding-bottom: calc(7px + var(--safe-bottom));
 }
 
 .collapse-sb {
@@ -265,6 +323,8 @@ body::before {
   background: rgba(255,45,107,.08); border-bottom: 1px solid rgba(255,45,107,.2);
   font-size: var(--fs-xs); color: var(--pink);
   display: flex; align-items: center; gap: 7px; height: 30px;
+  padding-left: calc(14px + var(--safe-left));
+  padding-right: calc(14px + var(--safe-right));
 }
 .plug-banner svg { width: 11px; height: 11px; stroke: currentColor; fill: none; stroke-width: 2; flex-shrink: 0; }
 .plug-banner a   { color: var(--cyan); cursor: pointer; text-decoration: none; }
@@ -273,25 +333,23 @@ body::before {
 
 /* ══════════════════════════════════════════════
    HEADER
-   - Title row: logo · NEXUS AI · BETA badge
-   - Sub-row (optional): project name pill
 ══════════════════════════════════════════════ */
 .chat-hdr {
   padding: 0 12px 0 14px; border-bottom: 1px solid var(--b); background: var(--bg2);
   display: flex; align-items: center; gap: 8px;
   flex-shrink: 0; height: 52px; min-width: 0;
+  padding-left: calc(14px + var(--safe-left));
+  padding-right: calc(12px + var(--safe-right));
 }
 
 /* Hamburger — hidden on desktop */
 #menuBtn { display: none; }
 
-/* Left group: title + BETA + project pill stacked */
 .chat-title-group {
   display: flex; flex-direction: column; justify-content: center;
   flex: 1 1 0; min-width: 0; overflow: hidden; gap: 2px;
 }
 
-/* Top line: wordmark + BETA badge */
 .chat-title-row {
   display: flex; align-items: center; gap: 6px; min-width: 0;
 }
@@ -301,7 +359,6 @@ body::before {
   flex-shrink: 1; min-width: 0; line-height: 1;
 }
 
-/* BETA badge — inline with title */
 .ver-badge {
   display: inline-flex; align-items: center;
   padding: 0 6px; height: 16px; border-radius: 8px;
@@ -313,9 +370,8 @@ body::before {
 .ver-badge.beta    { color: var(--yellow); border-color: rgba(255,214,0,.35); background: rgba(255,214,0,.06); }
 .ver-badge.release { color: var(--green);  border-color: rgba(0,255,170,.35); background: rgba(0,255,170,.06); }
 
-/* Bottom line: project name — single location, compact pill */
 .proj-name-pill {
-  display: none; /* shown by JS when project exists */
+  display: none;
   align-items: center; gap: 4px;
   font-size: var(--fs-2xs); color: rgba(255,170,50,.8);
   white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
@@ -327,12 +383,12 @@ body::before {
   background: rgba(255,170,50,.7); flex-shrink: 0;
 }
 
-/* Status badge */
 .status-badge {
   display: flex; align-items: center; gap: 4px; padding: 0 8px;
-  border-radius: 20px; border: 1px solid; height: 22px;
+  border-radius: 20px; border: 1px solid; height: 24px;
   font-size: var(--fs-2xs); cursor: pointer; flex-shrink: 0; transition: .2s;
-  white-space: nowrap; max-width: 110px; overflow: hidden;
+  white-space: nowrap; max-width: 120px; overflow: hidden;
+  -webkit-tap-highlight-color: transparent;
 }
 .status-badge.off { border-color: rgba(255,45,107,.3); color: var(--pink); background: rgba(255,45,107,.06); }
 .status-badge.on  { border-color: rgba(0,255,170,.3);  color: var(--green); background: rgba(0,255,170,.06); }
@@ -347,6 +403,8 @@ body::before {
 #msgs {
   flex: 1; overflow-y: auto; padding: 16px 16px 8px;
   display: flex; flex-direction: column; gap: 10px; min-height: 0;
+  -webkit-overflow-scrolling: touch;
+  overscroll-behavior: contain;
 }
 
 .welcome {
@@ -359,13 +417,18 @@ body::before {
   -webkit-background-clip: text; -webkit-text-fill-color: transparent; background-clip: text;
 }
 .ws { font-size: var(--fs-md); line-height: 1.9; max-width: 340px; }
-.suggs { display: grid; grid-template-columns: 1fr 1fr; gap: 7px; max-width: 440px; margin-top: 4px; width: 100%; }
+.suggs {
+  display: grid; grid-template-columns: 1fr 1fr;
+  gap: 7px; max-width: 440px; margin-top: 4px; width: 100%;
+}
 .sugg {
   padding: 9px 11px; background: var(--card); border: 1px solid var(--b);
   border-radius: var(--r); cursor: pointer; transition: .18s; text-align: left;
   font-family: 'JetBrains Mono', monospace; font-size: var(--fs-md); color: var(--text); line-height: 1.5;
+  -webkit-tap-highlight-color: transparent;
 }
 .sugg:hover { border-color: var(--cyan2); background: var(--hover); color: white; }
+.sugg:active { opacity: .75; }
 .sugg-title {
   color: var(--cyan); display: flex; align-items: center; gap: 5px;
   margin-bottom: 3px; font-size: var(--fs-sm); font-weight: 700;
@@ -375,7 +438,10 @@ body::before {
 .msg       { display: flex; gap: 9px; animation: mi .22s ease; }
 .msg.user  { flex-direction: row-reverse; }
 @keyframes mi { from{opacity:0;transform:translateY(5px)} to{opacity:1;transform:none} }
-.av { width: 30px; height: 30px; border-radius: 50%; flex-shrink: 0; overflow: hidden; background: var(--bg3); }
+.av {
+  width: 30px; height: 30px; border-radius: 50%;
+  flex-shrink: 0; overflow: hidden; background: var(--bg3);
+}
 .av img { width: 100%; height: 100%; object-fit: cover; }
 .mb-wrap    { max-width: 82%; display: flex; flex-direction: column; gap: 3px; min-width: 0; }
 .msg-sender { font-size: var(--fs-2xs); color: var(--dim); display: flex; align-items: center; gap: 5px; padding: 0 3px; }
@@ -402,6 +468,7 @@ body::before {
   background: rgba(10,11,34,.9); border: 1px solid rgba(0,229,255,.25); border-radius: 5px;
   color: var(--cyan); font-size: var(--fs-2xs); padding: 0 8px; cursor: pointer;
   display: flex; align-items: center; gap: 3px; transition: .12s; height: var(--h-xs);
+  -webkit-tap-highlight-color: transparent;
 }
 .cbtn:hover { background: rgba(0,229,255,.15); }
 .cbtn svg   { width: 11px; height: 11px; stroke: currentColor; fill: none; stroke-width: 2; }
@@ -422,7 +489,9 @@ body::before {
   font-size: var(--fs-2xs); color: var(--dim); background: none; border: 1px solid transparent;
   cursor: pointer; padding: 0 6px; border-radius: 4px; transition: .12s;
   display: flex; align-items: center; gap: 3px;
-  font-family: 'JetBrains Mono', monospace; height: var(--h-xs);
+  font-family: 'JetBrains Mono', monospace;
+  height: 28px; min-width: 28px;
+  -webkit-tap-highlight-color: transparent;
 }
 .mab:hover    { color: var(--cyan); border-color: var(--b); background: var(--card); }
 .mab.liked    { color: var(--green); border-color: rgba(0,255,170,.3); }
@@ -441,14 +510,14 @@ body::before {
 }
 .attach-rm {
   position: absolute; top: -5px; right: -5px;
-  width: 16px; height: 16px; background: var(--pink); border: none; border-radius: 50%;
+  width: 20px; height: 20px; background: var(--pink); border: none; border-radius: 50%;
   color: white; font-size: var(--fs-2xs); cursor: pointer;
   display: flex; align-items: center; justify-content: center; z-index: 2;
 }
 
 
 /* ══════════════════════════════════════════════
-   INPUT AREA — CLAUDE-STYLE
+   INPUT AREA
 ══════════════════════════════════════════════ */
 .inp-area {
   padding: 10px 14px 14px;
@@ -457,6 +526,10 @@ body::before {
   flex-shrink: 0;
   position: relative;
   z-index: 2;
+  /* Safe area for home indicator on iPhone */
+  padding-bottom: calc(14px + var(--safe-bottom));
+  padding-left: calc(14px + var(--safe-left));
+  padding-right: calc(14px + var(--safe-right));
 }
 
 .inp-box {
@@ -479,12 +552,13 @@ body::before {
   font-size: 14px;
   padding: 14px 16px 6px;
   resize: none;
-  min-height: 56px;
-  max-height: 200px;
+  min-height: 52px;
+  max-height: 180px;
   line-height: 1.65;
   display: block;
   scrollbar-width: thin;
   scrollbar-color: var(--b) transparent;
+  /* Prevent iOS zoom on focus — keep 16px as base for mobile */
 }
 #inp::placeholder { color: rgba(58,74,122,.75); font-size: 13px; }
 
@@ -504,7 +578,7 @@ body::before {
   overflow: hidden;
 }
 
-/* Universal icon button */
+/* Universal icon button — 44px touch target on mobile */
 .ib {
   width: 32px; height: 32px; min-width: 32px;
   display: inline-flex; align-items: center; justify-content: center;
@@ -515,9 +589,10 @@ body::before {
   padding: 0; line-height: 1; box-sizing: border-box;
   user-select: none; outline: none;
   -webkit-tap-highlight-color: transparent;
+  position: relative;
 }
 .ib:hover  { color: var(--text); background: rgba(0,229,255,.07); }
-.ib:active { background: rgba(0,229,255,.12); }
+.ib:active { background: rgba(0,229,255,.12); opacity: .75; }
 .ib svg { width: 16px; height: 16px; stroke: currentColor; fill: none; stroke-width: 1.6; flex-shrink: 0; display: block; pointer-events: none; }
 
 /* File input — truly off-screen */
@@ -532,12 +607,12 @@ body::before {
 /* Model selector pill */
 .inp-model {
   display: flex; align-items: center; gap: 5px;
-  height: 26px; padding: 0 8px;
+  height: 28px; padding: 0 8px;
   border-radius: 8px;
   background: rgba(255,255,255,.03); border: 1px solid rgba(255,255,255,.06);
   cursor: pointer; transition: .14s;
   font-family: 'JetBrains Mono', monospace; font-size: 10px; color: var(--dim);
-  max-width: clamp(110px, 180px, 32vw); min-width: 0; overflow: hidden; flex-shrink: 1;
+  max-width: clamp(100px, 170px, 28vw); min-width: 0; overflow: hidden; flex-shrink: 1;
   -webkit-tap-highlight-color: transparent;
 }
 .inp-model:hover { border-color: var(--b); color: var(--text); background: rgba(0,229,255,.04); }
@@ -551,9 +626,9 @@ body::before {
 .inp-model-badge[data-tier="pro"]   { color: #cc55ff;       border-color: rgba(136,0,255,.35);  background: rgba(136,0,255,.07); }
 .inp-model-badge[data-tier="think"] { color: var(--yellow); border-color: rgba(255,214,0,.3);   background: rgba(255,214,0,.06); }
 
-/* Send button — circle */
+/* Send button */
 .btn-send {
-  width: 34px; height: 34px; border-radius: 50%; border: none;
+  width: 36px; height: 36px; border-radius: 50%; border: none;
   background: linear-gradient(135deg, var(--cyan), var(--purple));
   color: white;
   display: inline-flex; align-items: center; justify-content: center;
@@ -565,11 +640,12 @@ body::before {
 .btn-send svg { width: 15px; height: 15px; stroke: currentColor; fill: none; stroke-width: 2.2; }
 
 .btn-cancel {
-  width: 30px; height: 30px; border-radius: 50%;
+  width: 32px; height: 32px; border-radius: 50%;
   border: 1px solid rgba(255,45,107,.3); background: rgba(255,45,107,.08);
   color: var(--pink);
   display: inline-flex; align-items: center; justify-content: center;
   cursor: pointer; transition: .14s; flex-shrink: 0;
+  -webkit-tap-highlight-color: transparent;
 }
 .btn-cancel:hover { background: rgba(255,45,107,.18); }
 .btn-cancel svg { width: 14px; height: 14px; stroke: currentColor; fill: none; stroke-width: 2; }
@@ -581,14 +657,15 @@ body::before {
 .model-dd {
   position: fixed; background: var(--bg3); border: 1px solid var(--b); border-radius: var(--r);
   z-index: 9000; display: none; box-shadow: 0 8px 32px rgba(0,0,0,.95);
-  max-height: min(380px, 70vh); overflow-y: auto; min-width: 265px;
+  max-height: min(380px, 60vh); overflow-y: auto; min-width: 265px;
+  -webkit-overflow-scrolling: touch;
 }
 .model-dd::-webkit-scrollbar { width: 3px; }
 .model-dd::-webkit-scrollbar-thumb { background: var(--b); }
 .model-dd.open { display: block; }
 .mg { padding: 6px 11px 3px; font-size: var(--fs-2xs); color: var(--dim); text-transform: uppercase; letter-spacing: 2px; border-top: 1px solid var(--b); }
 .mg:first-child { border-top: none; }
-.mo { padding: 7px 11px; display: flex; align-items: center; gap: 7px; cursor: pointer; transition: .1s; }
+.mo { padding: 10px 11px; display: flex; align-items: center; gap: 7px; cursor: pointer; transition: .1s; min-height: 44px; -webkit-tap-highlight-color: transparent; }
 .mo:hover { background: var(--hover); }
 .mo.act   { background: rgba(0,229,255,.06); }
 .mo-icon  { width: 20px; height: 20px; border-radius: 4px; overflow: hidden; flex-shrink: 0; display: flex; align-items: center; justify-content: center; }
@@ -605,11 +682,11 @@ body::before {
    THINKING / STEPS
 ══════════════════════════════════════════════ */
 .steps-wrap { display: flex; gap: 9px; animation: mi .22s ease; }
-.steps-box  { background: var(--bg2); border: 1px solid var(--b); border-radius: 2px 10px 10px 10px; padding: 0; overflow: hidden; min-width: 280px; max-width: min(520px, 90vw); }
-.steps-hdr  { padding: 9px 13px 8px; display: flex; align-items: center; gap: 7px; border-bottom: 1px solid var(--b); }
+.steps-box  { background: var(--bg2); border: 1px solid var(--b); border-radius: 2px 10px 10px 10px; padding: 0; overflow: hidden; min-width: 280px; max-width: min(520px, 88vw); }
+.steps-hdr  { padding: 9px 13px 8px; display: flex; align-items: center; gap: 7px; border-bottom: 1px solid var(--b); flex-wrap: nowrap; }
 .steps-hdr-spinner { width: 11px; height: 11px; border: 1.5px solid rgba(0,229,255,.2); border-top-color: var(--cyan); border-radius: 50%; animation: spin .7s linear infinite; flex-shrink: 0; }
-.steps-hdr-txt   { font-family: 'Orbitron', sans-serif; font-size: var(--fs-2xs); color: var(--cyan); letter-spacing: .5px; flex: 1; }
-.steps-hdr-count { font-size: var(--fs-2xs); color: var(--dim); }
+.steps-hdr-txt   { font-family: 'Orbitron', sans-serif; font-size: var(--fs-2xs); color: var(--cyan); letter-spacing: .5px; flex: 1; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.steps-hdr-count { font-size: var(--fs-2xs); color: var(--dim); flex-shrink: 0; }
 .steps-list { padding: 4px 0; }
 .step-row   { display: flex; align-items: flex-start; gap: 7px; padding: 3px 12px; font-size: var(--fs-md); line-height: 1.5; animation: stepIn .18s ease; }
 @keyframes stepIn { from{opacity:0;transform:translateX(-3px)} to{opacity:1;transform:none} }
@@ -632,6 +709,7 @@ body::before {
   background: rgba(255,45,107,.08); border: 1px solid rgba(255,45,107,.25);
   border-radius: 5px; color: var(--pink); font-size: var(--fs-2xs); cursor: pointer; transition: .1s;
   font-family: 'JetBrains Mono', monospace; display: inline-flex; align-items: center;
+  min-height: 32px;
 }
 .steps-cancel-btn:hover { background: rgba(255,45,107,.16); }
 @keyframes spin { to{transform:rotate(360deg)} }
@@ -648,12 +726,13 @@ body::before {
 ══════════════════════════════════════════════ */
 .mention-dd {
   position: fixed; background: var(--bg3); border: 1px solid var(--bb); border-radius: var(--r);
-  z-index: 8000; max-height: min(260px, 50vh); overflow-y: auto;
+  z-index: 8000; max-height: min(260px, 45vh); overflow-y: auto;
   box-shadow: 0 -10px 40px rgba(0,0,0,.97); min-width: 290px; display: none;
+  -webkit-overflow-scrolling: touch;
 }
 .mention-dd.open { display: block; }
 .mention-hdr  { padding: 5px 12px 4px; font-size: var(--fs-2xs); color: var(--dim); text-transform: uppercase; letter-spacing: 2px; border-bottom: 1px solid var(--b); display: flex; align-items: center; gap: 5px; }
-.mention-item { padding: 7px 12px; display: flex; align-items: center; gap: 8px; cursor: pointer; transition: .1s; }
+.mention-item { padding: 9px 12px; display: flex; align-items: center; gap: 8px; cursor: pointer; transition: .1s; min-height: 44px; -webkit-tap-highlight-color: transparent; }
 .mention-item:hover, .mention-item.sel { background: var(--hover); }
 .mention-ic   { width: 20px; height: 20px; border-radius: 4px; display: flex; align-items: center; justify-content: center; font-size: var(--fs-2xs); font-weight: 700; flex-shrink: 0; }
 .mention-ic.script { background: rgba(0,229,255,.1);  color: var(--cyan); }
@@ -670,11 +749,13 @@ body::before {
 ══════════════════════════════════════════════ */
 .suggestion-chips { display: flex; flex-direction: column; gap: 5px; margin-top: 10px; margin-bottom: 2px; }
 .suggestion-chip {
-  display: flex; align-items: center; gap: 8px; padding: 7px 12px 7px 10px;
+  display: flex; align-items: center; gap: 8px; padding: 8px 12px 8px 10px;
   background: rgba(0,229,255,.05); border: 1px solid rgba(0,229,255,.16); border-radius: 8px;
   color: var(--text); font-size: 11.5px; cursor: pointer; text-align: left;
   transition: background .14s, border-color .14s, color .14s, transform .1s;
   font-family: 'JetBrains Mono', monospace; width: fit-content; max-width: 100%; line-height: 1.4;
+  min-height: 40px;
+  -webkit-tap-highlight-color: transparent;
 }
 .suggestion-chip::before {
   content: ''; display: inline-flex; width: 0; height: 0;
@@ -693,8 +774,12 @@ body::before {
 .ov {
   position: fixed; inset: 0; background: rgba(3,3,18,.93); z-index: 500;
   display: none; align-items: flex-start; justify-content: center;
-  backdrop-filter: blur(5px); -webkit-backdrop-filter: blur(5px);
+  /* NO backdrop-filter — causes blur issues on mobile */
   padding: 20px 16px; overflow-y: auto;
+  -webkit-overflow-scrolling: touch;
+  overscroll-behavior: contain;
+  padding-top: calc(20px + var(--safe-top));
+  padding-bottom: calc(20px + var(--safe-bottom));
 }
 .ov.show { display: flex; }
 .modal {
@@ -711,6 +796,8 @@ body::before {
   height: var(--h-lg); padding: 0 16px; border-radius: var(--r);
   font-family: 'Orbitron', sans-serif; font-size: var(--fs-sm); font-weight: 700;
   cursor: pointer; border: none; transition: .15s; white-space: nowrap;
+  min-height: 44px;
+  -webkit-tap-highlight-color: transparent;
 }
 .btn-modal.primary   { background: var(--cyan); color: #030312; }
 .btn-modal.secondary { background: rgba(255,255,255,.06); color: var(--text); border: 1px solid var(--b); }
@@ -719,13 +806,14 @@ body::before {
 .settings-section { margin-bottom: 16px; padding-bottom: 16px; border-bottom: 1px solid var(--b); }
 .settings-section:last-child { border-bottom: none; margin-bottom: 0; padding-bottom: 0; }
 .settings-title   { font-size: var(--fs-xs); color: var(--cyan); text-transform: uppercase; letter-spacing: 1.5px; margin-bottom: 10px; font-family: 'Orbitron', sans-serif; }
-.settings-row     { display: flex; align-items: center; justify-content: space-between; padding: 5px 0; font-size: var(--fs-md); gap: 8px; flex-wrap: wrap; }
+.settings-row     { display: flex; align-items: center; justify-content: space-between; padding: 6px 0; font-size: var(--fs-md); gap: 8px; flex-wrap: wrap; min-height: 40px; }
 .settings-hint    { font-size: var(--fs-2xs); color: var(--dim); margin-top: 2px; line-height: 1.5; }
 .settings-btn {
-  display: inline-flex; align-items: center; height: var(--h-sm); padding: 0 13px;
+  display: inline-flex; align-items: center; height: 36px; padding: 0 13px;
   border-radius: var(--r-s); font-family: 'JetBrains Mono', monospace; font-size: var(--fs-sm); cursor: pointer;
   border: 1px solid var(--b); background: var(--card); color: var(--text);
   transition: .15s; white-space: nowrap; flex-shrink: 0; text-decoration: none;
+  -webkit-tap-highlight-color: transparent;
 }
 .settings-btn:hover { border-color: var(--cyan2); color: var(--cyan); }
 .settings-btn.danger       { border-color: rgba(255,45,107,.3); color: var(--pink); }
@@ -733,23 +821,26 @@ body::before {
 .settings-select {
   background: var(--bg3); border: 1px solid var(--b); border-radius: var(--r-s);
   padding: 0 8px; color: white; font-family: 'JetBrains Mono', monospace;
-  font-size: var(--fs-sm); outline: none; cursor: pointer; height: var(--h-sm);
+  font-size: var(--fs-sm); outline: none; cursor: pointer; height: 36px;
+  -webkit-appearance: none; appearance: none;
 }
 .toggle-sw {
-  width: 38px; height: 20px; border-radius: 10px; background: var(--dim);
+  width: 44px; height: 24px; border-radius: 12px; background: var(--dim);
   border: none; cursor: pointer; position: relative; transition: .25s; flex-shrink: 0; outline: none;
+  -webkit-tap-highlight-color: transparent;
 }
 .toggle-sw.on { background: var(--cyan); }
 .toggle-sw::after {
   content: ''; position: absolute; top: 3px; left: 3px;
-  width: 14px; height: 14px; border-radius: 50%;
+  width: 18px; height: 18px; border-radius: 50%;
   background: white; transition: .25s; box-shadow: 0 1px 4px rgba(0,0,0,.4);
 }
-.toggle-sw.on::after { left: 21px; }
+.toggle-sw.on::after { left: 23px; }
 .report-ta {
   width: 100%; background: var(--bg3); border: 1px solid var(--b); border-radius: 6px;
   padding: 8px 10px; color: white; font-family: 'JetBrains Mono', monospace;
   font-size: var(--fs-md); outline: none; resize: vertical; min-height: 80px; margin-top: 6px;
+  -webkit-appearance: none;
 }
 
 .install-step { display: flex; gap: 10px; padding: 9px 0; border-bottom: 1px solid var(--b); align-items: flex-start; }
@@ -765,7 +856,7 @@ body::before {
 
 
 /* ══════════════════════════════════════════════
-   RESPONSIVE
+   RESPONSIVE — TABLET (900–1100px)
 ══════════════════════════════════════════════ */
 @media (max-width: 1100px) { :root { --sb-w: 230px; } }
 @media (max-width: 900px) {
@@ -773,78 +864,174 @@ body::before {
   .inp-model { max-width: 140px; }
 }
 
-/* ── MOBILE (≤768px) ── */
+/* ══════════════════════════════════════════════
+   MOBILE (≤768px)
+   Key fixes:
+   - Sidebar slides in from left (hardware-accelerated)
+   - No blur/backdrop-filter anywhere
+   - Touch-friendly tap targets
+   - Safe area padding for notch/home indicator
+══════════════════════════════════════════════ */
 @media (max-width: 768px) {
+  /* App shell — pure flex column, no grid */
   #app {
-    display: flex !important; flex-direction: column !important;
-    height: 100vh !important; height: 100dvh !important;
-    grid-template-columns: none !important; overflow: hidden !important;
+    display: flex !important;
+    flex-direction: column !important;
+    height: 100vh !important;
+    height: 100dvh !important;
+    grid-template-columns: none !important;
+    overflow: hidden !important;
   }
   #app.sb-hidden { grid-template-columns: none !important; }
 
+  /* Sidebar — off-screen left, slides in via transform (GPU-accelerated) */
   #sb {
-    position: fixed !important; left: -100% !important; top: 0 !important;
-    width: min(285px, 88vw) !important; height: 100% !important; height: 100dvh !important;
-    max-height: none !important; z-index: 100 !important;
-    border-right: 1px solid var(--b) !important; border-bottom: none !important;
-    overflow-y: auto !important; box-shadow: 6px 0 40px rgba(0,0,0,.75) !important;
-    transition: left .28s cubic-bezier(.4,0,.2,1) !important;
+    position: fixed !important;
+    left: 0 !important;
+    top: 0 !important;
+    width: min(290px, 85vw) !important;
+    height: 100% !important;
+    height: 100dvh !important;
+    max-height: none !important;
+    z-index: 100 !important;
+    border-right: 1px solid var(--b) !important;
+    border-bottom: none !important;
+    overflow-y: auto !important;
+    box-shadow: 4px 0 30px rgba(0,0,0,.7) !important;
+    /* Use transform instead of left for smooth GPU animation */
+    transform: translateX(-105%) !important;
+    transition: transform .28s cubic-bezier(.4,0,.2,1) !important;
+    will-change: transform;
+    -webkit-overflow-scrolling: touch;
+    /* Top safe area for notch */
+    padding-top: var(--safe-top) !important;
   }
-  #sb.mobile-open { left: 0 !important; }
+  #sb.mobile-open {
+    transform: translateX(0) !important;
+  }
 
+  /* Show hamburger on mobile */
   #menuBtn { display: inline-flex !important; }
   .collapse-sb { display: none !important; }
 
-  .convs { display: flex !important; flex-direction: column; }
-  .sec-lbl { display: block !important; }
-  .sb-footer { display: block !important; }
-  .sb-btn-group { flex-direction: column !important; }
+  /* Chat fills remaining space */
+  #chat {
+    flex: 1 !important;
+    min-height: 0 !important;
+    width: 100% !important;
+    overflow: hidden !important;
+  }
 
-  #chat { flex: 1 !important; min-height: 0 !important; width: 100% !important; }
+  /* Header */
+  .chat-hdr {
+    height: 48px !important;
+    padding: 0 10px !important;
+    padding-left: calc(10px + var(--safe-left)) !important;
+    padding-right: calc(10px + var(--safe-right)) !important;
+    gap: 6px !important;
+  }
+  .chat-title { font-size: 11px !important; }
+  .proj-name-pill { max-width: 130px !important; }
+  .status-badge {
+    max-width: 90px !important;
+    font-size: 8px !important;
+    padding: 0 6px !important;
+    height: 22px !important;
+  }
 
-  .ib { width: 38px !important; height: 38px !important; min-width: 38px !important; }
+  /* Messages */
+  #msgs {
+    padding: 12px 10px 6px !important;
+    gap: 8px !important;
+  }
+  .mb-wrap { max-width: 90% !important; }
+  .bubble  { font-size: 13px !important; padding: 9px 11px !important; }
+
+  /* Welcome screen */
+  .suggs { grid-template-columns: 1fr !important; }
+  .wt { font-size: 20px !important; }
+  .ws { font-size: var(--fs-md) !important; }
+
+  /* Input area */
+  .inp-area {
+    padding: 8px 10px 12px !important;
+    padding-left: calc(10px + var(--safe-left)) !important;
+    padding-right: calc(10px + var(--safe-right)) !important;
+    padding-bottom: calc(12px + var(--safe-bottom)) !important;
+  }
+  .inp-box { border-radius: 16px !important; }
+  #inp {
+    font-size: 16px !important; /* Prevents iOS auto-zoom on focus */
+    padding: 13px 14px 5px !important;
+    min-height: 52px !important;
+    max-height: 140px !important;
+  }
+  .inp-bar { padding: 4px 8px 8px !important; gap: 5px !important; }
+
+  /* Larger touch targets on mobile */
+  .ib {
+    width: 40px !important; height: 40px !important; min-width: 40px !important;
+  }
   .ib svg { width: 18px !important; height: 18px !important; }
-  .btn-send { width: 40px !important; height: 40px !important; }
+  .btn-send { width: 42px !important; height: 42px !important; }
   .btn-send svg { width: 17px !important; height: 17px !important; }
-  .btn-cancel { width: 36px !important; height: 36px !important; }
+  .btn-cancel { width: 38px !important; height: 38px !important; }
 
-  .inp-area { padding: 8px 10px 14px; }
-  #inp { font-size: 16px !important; padding: 13px 14px 5px; min-height: 52px; max-height: 160px; }
-  .inp-bar { padding: 4px 8px 9px; gap: 5px; }
-  .inp-box { border-radius: 16px; }
-  .inp-model { max-width: 120px; }
+  .inp-model { max-width: 110px !important; }
 
-  .mb-wrap { max-width: 92%; }
-  .bubble  { font-size: 13px; padding: 9px 11px; }
-  #msgs    { padding: 12px 10px 6px; gap: 8px; }
+  /* Plug banner */
+  .plug-banner {
+    font-size: 9px !important;
+    padding: 0 10px !important;
+    padding-left: calc(10px + var(--safe-left)) !important;
+    gap: 5px !important;
+    height: 28px !important;
+  }
 
-  .chat-hdr { padding: 0 10px; gap: 6px; height: 48px; }
-  .chat-title { font-size: var(--fs-sm); }
-  .proj-name-pill { max-width: 140px; }
-  .status-badge { max-width: 88px; font-size: 8px; padding: 0 6px; height: 20px; }
+  /* Modal */
+  .ov { padding: 12px 10px !important; padding-bottom: calc(12px + var(--safe-bottom)) !important; }
+  .modal { padding: 16px !important; border-radius: 12px !important; }
+  .modal-t { font-size: 12px !important; }
+  .btn-modal { height: 44px !important; }
 
-  .suggs { grid-template-columns: 1fr; }
-  .wt { font-size: 20px; }
-  .ws { font-size: var(--fs-md); }
-
-  .ov { padding: 12px 10px; }
-  .modal { padding: 16px; border-radius: 12px; }
-  .modal-t { font-size: 12px; }
-
-  .plug-banner { font-size: 9px; padding: 0 10px; gap: 5px; height: 28px; }
+  /* Steps */
+  .steps-box { max-width: calc(100vw - 60px) !important; min-width: 240px !important; }
 }
 
+/* ══════════════════════════════════════════════
+   SMALL PHONES (≤480px)
+══════════════════════════════════════════════ */
 @media (max-width: 480px) {
-  .inp-model { max-width: 100px; }
-  .chat-title { font-size: var(--fs-2xs); }
-  .status-badge { max-width: 75px; }
-  .modal { padding: 14px; }
-  .wt { font-size: 18px; }
+  .inp-model { max-width: 95px !important; }
+  .chat-title { font-size: 10px !important; }
+  .status-badge { max-width: 78px !important; font-size: 7.5px !important; }
+  .wt { font-size: 18px !important; }
+  .modal { padding: 14px !important; }
+  .mb-wrap { max-width: 93% !important; }
+  .bubble { font-size: 12.5px !important; }
 }
 
+/* ══════════════════════════════════════════════
+   VERY SMALL (≤360px)
+══════════════════════════════════════════════ */
 @media (max-width: 360px) {
-  .status-badge { display: none; }
+  .status-badge { display: none !important; }
   .proj-name-pill { display: none !important; }
+  .ver-badge { display: none !important; }
+  .inp-model { max-width: 80px !important; }
+}
+
+/* ══════════════════════════════════════════════
+   LANDSCAPE PHONE
+══════════════════════════════════════════════ */
+@media (max-width: 768px) and (orientation: landscape) {
+  .chat-hdr { height: 40px !important; }
+  #inp { max-height: 90px !important; }
+  .inp-area {
+    padding-top: 6px !important;
+    padding-bottom: calc(6px + var(--safe-bottom)) !important;
+  }
+  #msgs { padding: 8px 10px 4px !important; }
 }
 `
 
@@ -916,7 +1103,7 @@ const Icon: Record<string, React.ReactElement> = {
 export default function ChatsPage() {
   const scriptsLoadedRef = useRef(false)
 
-  /* Mobile sidebar toggle — pure DOM */
+  /* ── Mobile sidebar toggle — pure DOM, uses transform ── */
   const handleMobileMenuToggle = () => {
     const sb      = document.getElementById('sb')
     const overlay = document.getElementById('sbOverlay')
@@ -937,10 +1124,19 @@ export default function ChatsPage() {
 
   useEffect(() => {
     document.title = 'NEXUS AI - Roblox Dev Intelligence'
+
+    // Prevent body scroll but allow inner scroll
     document.documentElement.style.height   = '100%'
     document.documentElement.style.overflow = 'hidden'
-    document.body.style.height   = '100%'
-    document.body.style.overflow = 'hidden'
+    document.body.style.height              = '100%'
+    document.body.style.overflow            = 'hidden'
+
+    // Prevent iOS rubber-band bounce on body
+    const preventBodyScroll = (e: TouchEvent) => {
+      if ((e.target as HTMLElement).closest('#msgs, #sb, .convs, .ov, .model-dd, .mention-dd')) return
+      e.preventDefault()
+    }
+    document.addEventListener('touchmove', preventBodyScroll, { passive: false })
 
     if (!scriptsLoadedRef.current) {
       scriptsLoadedRef.current = true
@@ -963,12 +1159,13 @@ export default function ChatsPage() {
     return () => {
       document.documentElement.style.height   = ''
       document.documentElement.style.overflow = ''
-      document.body.style.height   = ''
-      document.body.style.overflow = ''
+      document.body.style.height              = ''
+      document.body.style.overflow            = ''
+      document.removeEventListener('touchmove', preventBodyScroll)
     }
   }, [])
 
-  /* handlers */
+  /* ── Handler helpers ── */
   const handleClick = (fn: string, ...args: unknown[]) =>
     (): void => wCall(fn, ...args)
 
@@ -1013,7 +1210,7 @@ export default function ChatsPage() {
         <div className="pl-txt" id="plTxt">Initializing...</div>
       </div>
 
-      {/* ── MOBILE SIDEBAR OVERLAY ── */}
+      {/* ── MOBILE SIDEBAR OVERLAY — click to close ── */}
       <div id="sbOverlay" onClick={closeMobileSidebar}/>
 
       {/* ── MENTION DROPDOWN ── */}
@@ -1032,7 +1229,9 @@ export default function ChatsPage() {
       ════════════════════════════════════════════════════════════════════ */}
       <div id="app" className="hidden">
 
-        {/* ═══ SIDEBAR ═══ */}
+        {/* ═══════════════════════════════
+            SIDEBAR
+        ═══════════════════════════════ */}
         <div id="sb">
           {/* Logo */}
           <div className="sb-head">
@@ -1049,12 +1248,12 @@ export default function ChatsPage() {
           <div className="sb-user">
             <img
               className="sb-av" id="sbAv"
-              src="/images/nexusai.png" alt=""
+              src="/images/nexusai.png" alt="Avatar"
               onError={(e) => { e.currentTarget.style.opacity = '0.3' }}
               onClick={handleClick('openAvatarModal')}
             />
             <div style={{ minWidth: 0, flex: 1 }}>
-              <div className="sb-un"   id="sbUn">-</div>
+              <div className="sb-un"   id="sbUn">—</div>
               <div className="sb-role" id="sbRole">Roblox Developer</div>
             </div>
             <button
@@ -1075,7 +1274,7 @@ export default function ChatsPage() {
           >
             <div>
               <div className="cred-l"    id="credLabel">Credits</div>
-              <div className="cred-hint" id="credHint">Click to buy more</div>
+              <div className="cred-hint" id="credHint">Tap to buy more</div>
             </div>
             <div style={{ textAlign: 'right' }}>
               <div className="cred-v" id="credDisp">30</div>
@@ -1124,10 +1323,12 @@ export default function ChatsPage() {
         </div>
         {/* end #sb */}
 
-        {/* ═══ CHAT PANEL ═══ */}
+        {/* ═══════════════════════════════
+            CHAT PANEL
+        ═══════════════════════════════ */}
         <div id="chat">
 
-          {/* Plugin banner */}
+          {/* Plugin status banner */}
           <div className="plug-banner" id="plugBanner">
             {Icon.info}
             <span id="plugBannerTxt">Plugin not connected —</span>
@@ -1148,12 +1349,9 @@ export default function ChatsPage() {
             </a>
           </div>
 
-          {/* ── HEADER ──
-              Layout:  [☰] [NEXUS AI · BETA]          [Studio: OFF]
-                            [● My Project Name]
-          ── */}
+          {/* ── HEADER ── */}
           <div className="chat-hdr">
-            {/* Hamburger (mobile only) */}
+            {/* Hamburger — mobile only */}
             <button
               id="menuBtn"
               type="button"
@@ -1165,14 +1363,13 @@ export default function ChatsPage() {
               {Icon.menu}
             </button>
 
-            {/* Title group — stacked */}
+            {/* Title group */}
             <div className="chat-title-group">
-              {/* Row 1: wordmark + BETA badge */}
               <div className="chat-title-row">
                 <div className="chat-title" id="chatTitle">NEXUS AI</div>
                 <span className="ver-badge beta" id="verBadge">BETA</span>
               </div>
-              {/* Row 2: project name — single location, shown by JS */}
+              {/* Project name — shown by JS */}
               <div className="proj-name-pill" id="projNamePill">
                 <span className="proj-name-dot"/>
                 <span id="projNameText"/>
@@ -1224,13 +1421,12 @@ export default function ChatsPage() {
 
                 {/* Bottom bar */}
                 <div className="inp-bar">
-                  {/* Left controls */}
                   <div className="inp-l">
-                    {/* Attach */}
+                    {/* Attach file */}
                     <label
                       htmlFor="fi"
                       className="ib"
-                      title="Attach image / file"
+                      title="Attach image or file"
                       role="button"
                       tabIndex={0}
                       onKeyDown={(e) => {
@@ -1243,7 +1439,7 @@ export default function ChatsPage() {
                       {Icon.attach}
                     </label>
 
-                    {/* File input — off-screen */}
+                    {/* Hidden file input */}
                     <input
                       type="file"
                       id="fi"
@@ -1258,7 +1454,7 @@ export default function ChatsPage() {
                     <button
                       className="ib" type="button"
                       onClick={handleClick('clearChat')}
-                      title="Clear chat"
+                      title="Clear conversation"
                     >
                       {Icon.trash}
                     </button>
@@ -1271,6 +1467,7 @@ export default function ChatsPage() {
                       onClick={handleClickWithEvent('toggleMDD')}
                       role="button" tabIndex={0}
                       onKeyDown={(e) => { if (e.key === 'Enter') wCall('toggleMDD', e) }}
+                      aria-label="Select AI model"
                     >
                       <img
                         id="inpMIcon" src="" alt=""
@@ -1283,12 +1480,13 @@ export default function ChatsPage() {
                     </div>
                   </div>
 
-                  {/* Right controls */}
+                  {/* Right side: cancel / send */}
                   <button
                     className="btn-cancel hidden" id="cancelBtn"
                     type="button"
                     onClick={handleClick('cancelGen')}
-                    title="Cancel"
+                    title="Cancel generation"
+                    aria-label="Cancel"
                   >
                     {Icon.x}
                   </button>
@@ -1297,6 +1495,7 @@ export default function ChatsPage() {
                     type="button"
                     onClick={handleClick('send')}
                     title="Send message"
+                    aria-label="Send"
                   >
                     {Icon.send}
                   </button>
@@ -1318,24 +1517,24 @@ export default function ChatsPage() {
           MODALS
       ════════════════════════════════════════════════════════════════════ */}
 
-      {/* Avatar */}
+      {/* Avatar Modal */}
       <div className="ov" id="avatarModal">
         <div className="modal" style={{ width: 340, textAlign: 'center', padding: 26 }}>
-          <div style={{ fontFamily: "'Orbitron',sans-serif", fontSize: 13, color: 'var(--cyan)', marginBottom: 14 }} id="avatarModalName">@-</div>
+          <div style={{ fontFamily: "'Orbitron',sans-serif", fontSize: 13, color: 'var(--cyan)', marginBottom: 14 }} id="avatarModalName">@—</div>
           <img
-            id="avatarModalImg" src="" alt=""
+            id="avatarModalImg" src="" alt="Avatar"
             style={{ width: 110, height: 110, borderRadius: '50%', border: '3px solid var(--cyan)', objectFit: 'cover', margin: '0 auto 12px', display: 'block' }}
             onError={(e) => { e.currentTarget.src = '/images/nexusai.png' }}
           />
           <div style={{ fontSize: 'var(--fs-md)', color: 'var(--dim)', marginBottom: 3 }} id="avatarModalRole">Developer</div>
-          <div style={{ fontSize: 'var(--fs-sm)', color: 'var(--dim)' }} id="avatarModalId">Roblox ID: -</div>
+          <div style={{ fontSize: 'var(--fs-sm)', color: 'var(--dim)' }} id="avatarModalId">Roblox ID: —</div>
           <div className="modal-footer" style={{ justifyContent: 'center', marginTop: 14 }}>
             <button className="btn-modal primary" type="button" onClick={handleClick('closeModal', 'avatarModal')} id="avatarCloseBtn">CLOSE</button>
           </div>
         </div>
       </div>
 
-      {/* Install Plugin */}
+      {/* Install Plugin Modal */}
       <div className="ov" id="installModal">
         <div className="modal">
           <div className="modal-t">{Icon.download}<span id="installTitle">How to Install NEXUS AI Plugin</span></div>
@@ -1353,20 +1552,21 @@ export default function ChatsPage() {
         </div>
       </div>
 
-      {/* Settings */}
+      {/* Settings Modal */}
       <div className="ov" id="settingsModal">
         <div className="modal" style={{ width: 520 }}>
           <div className="modal-t">{Icon.settings}<span id="settingsTitle">Settings</span></div>
 
+          {/* Account */}
           <div className="settings-section">
             <div className="settings-title" id="settingsAccountTitle">Account</div>
             <div className="settings-row">
-              <span style={{ color: 'white', fontWeight: 600 }} id="settingsUsername">@-</span>
+              <span style={{ color: 'white', fontWeight: 600 }} id="settingsUsername">@—</span>
               <span id="settingsBadge"/>
             </div>
             <div className="settings-row">
               <span id="settingsCreditsLabel">Credits</span>
-              <span id="settingsCredits" style={{ color: 'var(--yellow)', fontWeight: 700 }}>-</span>
+              <span id="settingsCredits" style={{ color: 'var(--yellow)', fontWeight: 700 }}>—</span>
             </div>
             <div className="settings-row">
               <span id="settingsPlanLabel">Plan</span>
@@ -1374,10 +1574,11 @@ export default function ChatsPage() {
             </div>
             <div className="settings-row">
               <span id="settingsRobloxIdLabel">Roblox ID</span>
-              <span id="settingsRobloxId" style={{ color: 'var(--dim)', fontSize: 'var(--fs-sm)' }}>-</span>
+              <span id="settingsRobloxId" style={{ color: 'var(--dim)', fontSize: 'var(--fs-sm)' }}>—</span>
             </div>
           </div>
 
+          {/* Daily Credits */}
           <div className="settings-section">
             <div className="settings-title" id="dailyCreditsTitle">Daily Credits</div>
             <div className="settings-row"><span id="freePlanLabel">Free Plan</span><span style={{ color: 'var(--green)' }}>+2 CR / day</span></div>
@@ -1388,6 +1589,7 @@ export default function ChatsPage() {
             </div>
           </div>
 
+          {/* Auto Play Test */}
           <div className="settings-section">
             <div className="settings-title" id="playTestTitle">Auto Play Test</div>
             <div className="settings-row">
@@ -1395,7 +1597,7 @@ export default function ChatsPage() {
                 <div id="playTestLabel">Run play test after inject</div>
                 <div className="settings-hint" id="playTestHint">Disable if your PC crashes during play test</div>
               </div>
-              <button className="toggle-sw on" id="playTestToggle" type="button" onClick={handleClick('togglePlayTest')}/>
+              <button className="toggle-sw on" id="playTestToggle" type="button" onClick={handleClick('togglePlayTest')} aria-label="Toggle auto play test"/>
             </div>
             <div className="settings-row">
               <span id="playTestDurLabel">Duration (seconds)</span>
@@ -1407,6 +1609,7 @@ export default function ChatsPage() {
             </div>
           </div>
 
+          {/* Language */}
           <div className="settings-section">
             <div className="settings-title" id="langTitle">Language</div>
             <div className="settings-row">
@@ -1418,6 +1621,7 @@ export default function ChatsPage() {
             </div>
           </div>
 
+          {/* Report Issue */}
           <div className="settings-section">
             <div className="settings-title" id="reportTitle">Report an Issue</div>
             <textarea className="report-ta" id="reportTa" placeholder="Describe the problem..."/>
@@ -1431,6 +1635,7 @@ export default function ChatsPage() {
             </div>
           </div>
 
+          {/* Admin Panel (hidden by default) */}
           <div className="settings-section" id="adminSection" style={{ display: 'none' }}>
             <div className="settings-title">Admin Panel</div>
             <div style={{ marginTop: 6 }}>
@@ -1438,6 +1643,7 @@ export default function ChatsPage() {
             </div>
           </div>
 
+          {/* Redeem Code */}
           <div className="settings-section">
             <div className="settings-title" id="redeemTitle">Redeem Code</div>
             <div className="settings-row" style={{ flexDirection: 'column', alignItems: 'flex-start', gap: 6 }}>
@@ -1445,7 +1651,7 @@ export default function ChatsPage() {
               <div style={{ display: 'flex', gap: 8, width: '100%' }}>
                 <input
                   type="text" id="redeemInput" className="settings-select"
-                  style={{ flex: 1, padding: '0 10px', height: 'var(--h-sm)' }}
+                  style={{ flex: 1, padding: '0 10px', height: 36 }}
                   placeholder="Enter code..."
                 />
                 <button className="settings-btn" type="button" onClick={handleClick('redeemCode')} id="redeemBtn">Redeem</button>
@@ -1454,6 +1660,7 @@ export default function ChatsPage() {
             </div>
           </div>
 
+          {/* Download Plugin */}
           <div className="settings-section">
             <div className="settings-title" id="downloadTitle">Download Plugin</div>
             <div className="settings-row" style={{ flexDirection: 'column', gap: 5, alignItems: 'flex-start' }}>
@@ -1467,10 +1674,11 @@ export default function ChatsPage() {
             </div>
           </div>
 
+          {/* Sign Out */}
           <div className="settings-section">
             <div className="settings-title" id="accountTitle">Account</div>
             <div className="settings-row">
-              <span id="logoutLabel">Sign out</span>
+              <span id="logoutLabel">Sign out of NEXUS AI</span>
               <button className="settings-btn danger" type="button" onClick={handleClick('logout')}>Sign Out</button>
             </div>
           </div>
@@ -1481,7 +1689,7 @@ export default function ChatsPage() {
         </div>
       </div>
 
-      {/* Code Preview */}
+      {/* Code Preview Modal */}
       <div className="ov" id="codePreviewModal">
         <div className="modal" style={{ width: 700 }}>
           <div className="modal-t">
@@ -1510,7 +1718,7 @@ export default function ChatsPage() {
         </div>
       </div>
 
-      {/* Share */}
+      {/* Share Modal */}
       <div className="ov" id="shareModal">
         <div className="modal" style={{ width: 520 }}>
           <div className="modal-t">{Icon.share}<span id="shareModalTitle">Share Chat</span></div>

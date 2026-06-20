@@ -12,28 +12,6 @@ function DiscordIcon({ size = 14 }: { size?: number }) {
   );
 }
 
-/* ─── Model Image Icon ─── */
-function ModelImg({ src, alt, size = 18 }: { src: string; alt: string; size?: number }) {
-  const [err, setErr] = useState(false);
-  if (err) {
-    return (
-      <div style={{
-        width: size, height: size, borderRadius: 4, flexShrink: 0,
-        background: 'rgba(0,229,255,.12)', display: 'flex', alignItems: 'center',
-        justifyContent: 'center', fontSize: size * 0.55, color: 'var(--cyan)',
-        fontWeight: 700, fontFamily: 'monospace',
-      }}>
-        {alt.charAt(0)}
-      </div>
-    );
-  }
-  return (
-    <Image src={src} alt={alt} width={size} height={size}
-      style={{ borderRadius: 4, objectFit: 'contain', flexShrink: 0 }}
-      onError={() => setErr(true)} unoptimized />
-  );
-}
-
 /* ═══════════════════════ CSS ═══════════════════════ */
 const CSS = `
 @import url('https://fonts.googleapis.com/css2?family=Orbitron:wght@400;600;700;900&family=JetBrains+Mono:wght@300;400;500;600&display=swap');
@@ -52,13 +30,17 @@ const CSS = `
 }
 
 *,*::before,*::after{margin:0;padding:0;box-sizing:border-box;}
-html{scroll-behavior:smooth;}
+html{scroll-behavior:smooth;-webkit-text-size-adjust:100%;}
 body{
   font-family:'JetBrains Mono',monospace;
   background:var(--bg);color:var(--text);
   font-size:13px;overflow-x:hidden;
   -webkit-font-smoothing:antialiased;
+  width:100%;
 }
+
+img{max-width:100%;}
+
 ::-webkit-scrollbar{width:3px;}
 ::-webkit-scrollbar-thumb{background:rgba(0,229,255,.22);border-radius:3px;}
 ::-webkit-scrollbar-track{background:transparent;}
@@ -135,7 +117,7 @@ body{
 }
 .nav.scrolled{height:52px;background:rgba(3,3,18,.99);border-color:rgba(0,229,255,.14);}
 
-.nav-logo-wrap{display:flex;align-items:center;gap:10px;text-decoration:none;flex-shrink:0;}
+.nav-logo-wrap{display:flex;align-items:center;gap:10px;text-decoration:none;flex-shrink:0;min-width:0;}
 .nav-logo-icon{
   width:34px;height:34px;border-radius:10px;flex-shrink:0;
   border:1.5px solid rgba(0,229,255,.3);
@@ -171,7 +153,7 @@ body{
 .nav-live-dot{width:5px;height:5px;border-radius:50%;background:var(--green);animation:liveDot 1.8s ease-in-out infinite;box-shadow:0 0 6px var(--green);}
 @keyframes liveDot{0%,100%{opacity:1;transform:scale(1);}50%{opacity:.2;transform:scale(.5);}}
 
-.nav-r{margin-left:auto;display:flex;align-items:center;gap:8px;}
+.nav-r{margin-left:auto;display:flex;align-items:center;gap:8px;flex-shrink:0;}
 .nav-discord{
   padding:7px 15px;border-radius:10px;
   border:1px solid rgba(88,101,242,.32);background:rgba(88,101,242,.07);
@@ -199,12 +181,12 @@ body{
 .nav-menu-btn{
   display:none;background:none;border:1px solid var(--b);border-radius:10px;
   padding:8px;cursor:pointer;color:var(--text);transition:var(--transition-fast);
-  align-items:center;justify-content:center;
+  align-items:center;justify-content:center;flex-shrink:0;
 }
 .nav-menu-btn:hover{border-color:var(--cyan2);color:var(--cyan);}
 
 .nav-mobile-menu{
-  position:fixed;top:60px;left:0;right:0;
+  position:fixed;top:56px;left:0;right:0;
   background:rgba(3,3,18,.98);border-bottom:1px solid var(--b);
   padding:0 16px;z-index:99;
   display:flex;flex-direction:column;
@@ -212,7 +194,7 @@ body{
   max-height:0;overflow:hidden;
   transition:max-height .35s cubic-bezier(.4,0,.2,1),padding .35s ease;
 }
-.nav-mobile-menu.open{max-height:400px;padding:16px;}
+.nav-mobile-menu.open{max-height:400px;padding:16px;overflow-y:auto;}
 .nav-mobile-item{
   padding:14px 16px;border-radius:11px;margin-bottom:8px;
   border:1px solid var(--b);color:var(--text);
@@ -238,6 +220,7 @@ body{
   padding:140px 20px 80px;
   position:relative;z-index:2;
   overflow:hidden;
+  width:100%;
 }
 .hero::before{
   content:'';position:absolute;inset:0;pointer-events:none;
@@ -256,6 +239,7 @@ body{
   animation:heroFadeUp 1s .1s ease both;
   box-shadow:0 0 28px rgba(0,229,255,.07),0 0 0 1px rgba(0,229,255,.05) inset;
   position:relative;overflow:hidden;
+  max-width:100%;text-align:center;
 }
 .hero-badge::before{
   content:'';position:absolute;top:0;left:-100%;width:100%;height:100%;
@@ -263,7 +247,7 @@ body{
   animation:shimmerBadge 3.5s ease-in-out infinite;
 }
 @keyframes shimmerBadge{0%{left:-100%}100%{left:200%}}
-.badge-dot{width:6px;height:6px;border-radius:50%;background:var(--cyan);animation:liveDot 1.8s infinite;box-shadow:0 0 10px var(--cyan);}
+.badge-dot{width:6px;height:6px;border-radius:50%;background:var(--cyan);animation:liveDot 1.8s infinite;box-shadow:0 0 10px var(--cyan);flex-shrink:0;}
 
 .hero-title{
   font-family:'Orbitron',sans-serif;
@@ -271,6 +255,7 @@ body{
   line-height:1.05;margin-bottom:0;
   animation:heroFadeUp 1s .22s ease both;
   letter-spacing:-0.5px;
+  max-width:100%;
 }
 .hero-title .line1{display:block;color:white;}
 .hero-title .grad{
@@ -318,6 +303,7 @@ body{
   font-family:'JetBrains Mono',monospace;font-size:13px;color:var(--text);
   padding:14px 0;line-height:1.5;
   resize:none;min-height:52px;max-height:140px;
+  width:100%;min-width:0;
 }
 .hero-prompt-input::placeholder{color:var(--dim);}
 .hero-prompt-btn{
@@ -393,7 +379,7 @@ body{
   transition:transform var(--transition-med);
 }
 .hg-card:hover .hg-card-thumb{transform:scale(1.05);}
-.hg-card-info{display:flex;flex-direction:column;gap:3px;}
+.hg-card-info{display:flex;flex-direction:column;gap:3px;min-width:0;}
 .hg-card-label{font-size:8.5px;color:var(--dim);display:flex;align-items:center;gap:5px;}
 .hg-card-name{font-size:10px;color:white;font-weight:600;}
 .hg-card-prompt{font-size:8px;color:var(--cyan);opacity:.65;font-style:italic;max-width:130px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
@@ -412,7 +398,7 @@ body{
   background:linear-gradient(135deg,rgba(0,229,255,.04),rgba(136,0,255,.04));
 }
 
-/* ─── FIXED: Carousel image states ─── */
+/* ─── Carousel image states ─── */
 .hg-main-img{
   position:absolute;
   inset:0;
@@ -421,25 +407,21 @@ body{
   object-fit:cover;
   opacity:0;
   z-index:1;
-  /* No transition by default so hidden images don't fade in accidentally */
   transition:none;
   pointer-events:none;
 }
-/* The image currently showing */
 .hg-main-img.img-active{
   opacity:1;
   z-index:3;
   transform:scale(1);
   transition:opacity .6s cubic-bezier(.4,0,.2,1), transform .6s cubic-bezier(.4,0,.2,1);
 }
-/* The image fading out */
 .hg-main-img.img-leaving{
   opacity:0;
   z-index:2;
   transform:scale(.96);
   transition:opacity .6s cubic-bezier(.4,0,.2,1), transform .6s cubic-bezier(.4,0,.2,1);
 }
-/* The next image ready to enter (pre-positioned, no transition so it doesn't flicker) */
 .hg-main-img.img-entering{
   opacity:0;
   z-index:2;
@@ -459,6 +441,7 @@ body{
   padding:5px 12px;border-radius:9px;
   background:rgba(0,229,255,.08);border:1px solid rgba(0,229,255,.2);
   font-size:8.5px;color:var(--text2);font-style:italic;cursor:pointer;transition:var(--transition-fast);
+  max-width:100%;
 }
 .hg-main-prompt:hover{background:rgba(0,229,255,.18);color:var(--cyan);transform:scale(1.02);}
 
@@ -470,7 +453,7 @@ body{
 }
 @keyframes shimmerBar{0%,100%{opacity:.4}50%{opacity:1}}
 
-.hg-dots{display:flex;gap:7px;justify-content:center;margin-top:16px;}
+.hg-dots{display:flex;gap:7px;justify-content:center;margin-top:16px;flex-wrap:wrap;}
 .hg-dot{
   width:6px;height:6px;border-radius:50%;
   background:rgba(0,229,255,.18);border:1px solid rgba(0,229,255,.15);
@@ -482,6 +465,7 @@ body{
 .hero-stats{
   display:flex;gap:50px;margin-top:56px;flex-wrap:wrap;justify-content:center;
   animation:heroFadeUp 1s .6s ease both;
+  max-width:100%;
 }
 .stat{text-align:center;position:relative;}
 .stat-n{
@@ -509,18 +493,18 @@ body{
 }
 .ticker-wrap::before{left:0;background:linear-gradient(90deg,var(--bg),transparent);}
 .ticker-wrap::after{right:0;background:linear-gradient(270deg,var(--bg),transparent);}
-.ticker-inner{display:flex;gap:0;animation:tickerMove 36s linear infinite;}
+.ticker-inner{display:flex;gap:0;animation:tickerMove 36s linear infinite;width:max-content;}
 .ticker-inner:hover{animation-play-state:paused;}
 .ticker-item{
   display:flex;align-items:center;gap:7px;white-space:nowrap;
   padding:0 32px;font-size:9.5px;color:var(--text2);
   border-right:1px solid var(--b);
 }
-.ticker-dot{width:4px;height:4px;border-radius:50%;background:var(--cyan);box-shadow:0 0 7px var(--cyan);}
+.ticker-dot{width:4px;height:4px;border-radius:50%;background:var(--cyan);box-shadow:0 0 7px var(--cyan);flex-shrink:0;}
 @keyframes tickerMove{from{transform:translateX(0);}to{transform:translateX(-50%);}}
 
 /* ═══ SECTIONS ═══ */
-.section{padding:100px 36px;position:relative;z-index:1;max-width:1200px;margin:0 auto;}
+.section{padding:100px 36px;position:relative;z-index:1;max-width:1200px;margin:0 auto;width:100%;}
 .section-full{padding:100px 36px;position:relative;z-index:1;}
 
 .sec-eyebrow{
@@ -577,6 +561,7 @@ body{
   background:rgba(255,45,107,.07);border:1px solid rgba(255,45,107,.24);
   border-radius:24px;font-size:9px;color:var(--pink);letter-spacing:1px;
   animation:lockPulse 3s ease-in-out infinite;
+  max-width:100%;text-align:center;
 }
 @keyframes lockPulse{0%,100%{box-shadow:none}50%{box-shadow:0 0 16px rgba(255,45,107,.12)}}
 
@@ -647,7 +632,7 @@ body{
 }
 
 /* ═══ FEATURES ═══ */
-.features-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(300px,1fr));gap:18px;}
+.features-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(280px,1fr));gap:18px;}
 .feat{
   padding:30px;background:rgba(6,7,26,.72);border:1px solid var(--b);
   border-radius:18px;transition:var(--transition-med);position:relative;overflow:hidden;
@@ -708,30 +693,6 @@ body{
 }
 .step-title{font-size:13px;font-weight:600;color:white;margin-bottom:11px;letter-spacing:.3px;}
 .step-desc{font-size:10.5px;color:var(--text2);line-height:1.95;}
-
-/* ═══ AI MODELS ═══ */
-.models-wrap{max-width:1060px;margin:0 auto;}
-.model-category{display:flex;align-items:center;gap:12px;margin:28px 0 14px;}
-.mc-label{font-size:8.5px;color:var(--text2);text-transform:uppercase;letter-spacing:2px;white-space:nowrap;}
-.mc-line{flex:1;height:1px;background:var(--b);}
-.models-grid{display:flex;flex-wrap:wrap;gap:10px;}
-.model-chip{
-  padding:10px 16px;border:1px solid var(--b);border-radius:24px;
-  font-size:10px;color:var(--text);background:rgba(6,7,26,.72);
-  display:flex;align-items:center;gap:10px;transition:var(--transition-fast);
-  position:relative;cursor:default;
-}
-.model-chip:hover{border-color:var(--cyan2);color:var(--cyan);background:rgba(0,229,255,.05);transform:translateY(-2px);}
-.model-chip.is-new{border-color:rgba(255,45,107,.28);background:rgba(255,45,107,.04);}
-.model-chip.is-new:hover{border-color:rgba(255,45,107,.55);color:var(--pink);}
-.model-chip.is-soon{opacity:.35;cursor:not-allowed;}
-.model-chip.is-soon:hover{border-color:var(--b);color:var(--text);background:rgba(6,7,26,.72);transform:none;}
-.mbadge{font-size:7.5px;padding:2px 9px;border-radius:6px;font-weight:700;text-transform:uppercase;letter-spacing:.5px;flex-shrink:0;}
-.mbadge.free{background:rgba(0,255,170,.12);color:var(--green);}
-.mbadge.cr{background:rgba(0,229,255,.09);color:var(--cyan);}
-.mbadge.new{background:rgba(255,45,107,.14);color:var(--pink);animation:newPulse 2.5s ease-in-out infinite;}
-.mbadge.soon{background:rgba(255,214,0,.09);color:var(--yellow);}
-@keyframes newPulse{0%,100%{box-shadow:0 0 0 0 rgba(255,45,107,.4);}50%{box-shadow:0 0 0 5px rgba(255,45,107,0);}}
 
 /* ═══ GATE ═══ */
 .gate-section{padding:100px 28px;text-align:center;position:relative;z-index:1;}
@@ -811,6 +772,7 @@ body{
   background:rgba(0,255,170,.08);border:1px solid rgba(0,255,170,.24);
   border-radius:22px;font-size:9px;color:var(--green);font-weight:700;letter-spacing:1px;
   animation:ctaFree 3s ease-in-out infinite;
+  max-width:100%;text-align:center;
 }
 @keyframes ctaFree{0%,100%{box-shadow:none}50%{box-shadow:0 0 16px rgba(0,255,170,.1)}}
 .cta-title{font-family:'Orbitron',sans-serif;font-size:clamp(20px,3.2vw,32px);font-weight:900;color:white;margin-bottom:16px;position:relative;z-index:1;}
@@ -874,6 +836,8 @@ footer{
 .footer-copy{font-size:9px;color:var(--dim);}
 
 /* ═══ RESPONSIVE ═══ */
+
+/* Tablet / small laptop */
 @media(max-width:1100px){
   .hg-side{display:none;}
   .hero-games-stage{height:320px;}
@@ -882,8 +846,18 @@ footer{
   .features-grid{grid-template-columns:repeat(2,1fr);}
 }
 
+/* Tablet portrait */
+@media(max-width:900px){
+  .nav{padding:0 20px;}
+  .nav-sub{display:none;}
+  .hero{padding:120px 24px 64px;}
+  .section{padding:80px 24px;}
+  .section-full{padding:80px 24px;}
+  .gate-box,.cta-box{padding:48px 36px;}
+}
+
 @media(max-width:768px){
-  .nav{padding:0 18px;height:56px;}
+  .nav{padding:0 16px;height:56px;}
   .nav.scrolled{height:48px;}
   .nav-sub,.nav-divider,.nav-live{display:none;}
   .nav-discord{display:none;}
@@ -891,67 +865,82 @@ footer{
   .nav-r .nav-login{display:none;}
   .nav-mobile-menu{top:56px;}
 
-  .hero{padding:100px 18px 56px;}
+  .hero{padding:96px 18px 56px;width:100%;}
   .hero-title{font-size:clamp(28px,8.5vw,46px);}
-  .hero-badge{font-size:8.5px;padding:6px 16px;}
+  .hero-badge{font-size:8px;padding:6px 14px;gap:8px;}
 
-  .hero-games-stage{height:auto;margin-top:38px;}
+  .hero-games-stage{height:auto;margin-top:36px;}
   .hg-center{position:relative;left:auto;top:auto;transform:none;width:100%;max-width:480px;margin:0 auto;}
-  .hg-main-wrap{height:226px;border-radius:16px;}
+  .hg-main-wrap{height:220px;border-radius:16px;}
+  .hg-main-name{font-size:13px;}
+  .hg-main-overlay{padding:26px 16px 14px;}
 
-  .hero-stats{gap:24px;margin-top:38px;}
-  .stat-n{font-size:24px;}
+  .hero-stats{gap:22px;margin-top:36px;}
+  .stat-n{font-size:22px;}
+  .stat-l{font-size:7.5px;letter-spacing:1.4px;}
   .stat-divider{display:none;}
-  .hero-scroll{margin-top:34px;}
+  .hero-scroll{margin-top:32px;}
 
-  .hero-prompt-wrap{margin-top:30px;}
-  .hero-prompt-box{padding:5px 5px 5px 16px;border-radius:16px;}
-  .hero-prompt-input{font-size:12px;min-height:48px;}
-  .hero-prompt-btn{padding:12px 20px;font-size:9px;gap:6px;border-radius:12px;}
+  .hero-prompt-wrap{margin-top:28px;}
+  .hero-prompt-box{padding:5px 5px 5px 16px;border-radius:16px;flex-wrap:wrap;}
+  .hero-prompt-input{font-size:12px;min-height:46px;}
+  .hero-prompt-btn{padding:11px 18px;font-size:8.5px;gap:6px;border-radius:12px;}
   .hero-prompt-examples{display:none;}
 
-  .section{padding:64px 18px;}
-  .section-full{padding:64px 18px;}
-  .mystery{padding:72px 18px;}
-  .screenshots-section{padding:72px 18px;}
-  .gate-section,.cta-section{padding:64px 18px;}
-  .gate-box{padding:40px 28px;}
-  .cta-box{padding:40px 28px;}
-  .sec-sub{margin-bottom:38px;}
+  .section{padding:60px 16px;}
+  .section-full{padding:60px 16px;}
+  .mystery{padding:64px 16px;}
+  .screenshots-section{padding:64px 16px;}
+  .gate-section,.cta-section{padding:60px 16px;}
+  .gate-box{padding:36px 24px;border-radius:22px;}
+  .cta-box{padding:36px 24px;border-radius:22px;}
+  .sec-sub{margin-bottom:34px;font-size:11px;}
+  .sec-title{font-size:clamp(20px,6vw,30px);}
 
-  .hint-grid{grid-template-columns:1fr 1fr;}
+  .mystery-title{font-size:clamp(22px,7vw,34px);}
+  .mystery-sub{font-size:11px;line-height:1.95;}
+
+  .hint-grid{grid-template-columns:1fr 1fr;gap:10px;}
+  .hint-card{padding:18px 16px;}
   .how-grid{grid-template-columns:1fr;}
   .features-grid{grid-template-columns:1fr;}
   .screen-grid{grid-template-columns:1fr;}
-  .models-grid{justify-content:flex-start;}
 
-  footer{padding:28px 18px;}
+  .gate-title{font-size:18px;}
+  .cta-title{font-size:clamp(18px,5.5vw,26px);}
+  .gate-note,.cta-meta{font-size:8px;line-height:1.9;}
+
+  footer{padding:28px 16px;}
   .footer-inner{flex-direction:column;text-align:center;}
-  .footer-links{justify-content:center;}
+  .footer-links{justify-content:center;gap:16px;}
   .footer-brand-wrap{justify-content:center;flex-direction:column;gap:10px;}
 }
 
 @media(max-width:480px){
   .hero-title{font-size:clamp(24px,9.5vw,36px);}
+  .hero-badge{font-size:7.5px;padding:6px 12px;}
   .hint-grid{grid-template-columns:1fr;}
-  .models-grid{justify-content:center;}
   .gate-box,.cta-box{padding:28px 18px;}
-  .hg-main-wrap{height:196px;}
-  .hero-stats{gap:18px;}
-  .stat-n{font-size:22px;}
-  .stat-l{font-size:7.5px;}
-  .step-card{padding:30px 20px;}
-  .feat{padding:24px 20px;}
+  .hg-main-wrap{height:190px;}
+  .hg-main-name{font-size:12px;}
+  .hero-stats{gap:16px;}
+  .stat-n{font-size:20px;}
+  .stat-l{font-size:7px;}
+  .step-card{padding:28px 18px;}
+  .feat{padding:22px 18px;}
   .btn-primary{width:100%;justify-content:center;}
   .features-grid,.how-grid{gap:12px;}
+  .gate-btn{width:100%;justify-content:center;padding:14px 24px;}
+  .cta-discord{font-size:9px;text-align:center;}
 }
 
 @media(max-width:360px){
-  .hero-title{font-size:24px;}
-  .nav-logo{font-size:12px;letter-spacing:2px;}
+  .hero-title{font-size:22px;}
+  .nav-logo{font-size:11px;letter-spacing:1.5px;}
   .gate-box,.cta-box{padding:24px 14px;}
-  .hero-prompt-btn{padding:10px 14px;font-size:8.5px;}
-  .gate-box{padding:28px 16px;}
+  .hero-prompt-btn{padding:10px 14px;font-size:8px;}
+  .hg-main-wrap{height:170px;}
+  .hero-badge{font-size:7px;padding:5px 10px;}
 }
 `;
 
@@ -979,8 +968,8 @@ const EXAMPLE_PROMPTS = [
 ];
 
 const TICKER_ITEMS = [
-  'Direct Studio Injection','Multi-Model AI','Visual GUI Builder',
-  'Auto Play-Test','@ Mention System','Roblox Account Sync',
+  'Direct Studio Injection','AI Script Generation','Auto Play-Test',
+  '@ Mention System','Roblox Account Sync',
   '30 Free Credits','Zero Copy-Paste','Studio-Aware AI','Natural Language',
   'Auto Error Fix','Instant Injection',
 ];
@@ -991,16 +980,14 @@ const imgFail = (e: React.SyntheticEvent<HTMLImageElement>) => {
   el.src = '';
 };
 
-/* ─── FIXED Hero Game Carousel ─── */
+/* ─── Hero Game Carousel ─── */
 /*
-  Root cause of the bug:
-  - Previously all non-active images got class "entering" (opacity:0), which is correct
-    visually but means when React re-renders (e.g. after scroll) it resets transition state.
-  - The fix: use THREE explicit phases tracked in refs, not just in state.
-    Phase flow: idle -> transitioning (leaving+entering rendered) -> idle (new active)
-  - We render only 2 images at a time: current active + next (during transition).
-    All other images are simply not rendered or hidden with display:none.
-  - Timer is stored in a ref and properly cleared/restarted when activeIdx changes.
+  Carousel logic:
+  - Three explicit phases tracked in refs, not just state.
+  - Phase flow: idle -> transitioning (leaving+entering rendered) -> idle (new active)
+  - Only 2 images are visually active at a time; everything else is hidden (opacity:0, no transition).
+  - Timer is stored in a ref and properly cleared/restarted whenever the active slide changes,
+    so manual navigation (clicking a dot or side card) doesn't fight with the autoplay timer.
 */
 function HeroGames({ onPromptClick }: { onPromptClick: (p: string) => void }) {
   const [activeIdx, setActiveIdx]       = useState(0);
@@ -1100,8 +1087,6 @@ function HeroGames({ onPromptClick }: { onPromptClick: (p: string) => void }) {
         <div className="hg-main-wrap">
           {GAMES.map((g, i) => {
             const cls = getImgClass(i);
-            // Don't render hidden images at all for performance
-            // but we need them in DOM for preloading — use visibility trick
             return (
               <img
                 key={g.file}
@@ -1236,11 +1221,11 @@ function MobileMenu({ open }: { open: boolean }) {
         </svg>
         Features
       </a>
-      <a href="#models" className="nav-mobile-item">
+      <a href="#how" className="nav-mobile-item">
         <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-          <path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z" />
+          <circle cx="12" cy="12" r="10" /><polyline points="12 6 12 12 16 14" />
         </svg>
-        AI Models
+        How It Works
       </a>
       <a href="/login" className="nav-mobile-item primary">
         <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
@@ -1258,74 +1243,43 @@ const FEATURES = [
     iconBg:'rgba(0,229,255,.09)', iconColor:'var(--cyan)',
     icon:<polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2" />,
     title:'Direct Studio Injection',
-    desc:'Scripts, parts, and GUIs go straight into Roblox Studio via the companion plugin. No copy-pasting, no manual steps — ever.',
+    desc:'Scripts and game objects go straight into Roblox Studio via the companion plugin. No copy-pasting, no manual steps — ever.',
     tagBg:'rgba(0,229,255,.07)', tagColor:'var(--cyan)', tagLabel:'Plugin Required', delay:'d1',
   },
   {
     iconBg:'rgba(136,0,255,.09)', iconColor:'#cc55ff',
     icon:<path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z" />,
-    title:'Multi-Model AI',
-    desc:'Switch between Gemini, DeepSeek, ChatGPT, and more — all fine-tuned to write production-quality Lua for Roblox.',
-    tagBg:'rgba(0,255,170,.07)', tagColor:'var(--green)', tagLabel:'Many Free', delay:'d2',
-  },
-  {
-    iconBg:'rgba(0,255,170,.08)', iconColor:'var(--green)',
-    icon:<><rect x="3" y="3" width="18" height="18" rx="2" /><path d="M3 9h18M9 21V9" /></>,
-    title:'Visual GUI Builder',
-    desc:'Design your UI visually with drag-and-drop, then export it as Lua or inject it directly into Studio in one click.',
-    tagBg:'rgba(0,255,170,.07)', tagColor:'var(--green)', tagLabel:'Drag & Drop', delay:'d3',
+    title:'AI Script Generation',
+    desc:'Describe what you want in plain English and the AI writes production-quality Lua code tailored to your project.',
+    tagBg:'rgba(0,255,170,.07)', tagColor:'var(--green)', tagLabel:'Powered by AI', delay:'d2',
   },
   {
     iconBg:'rgba(255,214,0,.08)', iconColor:'var(--yellow)',
     icon:<><circle cx="12" cy="12" r="10" /><polyline points="12 6 12 12 16 14" /></>,
     title:'Auto Play-Test & Fix',
     desc:'After building, AI runs a play-test automatically. Errors in the console? It reads them, stops, and re-injects a fix on its own.',
-    tagBg:'rgba(255,214,0,.08)', tagColor:'var(--yellow)', tagLabel:'Auto-Fix', delay:'d4',
+    tagBg:'rgba(255,214,0,.08)', tagColor:'var(--yellow)', tagLabel:'Auto-Fix', delay:'d3',
   },
   {
     iconBg:'rgba(255,45,107,.08)', iconColor:'var(--pink)',
     icon:<><circle cx="11" cy="11" r="8" /><line x1="21" y1="21" x2="16.65" y2="16.65" /></>,
     title:'@ Mention System',
     desc:'Type @ to reference any script or object in your project. AI reads it, understands it, and builds on top of it intelligently.',
-    tagBg:'rgba(0,229,255,.07)', tagColor:'var(--cyan)', tagLabel:'Context-Aware', delay:'d5',
+    tagBg:'rgba(0,229,255,.07)', tagColor:'var(--cyan)', tagLabel:'Context-Aware', delay:'d4',
   },
   {
     iconBg:'rgba(0,229,255,.08)', iconColor:'var(--cyan)',
     icon:<><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2" /><circle cx="12" cy="7" r="4" /></>,
     title:'Roblox Account Sync',
     desc:'Credits, history, and projects are tied to your Roblox account and stay synced automatically across every device.',
-    tagBg:'rgba(255,214,0,.08)', tagColor:'var(--yellow)', tagLabel:'Persistent', delay:'d6',
-  },
-];
-
-/* ─── AI Models ─── */
-const AI_MODELS = [
-  {
-    label: 'Google Gemini',
-    models: [
-      { name:'Gemini 3.5 Flash', badge:'new' as const, cls:'is-new', imgSrc:'/images/gemini.png' },
-      { name:'Gemini 3.1 Pro',   badge:'cr'  as const, cls:'is-new', imgSrc:'/images/gemini.png' },
-    ],
+    tagBg:'rgba(255,214,0,.08)', tagColor:'var(--yellow)', tagLabel:'Persistent', delay:'d5',
   },
   {
-    label: 'DeepSeek',
-    models: [
-      { name:'DeepSeek V4 Pro', badge:'new' as const, cls:'is-new', imgSrc:'/images/deepseek.svg' },
-    ],
-  },
-  {
-    label: 'OpenAI',
-    models: [
-      { name:'ChatGPT', badge:'new' as const, cls:'is-new', imgSrc:'/images/chatgpt.png' },
-    ],
-  },
-  {
-    label: 'Coming Soon',
-    models: [
-      { name:'Claude Sonnet', badge:'soon' as const, cls:'is-soon', imgSrc:'/images/claude.png' },
-      { name:'Claude Opus',   badge:'soon' as const, cls:'is-soon', imgSrc:'/images/claude.png' },
-      { name:'GPT-5.5',       badge:'soon' as const, cls:'is-soon', imgSrc:'/images/chatgpt.png' },
-    ],
+    iconBg:'rgba(0,255,170,.08)', iconColor:'var(--green)',
+    icon:<><rect x="2" y="3" width="20" height="14" rx="2" /><line x1="8" y1="21" x2="16" y2="21" /><line x1="12" y1="17" x2="12" y2="21" /></>,
+    title:'Studio-Aware AI',
+    desc:'The AI sees your workspace as you build. It knows what scripts already exist and builds intelligently on top of them.',
+    tagBg:'rgba(0,255,170,.07)', tagColor:'var(--green)', tagLabel:'Context-Aware', delay:'d6',
   },
 ];
 
@@ -1505,8 +1459,8 @@ export default function HomePage() {
           </div>
           <div className="stat-divider" />
           <div className="stat">
-            <div className="stat-n">7+</div>
-            <div className="stat-l">AI Models</div>
+            <div className="stat-n">AI</div>
+            <div className="stat-l">Powered</div>
           </div>
           <div className="stat-divider" />
           <div className="stat">
@@ -1549,7 +1503,7 @@ export default function HomePage() {
           </h2>
           <p className="mystery-sub reveal d2">
             Most AI tools give you code you still have to copy, paste, and test yourself.<br />
-            NEXUS AI skips all of that — it injects scripts, GUIs, parts, and full systems
+            NEXUS AI skips all of that — it injects scripts and full systems
             directly into your Roblox place. Just describe what you want, and watch it appear.
           </p>
           <div className="mystery-lock reveal d2">
@@ -1636,7 +1590,7 @@ export default function HomePage() {
               iconColor:'var(--yellow)',
               icon:<polyline points="20 6 9 17 4 12" />,
               title:'Live & Injecting',
-              desc:'Every AI command materializes in your place — parts, scripts, GUIs, full systems. All live, all instant.',
+              desc:'Every AI command materializes in your place — parts, scripts, full systems. All live, all instant.',
               delay:'d3',
             },
           ].map((s, i) => (
@@ -1713,37 +1667,6 @@ export default function HomePage() {
         </div>
       </section>
 
-      {/* ═══ AI MODELS ═══ */}
-      <section className="section" style={{ paddingTop:0 }} id="models">
-        <div className="sec-eyebrow reveal">AI Models</div>
-        <h2 className="sec-title reveal d1">Best-in-Class Model Selection</h2>
-        <p className="sec-sub reveal d2">
-          Handpicked models for speed, precision, and Roblox expertise. Many are completely free to use.
-        </p>
-        <div className="models-wrap reveal d2">
-          {AI_MODELS.map((cat, i) => (
-            <div key={i}>
-              <div className="model-category">
-                <div className="mc-line" />
-                <div className="mc-label">{cat.label}</div>
-                <div className="mc-line" />
-              </div>
-              <div className="models-grid">
-                {cat.models.map((m, j) => (
-                  <div key={j} className={`model-chip ${m.cls || ''}`}>
-                    <div style={{ width:20, height:20, borderRadius:5, flexShrink:0, overflow:'hidden', display:'flex', alignItems:'center', justifyContent:'center' }}>
-                      <ModelImg src={m.imgSrc} alt={m.name} size={18} />
-                    </div>
-                    {m.name}
-                    <span className={`mbadge ${m.badge}`}>{m.badge.toUpperCase()}</span>
-                  </div>
-                ))}
-              </div>
-            </div>
-          ))}
-        </div>
-      </section>
-
       {/* ═══ GATE ═══ */}
       <div className="gate-section" id="gate">
         <div className="gate-box reveal-scale">
@@ -1757,7 +1680,7 @@ export default function HomePage() {
           </div>
           <div className="gate-title">The Rest is Inside</div>
           <div className="gate-sub">
-            Your dashboard, full model access, credit system, plugin download, daily rewards, and project history — all waiting behind one free login.
+            Your dashboard, full AI access, credit system, plugin download, daily rewards, and project history — all waiting behind one free login.
           </div>
           <a href="/login" className="gate-btn">
             <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
