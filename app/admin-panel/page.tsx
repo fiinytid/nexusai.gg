@@ -1311,16 +1311,16 @@ export default function AdminPanel() {
 
   // ── Logs ──────────────────────────────────────────────────────────────────
   const loadLogs = useCallback(async () => {
-    let r = await api('/api/control?get_logs=1&limit=50');
-    if (!r.ok) r = await api('/api/control', { method: 'POST', body: { type: 'get_logs', limit: 50 } });
+    let r = await api('https://fine-setter-131.convex.site/?get_logs=1&limit=50');
+    if (!r.ok) r = await api('https://fine-setter-131.convex.site/', { method: 'POST', body: { type: 'get_logs', limit: 50 } });
     let data = (r.data as { logs?: Log[] })?.logs ?? [];
     if (logFilter) data = data.filter(l => l.action === logFilter);
     setLogs(data.slice(0, 50));
   }, [api, logFilter]);
 
   const loadHistory = useCallback(async () => {
-    let r = await api('/api/control?get_history=1&limit=30');
-    if (!r.ok) r = await api('/api/control', { method: 'POST', body: { type: 'get_history', limit: 30 } });
+    let r = await api('https://fine-setter-131.convex.site/?get_history=1&limit=30');
+    if (!r.ok) r = await api('https://fine-setter-131.convex.site/', { method: 'POST', body: { type: 'get_history', limit: 30 } });
     setHistory((r.data as { history?: Log[] })?.history?.slice(0, 30) ?? []);
   }, [api]);
 

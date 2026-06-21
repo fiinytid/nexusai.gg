@@ -5,42 +5,42 @@ import { internal } from "./_generated/api";
 const REQUIRED_PLUGIN_VERSION = "V1.3.29";
 
 // ── TUNABLES ───────────────────────────────────────────────────────────────────
-const SESSION_TTL         = 24 * 60 * 60 * 1_000;
-const SESSION_TOKEN_MAX   = 128;
-const MIN_ADMIN_TOKEN_LEN = 16;
-const MAX_BODY_FIELD_LEN  = 50_000;
-const MAX_LOG_ENTRIES     = 500;
-const MAX_HIST_ENTRIES    = 200;
-const MAX_USER_HIST       = 100;
-const RATE_USER_PER_MIN   = 150;
-const RATE_IP_PER_MIN     = 300;
-const RATE_BURST_COUNT    = 20;
-const RATE_BURST_WINDOW   = 5_000;
-const TTL_TOOLBOX         = 5  * 60_000;
-const TTL_ASSET           = 30 * 60_000;
-const TTL_USER_INFO       = 10 * 60_000;
-const TTL_GAME_INFO       = 15 * 60_000;
-const MAX_BATCH_COMMANDS  = 200;
-const MAX_MULTI_TARGETS   = 20;
-const MAX_AI_FEED_ENTRIES = 300;
+const SESSION_TTL           = 24 * 60 * 60 * 1_000;
+const SESSION_TOKEN_MAX     = 128;
+const MIN_ADMIN_TOKEN_LEN   = 16;
+const MAX_BODY_FIELD_LEN    = 50_000;
+const MAX_LOG_ENTRIES       = 500;
+const MAX_HIST_ENTRIES      = 200;
+const MAX_USER_HIST         = 100;
+const RATE_USER_PER_MIN     = 150;
+const RATE_IP_PER_MIN       = 300;
+const RATE_BURST_COUNT      = 20;
+const RATE_BURST_WINDOW     = 5_000;
+const TTL_TOOLBOX           = 5  * 60_000;
+const TTL_ASSET             = 30 * 60_000;
+const TTL_USER_INFO         = 10 * 60_000;
+const TTL_GAME_INFO         = 15 * 60_000;
+const MAX_BATCH_COMMANDS    = 200;
+const MAX_MULTI_TARGETS     = 20;
+const MAX_AI_FEED_ENTRIES   = 300;
 const AI_FEED_DEFAULT_LIMIT = 50;
 
-// NOTE: DEFAULT_ADMIN_ACTIONS and DEDUP_ACTIONS have been removed entirely.
-// There is no longer a server-side "admin-only action name" allowlist, and
-// no command-deduplication step. Every action now goes through the same
-// authorizeCommand() path uniformly; admin gating is handled solely by
-// verifyAdminToken() where individual handlers explicitly require it
-// (currently: none of the renamed actions require it implicitly anymore —
-// see authorizeCommand()'s simplified signature below).
+// Nonce TTL: how long a nonce is remembered to prevent replay attacks.
+// Set to 5 minutes — wide enough to cover slow plugin poll cycles.
+// FIX: Previously, nonce replay was too aggressive because every GET poll
+// also triggered nonce checking. Nonces are now ONLY checked on POST requests.
+const NONCE_TTL_MS = 5 * 60_000;
 
+// ── ALLOWED ORIGINS ────────────────────────────────────────────────────────────
 const ALLOWED_ORIGINS = new Set<string>([
   "https://nexusai-rbx.vercel.app",
   "https://nexusai.gg",
   "http://localhost:3000",
-  "https://fine-setter-131.convex.site", // production
+  "https://fine-setter-131.convex.site",   // production
   "https://brazen-lapwing-697.convex.site", // development
 ]);
 
+// ── VALID ASSET TYPE SETS ──────────────────────────────────────────────────────
 const VALID_TOOLBOX_TYPES = new Set<string>([
   "Model", "Plugin", "Audio", "Decal", "Image", "MeshPart",
   "Package", "Hat", "Shirt", "Pants", "TShirt", "Gear", "Animation",
@@ -51,27 +51,24 @@ const INSERTABLE_ASSET_TYPES = new Set<string>([
   "TShirt", "Gear", "Animation", "MeshPart", "Unknown",
 ]);
 
-// Action names that the AI/web side may dispatch to the plugin which are
-// considered sensitive enough to require an admin token rather than a
-// per-user session token. This replaces the old DEFAULT_ADMIN_ACTIONS set,
-// but is intentionally NOT a hardcoded constant — it is read from the
-// environment only, so there is no implicit default list baked into the
-// server. If NEXUS_ADMIN_ACTIONS is unset, no action is admin-gated beyond
-// what authorizeCommand() already enforces (same-user ownership).
+// ── ADMIN-GATED ACTIONS ────────────────────────────────────────────────────────
+// Returns the set of action names that require an admin token.
+// Configured via the NEXUS_ADMIN_ACTIONS environment variable (comma-separated).
+// If the env var is not set, no extra actions are admin-gated beyond the
+// explicit checks already in place (e.g. dispatch_multi_target).
 function getAdminGatedActions(): Set<string> {
   const env = process.env.NEXUS_ADMIN_ACTIONS ?? "";
   if (!env) return new Set();
   return new Set(env.split(",").map((s) => s.trim()).filter(Boolean));
 }
 
-// ── ACTION NAME MIGRATION ───────────────────────────────────────────────────────
-// Maps legacy action names (still potentially sent by an older plugin build
-// or an older AI/web caller) to their new, clearer snake_case names. Applied
-// once, immediately after parsing the action name out of the request, so the
-// rest of the code only ever sees the new names.
+// ── ACTION NAME MIGRATION ──────────────────────────────────────────────────────
+// Maps legacy action names (sent by older plugin builds or older web/AI callers)
+// to their current snake_case equivalents. Applied once immediately after parsing
+// the action name, so all downstream logic only ever sees the new names.
 const ACTION_RENAME_MAP: Record<string, string> = {
-  // Plugin → server (reports)
-  script_content:        "read_script",
+  // Plugin → server (report actions)
+  script_content:         "read_script",
   log_output:             "output_log",
   output_data:            "output_report",
   workspace_data:         "workspace_scan",
@@ -100,7 +97,7 @@ const ACTION_RENAME_MAP: Record<string, string> = {
   nxai_connect:           "plugin_connect",
   nxai_disconnect:        "plugin_disconnect",
 
-  // Web/AI → plugin (dispatch)
+  // Web/AI → plugin (dispatch actions)
   inject_command:         "dispatch_command",
   batch_commands:         "dispatch_batch",
   execute_json:           "dispatch_from_text",
@@ -113,6 +110,7 @@ function migrateActionName(raw: string): string {
 }
 
 // ── INTERFACES ─────────────────────────────────────────────────────────────────
+
 interface QueueCommand {
   action: string;
   _priority?: string;
@@ -126,11 +124,6 @@ interface ProjectData {
   projectId: string;
   projectName: string;
   placeId: string;
-  updatedAt: number;
-}
-
-interface WebhookData {
-  url: string;
   updatedAt: number;
 }
 
@@ -213,12 +206,11 @@ interface FilterResult {
   removed: string[];
 }
 
-// AI feed entry: a single, durable, ordered message that the AI can read
-// later from Convex regardless of which chat/session asks for it. This is
-// what makes read_script / output_log / etc. behave like "messages sent to
-// the AI" instead of just being the most-recent-snapshot data they were
-// before — every event is appended, not overwritten, and is explicitly
-// marked read once retrieved (see ai_feed handling below).
+// AiFeedEntry: a single durable, ordered message the AI can read later.
+// Every plugin report (read_script, output_log, runcode_report, etc.) is
+// appended here in addition to being saved as a snapshot via saveData().
+// The AI polls GET ?ai_feed=1&user=... to retrieve unread entries; entries
+// are marked read atomically so no entry is delivered twice.
 interface AiFeedEntry {
   id: string;
   username: string;
@@ -229,7 +221,8 @@ interface AiFeedEntry {
   read: boolean;
 }
 
-// ── SANITISERS (pure, no side effects) ────────────────────────────────────────
+// ── SANITISERS ─────────────────────────────────────────────────────────────────
+
 function san(user: unknown): string {
   if (user == null) return "default";
   return String(user)
@@ -305,6 +298,7 @@ function sanUrl(val: unknown): string | null {
 }
 
 // ── JSON HELPERS ───────────────────────────────────────────────────────────────
+
 function cleanControlChars(text: string): string {
   if (typeof text !== "string") return "";
   let out = "";
@@ -332,7 +326,7 @@ function robustJsonParse(raw: unknown): unknown {
         .replace(/([{,]\s*)([a-zA-Z_$][a-zA-Z0-9_$]*)(\s*:(?!:))/g, '$1"$2"$3')
     );
   } catch (_) {}
-  // Attempt 4: Lua-style objects
+  // Attempt 4: Lua-style objects (key = value notation)
   try {
     return JSON.parse(
       s
@@ -362,11 +356,11 @@ function findJsonObjects(text: string): string[] {
     const start = i;
     for (; i < len; i++) {
       const ch = text[i];
-      if (escape)                { escape = false; continue; }
-      if (ch === "\\" && inString) { escape = true; continue; }
-      if (ch === '"')             { inString = !inString; continue; }
-      if (inString)               continue;
-      if (ch === "{")             depth++;
+      if (escape)                  { escape = false; continue; }
+      if (ch === "\\" && inString) { escape = true;  continue; }
+      if (ch === '"')              { inString = !inString; continue; }
+      if (inString)                continue;
+      if (ch === "{")              depth++;
       else if (ch === "}") {
         depth--;
         if (depth === 0) { results.push(text.slice(start, i + 1)); i++; break; }
@@ -426,7 +420,7 @@ function extractCommandsFromText(text: string): QueueCommand[] {
     }
   }
 
-  // Remove code block ranges from text before scanning for bare JSON
+  // Mask code block ranges before scanning bare text for JSON objects
   let textNoBraces = text;
   for (let r = codeBlockRanges.length - 1; r >= 0; r--) {
     const [start, end] = codeBlockRanges[r];
@@ -444,6 +438,7 @@ function extractCommandsFromText(text: string): QueueCommand[] {
 }
 
 // ── RESPONSE HELPERS ───────────────────────────────────────────────────────────
+
 function buildCorsHeaders(request: Request): Record<string, string> {
   const origin = request.headers.get("origin") ?? "";
   return {
@@ -479,16 +474,7 @@ function errResp(
   extra: Record<string, unknown> = {}
 ): Response {
   const status = code >= 400 && code < 600 ? code : 500;
-  return jsonResp(
-    {
-      ok: false,
-      status: "error",
-      error,
-      ...extra,
-    },
-    status,
-    cors
-  );
+  return jsonResp({ ok: false, status: "error", error, ...extra }, status, cors);
 }
 
 function rateLimitResp(
@@ -503,6 +489,7 @@ function rateLimitResp(
 }
 
 // ── CRYPTO HELPERS ─────────────────────────────────────────────────────────────
+
 function timingSafeCompare(a: string, b: string): boolean {
   if (a.length !== b.length) return false;
   let result = 0;
@@ -519,17 +506,20 @@ function generateNonce(len = 32): string {
 }
 
 function bufToHex(buf: ArrayBuffer): string {
-  return Array.from(new Uint8Array(buf), (b) => b.toString(16).padStart(2, "0")).join("");
+  return Array.from(
+    new Uint8Array(buf),
+    (b) => b.toString(16).padStart(2, "0")
+  ).join("");
 }
 
-// SHA-256 hex digest via the standard Web Crypto API.
 async function sha256Hex(input: string): Promise<string> {
-  const data = new TextEncoder().encode(input);
+  const data   = new TextEncoder().encode(input);
   const digest = await crypto.subtle.digest("SHA-256", data);
   return bufToHex(digest);
 }
 
 // ── TOKEN VERIFICATION ─────────────────────────────────────────────────────────
+
 function verifyAdminToken(request: Request, queryToken?: string): boolean {
   const env = process.env.ADMIN_TOKEN ?? "";
   if (!env || env.length < MIN_ADMIN_TOKEN_LEN) return false;
@@ -545,19 +535,19 @@ function verifyAdminToken(request: Request, queryToken?: string): boolean {
   return timingSafeCompare(candidate, env);
 }
 
-// Verifies X-Nexus-Signature / X-Roblox-Signature as HMAC-SHA256 over the
-// *raw* request body. Must be called with the raw text exactly as received
-// (not a re-serialized JS object) or a correct signature would never match.
+// Verifies X-Nexus-Signature / X-Roblox-Signature as HMAC-SHA256 over the raw
+// request body. The raw body string must be passed exactly as received —
+// re-serializing a parsed JS object would break signature verification.
 async function verifyPluginHmac(request: Request, rawBody: string): Promise<boolean> {
   const secret = process.env.PLUGIN_HMAC_SECRET ?? "";
-  if (!secret || secret.length < 16) return true; // HMAC is opt-in; skip if not configured
+  if (!secret || secret.length < 16) return true; // HMAC is opt-in; skip if unconfigured
 
   const sig = (
     (request.headers.get("x-nexus-signature") ?? "") ||
     (request.headers.get("x-roblox-signature") ?? "")
   ).trim();
 
-  if (!sig) return true; // signature optional unless the deployer enforces PLUGIN_HMAC_SECRET on the client too
+  if (!sig) return true; // Signature is optional unless the deployer mandates it
 
   try {
     const key = await crypto.subtle.importKey(
@@ -567,23 +557,27 @@ async function verifyPluginHmac(request: Request, rawBody: string): Promise<bool
       false,
       ["sign"]
     );
-    const mac = await crypto.subtle.sign("HMAC", key, new TextEncoder().encode(rawBody));
+    const mac         = await crypto.subtle.sign("HMAC", key, new TextEncoder().encode(rawBody));
     const expectedHex = bufToHex(mac);
-    const provided = sig.toLowerCase().replace(/^sha256=/, "");
+    const provided    = sig.toLowerCase().replace(/^sha256=/, "");
     return timingSafeCompare(provided, expectedHex);
   } catch {
     return false;
   }
 }
 
-// Lightweight replay guard for the X-Nexus-Nonce header.
+// FIX: Nonce replay guard now only runs on POST requests. Previously it ran
+// on every request, causing "Nonce already used" errors for legitimate GET
+// polls that reused the same nonce within the 5-minute window.
+// The nonce header is optional — if absent, the check is skipped entirely.
 async function checkNonceReplay(ctx: ActionCtx, request: Request): Promise<boolean> {
   const nonce = (request.headers.get("x-nexus-nonce") ?? "").trim();
-  if (!nonce) return true; // nonce is optional unless the client opts into signing
+  if (!nonce) return true;            // Nonce is opt-in
   if (nonce.length > 128) return false;
+
   const isReplay = await ctx.runMutation(internal.store.checkAndSetDedup, {
-    hash: `nonce:${nonce}`,
-    windowMs: 5 * 60_000,
+    hash:     `nonce:${nonce}`,
+    windowMs: NONCE_TTL_MS,
   });
   return !isReplay;
 }
@@ -604,10 +598,8 @@ function getRobloxApiKey(): string | null {
 }
 
 // ── AUTHORISATION ──────────────────────────────────────────────────────────────
-// Simplified from the original: there is no more hardcoded admin-action
-// allowlist (DEFAULT_ADMIN_ACTIONS is gone). Admin gating now comes solely
-// from the optional NEXUS_ADMIN_ACTIONS env var via getAdminGatedActions().
-// Ownership + session-token verification logic is unchanged.
+// Admin gating is driven entirely by the NEXUS_ADMIN_ACTIONS env var.
+// Ownership and session-token verification are always enforced for non-admins.
 async function authorizeCommand(
   ctx: ActionCtx,
   request: Request,
@@ -642,11 +634,10 @@ async function authorizeCommand(
     username: targetUser,
   });
 
-  // No session has ever been registered for this user (plugin never
-  // connected) - there is nothing to verify against yet, so allow through.
+  // No session registered yet (plugin never connected) — allow through.
   if (!session) return { ok: true };
 
-  // A session exists for this user, so a valid token is mandatory.
+  // A session exists, so a valid token is mandatory.
   if (!candidate)
     return { ok: false, status: 401, error: "Session token required." };
 
@@ -659,16 +650,13 @@ async function authorizeCommand(
   return { ok: true };
 }
 
-function filterBatch(
-  commands: unknown[],
-  isAdmin: boolean
-): FilterResult {
+function filterBatch(commands: unknown[], isAdmin: boolean): FilterResult {
   if (isAdmin) {
     return { safe: sanArr<QueueCommand>(commands, MAX_BATCH_COMMANDS), removed: [] };
   }
   const adminGated = getAdminGatedActions();
   const safe: QueueCommand[] = [];
-  const removed: string[] = [];
+  const removed: string[]    = [];
   for (const cmd of sanArr<QueueCommand>(commands, MAX_BATCH_COMMANDS)) {
     const act = migrateActionName(String(cmd?.action ?? ""));
     if (adminGated.has(act)) removed.push(sanStr(act, 50));
@@ -678,6 +666,7 @@ function filterBatch(
 }
 
 // ── SAFE FETCH ─────────────────────────────────────────────────────────────────
+
 async function safeFetch(
   url: string,
   options: RequestInit = {},
@@ -689,8 +678,8 @@ async function safeFetch(
   for (let attempt = 0; attempt <= maxRetries; attempt++) {
     try {
       const controller = new AbortController();
-      const timer = setTimeout(() => controller.abort(), timeoutMs);
-      const resp = await fetch(url, { ...options, signal: controller.signal });
+      const timer      = setTimeout(() => controller.abort(), timeoutMs);
+      const resp       = await fetch(url, { ...options, signal: controller.signal });
       clearTimeout(timer);
 
       if (resp.status === 429 && attempt < maxRetries) {
@@ -713,6 +702,7 @@ async function safeFetch(
 }
 
 // ── ROBLOX HELPERS ─────────────────────────────────────────────────────────────
+
 function buildInsertScript(assetId: string | number, assetName: string): string {
   const safeName = sanStr(String(assetName ?? "Asset"), 80)
     .replace(/[^a-zA-Z0-9 _\-]/g, "")
@@ -740,20 +730,18 @@ async function robloxToolboxSearch(
   cursor: string | null = null
 ): Promise<ToolboxResult> {
   const cacheKey = `toolbox:${keyword}:${assetType}:${limit}:${cursor ?? ""}`;
-  const cached = await ctx.runQuery(internal.store.getCacheEntry, { key: cacheKey });
+  const cached   = await ctx.runQuery(internal.store.getCacheEntry, { key: cacheKey });
   if (cached) return JSON.parse(cached) as ToolboxResult;
 
   const apiKey = getRobloxApiKey();
   if (!apiKey)
-    throw Object.assign(new Error("ROBLOX_OPEN_CLOUD_KEY not configured."), {
-      code: 503,
-    });
+    throw Object.assign(new Error("ROBLOX_OPEN_CLOUD_KEY not configured."), { code: 503 });
 
   const safeType = VALID_TOOLBOX_TYPES.has(assetType) ? assetType : "Model";
-  const params = new URLSearchParams({
-    keyword: String(keyword).substring(0, 100),
+  const params   = new URLSearchParams({
+    keyword:   String(keyword).substring(0, 100),
     assetType: safeType,
-    limit: String(Math.min(Math.max(1, limit), 100)),
+    limit:     String(Math.min(Math.max(1, limit), 100)),
     ...(cursor ? { cursor } : {}),
   });
 
@@ -762,10 +750,10 @@ async function robloxToolboxSearch(
     resp = await safeFetch(
       `https://apis.roblox.com/toolbox-service/v2/assets:search?${params}`,
       {
-        method: "GET",
+        method:  "GET",
         headers: {
-          "x-api-key": apiKey,
-          Accept: "application/json",
+          "x-api-key":  apiKey,
+          Accept:       "application/json",
           "User-Agent": "NexusAI",
         },
       },
@@ -832,21 +820,18 @@ async function robloxToolboxSearch(
   const result: ToolboxResult = {
     assets,
     nextCursor: (data["nextPageCursor"] as string | null) ?? null,
-    total: (data["totalCount"] as number) ?? assets.length,
+    total:      (data["totalCount"] as number) ?? assets.length,
   };
 
   await ctx.runMutation(internal.store.setCacheEntry, {
-    key: cacheKey,
-    value: JSON.stringify(result),
+    key:       cacheKey,
+    value:     JSON.stringify(result),
     expiresAt: Date.now() + TTL_TOOLBOX,
   });
   return result;
 }
 
-async function validateAsset(
-  ctx: ActionCtx,
-  assetId: unknown
-): Promise<AssetResult> {
+async function validateAsset(ctx: ActionCtx, assetId: unknown): Promise<AssetResult> {
   const id = parseInt(String(assetId).replace(/\D/g, ""), 10);
   if (!id || id <= 0 || id > 99_999_999_999)
     throw Object.assign(
@@ -855,7 +840,7 @@ async function validateAsset(
     );
 
   const cacheKey = `asset:${id}`;
-  const cached = await ctx.runQuery(internal.store.getCacheEntry, { key: cacheKey });
+  const cached   = await ctx.runQuery(internal.store.getCacheEntry, { key: cacheKey });
   if (cached) return JSON.parse(cached) as AssetResult;
 
   let assetData: Record<string, unknown> | null = null;
@@ -885,48 +870,48 @@ async function validateAsset(
 
   if (!assetData) {
     const result: AssetResult = {
-      valid: true,
-      assetId: String(id),
-      name: `Asset #${id}`,
-      assetType: "Unknown",
-      creator: { name: "Unknown", type: "User", userId: "" },
-      isPublic: true,
-      unverified: true,
-      insertable: true,
+      valid:        true,
+      assetId:      String(id),
+      name:         `Asset #${id}`,
+      assetType:    "Unknown",
+      creator:      { name: "Unknown", type: "User", userId: "" },
+      isPublic:     true,
+      unverified:   true,
+      insertable:   true,
       insertScript: buildInsertScript(id, `Asset #${id}`),
     };
     await ctx.runMutation(internal.store.setCacheEntry, {
-      key: cacheKey,
-      value: JSON.stringify(result),
+      key:       cacheKey,
+      value:     JSON.stringify(result),
       expiresAt: Date.now() + TTL_ASSET / 4,
     });
     return result;
   }
 
-  const rawType  = sanStr(String(assetData["assetType"] ?? assetData["itemType"] ?? "Model"), 30);
+  const rawType   = sanStr(String(assetData["assetType"] ?? assetData["itemType"] ?? "Model"), 30);
   const assetName = sanStr(String(assetData["name"] ?? `Asset #${id}`), 120);
   const isPublic  = !(assetData["sales"] === 0 && assetData["isForSale"] === false);
   const creator   = sanObj(assetData["creator"]);
 
   const result: AssetResult = {
-    valid: true,
-    assetId: String(id),
-    name: assetName,
-    description: sanStr(String(assetData["description"] ?? ""), 250),
-    assetType: rawType,
+    valid:        true,
+    assetId:      String(id),
+    name:         assetName,
+    description:  sanStr(String(assetData["description"] ?? ""), 250),
+    assetType:    rawType,
     creator: {
-      name: sanStr(String(creator["name"] ?? "Unknown"), 80),
-      type: sanStr(String(creator["creatorType"] ?? "User"), 20),
+      name:   sanStr(String(creator["name"] ?? "Unknown"), 80),
+      type:   sanStr(String(creator["creatorType"] ?? "User"), 20),
       userId: String(creator["creatorTargetId"] ?? ""),
     },
     isPublic,
-    insertable: INSERTABLE_ASSET_TYPES.has(rawType),
+    insertable:   INSERTABLE_ASSET_TYPES.has(rawType),
     insertScript: buildInsertScript(id, assetName),
   };
 
   await ctx.runMutation(internal.store.setCacheEntry, {
-    key: cacheKey,
-    value: JSON.stringify(result),
+    key:       cacheKey,
+    value:     JSON.stringify(result),
     expiresAt: Date.now() + TTL_ASSET,
   });
   return result;
@@ -937,7 +922,7 @@ async function fetchUserInfo(ctx: ActionCtx, userId: number): Promise<UserInfo> 
   if (!id || id <= 0) throw new Error("Invalid userId.");
 
   const cacheKey = `userinfo:${id}`;
-  const cached = await ctx.runQuery(internal.store.getCacheEntry, { key: cacheKey });
+  const cached   = await ctx.runQuery(internal.store.getCacheEntry, { key: cacheKey });
   if (cached) return JSON.parse(cached) as UserInfo;
 
   const resp = await safeFetch(
@@ -948,20 +933,20 @@ async function fetchUserInfo(ctx: ActionCtx, userId: number): Promise<UserInfo> 
   );
   if (!resp.ok) throw new Error(`Roblox Users API error: HTTP ${resp.status}`);
 
-  const d = (await resp.json()) as Record<string, unknown>;
+  const d      = (await resp.json()) as Record<string, unknown>;
   const result: UserInfo = {
-    userId: id,
-    username: sanStr(String(d["name"] ?? ""), 80),
+    userId,
+    username:    sanStr(String(d["name"] ?? ""), 80),
     displayName: sanStr(String(d["displayName"] ?? d["name"] ?? ""), 80),
     description: sanStr(String(d["description"] ?? ""), 300),
-    isBanned: Boolean(d["isBanned"]),
-    created: (d["created"] as string | null) ?? null,
-    avatarUrl: `https://www.roblox.com/headshot-thumbnail/image?userId=${id}&width=150&height=150&format=png`,
+    isBanned:    Boolean(d["isBanned"]),
+    created:     (d["created"] as string | null) ?? null,
+    avatarUrl:   `https://www.roblox.com/headshot-thumbnail/image?userId=${id}&width=150&height=150&format=png`,
   };
 
   await ctx.runMutation(internal.store.setCacheEntry, {
-    key: cacheKey,
-    value: JSON.stringify(result),
+    key:       cacheKey,
+    value:     JSON.stringify(result),
     expiresAt: Date.now() + TTL_USER_INFO,
   });
   return result;
@@ -976,7 +961,7 @@ async function fetchGameInfo(
   if (!parsed || parsed <= 0) throw new Error("Invalid universeId / placeId.");
 
   const cacheKey = `gameinfo:${parsed}:${isPlaceId}`;
-  const cached = await ctx.runQuery(internal.store.getCacheEntry, { key: cacheKey });
+  const cached   = await ctx.runQuery(internal.store.getCacheEntry, { key: cacheKey });
   if (cached) return JSON.parse(cached) as GameInfo;
 
   let universeId = parsed;
@@ -989,7 +974,7 @@ async function fetchGameInfo(
         1
       );
       if (r.ok) {
-        const j = (await r.json()) as Record<string, unknown>;
+        const j    = (await r.json()) as Record<string, unknown>;
         universeId = (j["universeId"] as number) ?? parsed;
       }
     } catch (_) {}
@@ -1003,59 +988,60 @@ async function fetchGameInfo(
   );
   if (!resp.ok) throw new Error(`Roblox Games API error: HTTP ${resp.status}`);
 
-  const d = (await resp.json()) as { data?: Record<string, unknown>[] };
+  const d    = (await resp.json()) as { data?: Record<string, unknown>[] };
   const game = (d.data ?? [])[0];
   if (!game) throw new Error("Game not found.");
 
-  const gc = sanObj(game["creator"]);
+  const gc     = sanObj(game["creator"]);
   const result: GameInfo = {
     universeId,
-    placeId: (game["rootPlaceId"] as number) ?? parsed,
-    name: sanStr(String(game["name"] ?? ""), 120),
-    description: sanStr(String(game["description"] ?? ""), 500),
+    placeId:        (game["rootPlaceId"] as number) ?? parsed,
+    name:           sanStr(String(game["name"] ?? ""), 120),
+    description:    sanStr(String(game["description"] ?? ""), 500),
     creator: {
       name: sanStr(String(gc["name"] ?? ""), 80),
-      type: sanStr(String(gc["type"] ?? "User"), 20),
+      type: sanStr(String(gc["type"]  ?? "User"), 20),
     },
-    playing: (game["playing"] as number) ?? 0,
-    visits: (game["visits"] as number) ?? 0,
-    maxPlayers: (game["maxPlayers"] as number) ?? 0,
+    playing:        (game["playing"]        as number) ?? 0,
+    visits:         (game["visits"]         as number) ?? 0,
+    maxPlayers:     (game["maxPlayers"]     as number) ?? 0,
     favoritedCount: (game["favoritedCount"] as number) ?? 0,
-    genre: sanStr(String(game["genre"] ?? ""), 30),
-    thumbnailUrl: `https://www.roblox.com/asset-thumbnail/image?assetId=${game["rootPlaceId"] ?? parsed}&width=768&height=432&format=png`,
+    genre:          sanStr(String(game["genre"] ?? ""), 30),
+    thumbnailUrl:   `https://www.roblox.com/asset-thumbnail/image?assetId=${game["rootPlaceId"] ?? parsed}&width=768&height=432&format=png`,
   };
 
   await ctx.runMutation(internal.store.setCacheEntry, {
-    key: cacheKey,
-    value: JSON.stringify(result),
+    key:       cacheKey,
+    value:     JSON.stringify(result),
     expiresAt: Date.now() + TTL_GAME_INFO,
   });
   return result;
 }
 
 // ── LOCAL DOCS INDEX ───────────────────────────────────────────────────────────
+
 function getLocalDocsIndex(): DocEntry[] {
   return [
-    { title: "Instance", url: "https://create.roblox.com/docs/reference/engine/classes/Instance", snippet: "Base class. FindFirstChild, WaitForChild, Destroy, Clone.", category: "api", keywords: "instance findfirstchild waitforchild destroy clone parent classname isa" },
-    { title: "Workspace", url: "https://create.roblox.com/docs/reference/engine/classes/Workspace", snippet: "Primary 3D container. Gravity, CurrentCamera.", category: "api", keywords: "workspace gravity camera service 3d world" },
-    { title: "BasePart / Part", url: "https://create.roblox.com/docs/reference/engine/classes/BasePart", snippet: "Physical part. Size, Position, CFrame, Anchored, Material.", category: "api", keywords: "part size position cframe anchored material transparency mesh union" },
-    { title: "Script / LocalScript", url: "https://create.roblox.com/docs/reference/engine/classes/Script", snippet: "Script: server. LocalScript: client. ModuleScript: shared.", category: "api", keywords: "script localscript modulescript server client require enabled source" },
-    { title: "RemoteEvent", url: "https://create.roblox.com/docs/reference/engine/classes/RemoteEvent", snippet: "FireServer, FireClient, FireAllClients, OnServerEvent, OnClientEvent.", category: "api", keywords: "remoteevent onserverevent onclientevent fireserver fireclient" },
-    { title: "RemoteFunction", url: "https://create.roblox.com/docs/reference/engine/classes/RemoteFunction", snippet: "InvokeServer, InvokeClient, OnServerInvoke, OnClientInvoke.", category: "api", keywords: "remotefunction invokeserver invokeclient onserverinvoke" },
-    { title: "Players", url: "https://create.roblox.com/docs/reference/engine/classes/Players", snippet: "PlayerAdded, PlayerRemoving, GetPlayers, LocalPlayer.", category: "api", keywords: "players playeradded playerremoving getplayers localplayer character" },
-    { title: "DataStoreService", url: "https://create.roblox.com/docs/reference/engine/classes/DataStoreService", snippet: "GetAsync, SetAsync, UpdateAsync. Always wrap with pcall.", category: "api", keywords: "datastore getasync setasync updateasync save load persistent" },
-    { title: "TweenService", url: "https://create.roblox.com/docs/reference/engine/classes/TweenService", snippet: "Create(instance, TweenInfo, goals). Play, Pause, Cancel.", category: "api", keywords: "tweenservice tween animation tweeninfo play pause cancel easing" },
-    { title: "RunService", url: "https://create.roblox.com/docs/reference/engine/classes/RunService", snippet: "Heartbeat, RenderStepped, Stepped. IsServer, IsClient.", category: "api", keywords: "runservice heartbeat renderstepped stepped loop isserver isclient" },
-    { title: "InsertService", url: "https://create.roblox.com/docs/reference/engine/classes/InsertService", snippet: "LoadAsset(assetId). Asset must be public. Always pcall.", category: "api", keywords: "insertservice loadasset asset insert model pcall public" },
-    { title: "HttpService", url: "https://create.roblox.com/docs/reference/engine/classes/HttpService", snippet: "GetAsync, PostAsync, JSONEncode, JSONDecode.", category: "api", keywords: "httpservice getasync postasync http json encode decode api webhook" },
-    { title: "task Library", url: "https://create.roblox.com/docs/reference/engine/libraries/task", snippet: "task.wait, task.spawn, task.delay. Preferred over wait().", category: "guide", keywords: "task wait spawn delay cancel coroutine thread async timing yield" },
-    { title: "Terrain", url: "https://create.roblox.com/docs/reference/engine/classes/Terrain", snippet: "FillBlock, FillBall, FillCylinder. ReplaceMaterial.", category: "api", keywords: "terrain fillblock fillball fillcylinder material grass water rock" },
-    { title: "PathfindingService", url: "https://create.roblox.com/docs/reference/engine/classes/PathfindingService", snippet: "CreatePath, ComputeAsync, GetWaypoints.", category: "api", keywords: "pathfinding npc navigation ai moveto waypoints compute agent" },
-    { title: "UserInputService", url: "https://create.roblox.com/docs/reference/engine/classes/UserInputService", snippet: "InputBegan, InputEnded, GetKeysPressed, TouchTap.", category: "api", keywords: "input keyboard mouse touch gamepad keybind userinputservice" },
-    { title: "SoundService", url: "https://create.roblox.com/docs/reference/engine/classes/SoundService", snippet: "PlayLocalSound, SetListener, GlobalSounds.", category: "api", keywords: "sound audio music sfx soundservice play volume" },
-    { title: "CollectionService", url: "https://create.roblox.com/docs/reference/engine/classes/CollectionService", snippet: "AddTag, RemoveTag, GetTagged, HasTag.", category: "api", keywords: "tag collection gettagged addtag removetag hastag collectionservice" },
-    { title: "ContextActionService", url: "https://create.roblox.com/docs/reference/engine/classes/ContextActionService", snippet: "BindAction, UnbindAction. Mobile buttons, keyboard.", category: "api", keywords: "bind action mobile button contextactionservice keyboard" },
-    { title: "Lighting", url: "https://create.roblox.com/docs/reference/engine/classes/Lighting", snippet: "Ambient, Brightness, TimeOfDay, FogEnd.", category: "api", keywords: "lighting ambient brightness fog timeofday atmosphere" },
+    { title: "Instance",           url: "https://create.roblox.com/docs/reference/engine/classes/Instance",           snippet: "Base class. FindFirstChild, WaitForChild, Destroy, Clone.",                   category: "api",   keywords: "instance findfirstchild waitforchild destroy clone parent classname isa" },
+    { title: "Workspace",          url: "https://create.roblox.com/docs/reference/engine/classes/Workspace",          snippet: "Primary 3D container. Gravity, CurrentCamera.",                               category: "api",   keywords: "workspace gravity camera service 3d world" },
+    { title: "BasePart / Part",    url: "https://create.roblox.com/docs/reference/engine/classes/BasePart",           snippet: "Physical part. Size, Position, CFrame, Anchored, Material.",                 category: "api",   keywords: "part size position cframe anchored material transparency mesh union" },
+    { title: "Script / LocalScript", url: "https://create.roblox.com/docs/reference/engine/classes/Script",           snippet: "Script: server. LocalScript: client. ModuleScript: shared.",                 category: "api",   keywords: "script localscript modulescript server client require enabled source" },
+    { title: "RemoteEvent",        url: "https://create.roblox.com/docs/reference/engine/classes/RemoteEvent",        snippet: "FireServer, FireClient, FireAllClients, OnServerEvent, OnClientEvent.",       category: "api",   keywords: "remoteevent onserverevent onclientevent fireserver fireclient" },
+    { title: "RemoteFunction",     url: "https://create.roblox.com/docs/reference/engine/classes/RemoteFunction",     snippet: "InvokeServer, InvokeClient, OnServerInvoke, OnClientInvoke.",                category: "api",   keywords: "remotefunction invokeserver invokeclient onserverinvoke" },
+    { title: "Players",            url: "https://create.roblox.com/docs/reference/engine/classes/Players",            snippet: "PlayerAdded, PlayerRemoving, GetPlayers, LocalPlayer.",                      category: "api",   keywords: "players playeradded playerremoving getplayers localplayer character" },
+    { title: "DataStoreService",   url: "https://create.roblox.com/docs/reference/engine/classes/DataStoreService",   snippet: "GetAsync, SetAsync, UpdateAsync. Always wrap with pcall.",                   category: "api",   keywords: "datastore getasync setasync updateasync save load persistent" },
+    { title: "TweenService",       url: "https://create.roblox.com/docs/reference/engine/classes/TweenService",       snippet: "Create(instance, TweenInfo, goals). Play, Pause, Cancel.",                  category: "api",   keywords: "tweenservice tween animation tweeninfo play pause cancel easing" },
+    { title: "RunService",         url: "https://create.roblox.com/docs/reference/engine/classes/RunService",         snippet: "Heartbeat, RenderStepped, Stepped. IsServer, IsClient.",                    category: "api",   keywords: "runservice heartbeat renderstepped stepped loop isserver isclient" },
+    { title: "InsertService",      url: "https://create.roblox.com/docs/reference/engine/classes/InsertService",      snippet: "LoadAsset(assetId). Asset must be public. Always pcall.",                   category: "api",   keywords: "insertservice loadasset asset insert model pcall public" },
+    { title: "HttpService",        url: "https://create.roblox.com/docs/reference/engine/classes/HttpService",        snippet: "GetAsync, PostAsync, JSONEncode, JSONDecode.",                               category: "api",   keywords: "httpservice getasync postasync http json encode decode api webhook" },
+    { title: "task Library",       url: "https://create.roblox.com/docs/reference/engine/libraries/task",             snippet: "task.wait, task.spawn, task.delay. Preferred over wait().",                  category: "guide", keywords: "task wait spawn delay cancel coroutine thread async timing yield" },
+    { title: "Terrain",            url: "https://create.roblox.com/docs/reference/engine/classes/Terrain",            snippet: "FillBlock, FillBall, FillCylinder. ReplaceMaterial.",                       category: "api",   keywords: "terrain fillblock fillball fillcylinder material grass water rock" },
+    { title: "PathfindingService", url: "https://create.roblox.com/docs/reference/engine/classes/PathfindingService", snippet: "CreatePath, ComputeAsync, GetWaypoints.",                                   category: "api",   keywords: "pathfinding npc navigation ai moveto waypoints compute agent" },
+    { title: "UserInputService",   url: "https://create.roblox.com/docs/reference/engine/classes/UserInputService",   snippet: "InputBegan, InputEnded, GetKeysPressed, TouchTap.",                         category: "api",   keywords: "input keyboard mouse touch gamepad keybind userinputservice" },
+    { title: "SoundService",       url: "https://create.roblox.com/docs/reference/engine/classes/SoundService",       snippet: "PlayLocalSound, SetListener, GlobalSounds.",                                category: "api",   keywords: "sound audio music sfx soundservice play volume" },
+    { title: "CollectionService",  url: "https://create.roblox.com/docs/reference/engine/classes/CollectionService",  snippet: "AddTag, RemoveTag, GetTagged, HasTag.",                                     category: "api",   keywords: "tag collection gettagged addtag removetag hastag collectionservice" },
+    { title: "ContextActionService", url: "https://create.roblox.com/docs/reference/engine/classes/ContextActionService", snippet: "BindAction, UnbindAction. Mobile buttons, keyboard.",                   category: "api",   keywords: "bind action mobile button contextactionservice keyboard" },
+    { title: "Lighting",           url: "https://create.roblox.com/docs/reference/engine/classes/Lighting",           snippet: "Ambient, Brightness, TimeOfDay, FogEnd.",                                   category: "api",   keywords: "lighting ambient brightness fog timeofday atmosphere" },
   ];
 }
 
@@ -1070,24 +1056,20 @@ async function searchDocs(
   if (!q) throw new Error("Query cannot be empty.");
 
   const cacheKey = `docs:${q}:${docType}:${limit}`;
-  const cached = await ctx.runQuery(internal.store.getCacheEntry, { key: cacheKey });
+  const cached   = await ctx.runQuery(internal.store.getCacheEntry, { key: cacheKey });
   if (cached) return JSON.parse(cached) as DocsResult;
 
+  // Try the live Roblox Creator Docs search API first
   try {
     const params = new URLSearchParams({
-      query: q,
-      type: docType === "all" ? "" : docType,
-      limit: String(maxRes),
+      query:  q,
+      type:   docType === "all" ? "" : docType,
+      limit:  String(maxRes),
       locale: "en-us",
     });
     const resp = await safeFetch(
       `https://create.roblox.com/api/search/docs?${params}`,
-      {
-        headers: {
-          Accept: "application/json",
-          "User-Agent": "NexusAI",
-        },
-      },
+      { headers: { Accept: "application/json", "User-Agent": "NexusAI" } },
       8_000,
       1
     );
@@ -1097,17 +1079,17 @@ async function searchDocs(
       if (raw.length > 0) {
         const result: DocsResult = {
           results: raw.slice(0, maxRes).map((r) => ({
-            title:    sanStr(String(r["title"] ?? r["name"] ?? "No Title"), 120),
-            url:      sanStr(String(r["url"] ?? r["path"] ?? ""), 300),
-            snippet:  sanStr(String(r["snippet"] ?? r["excerpt"] ?? r["description"] ?? ""), 300),
-            category: sanStr(String(r["category"] ?? r["type"] ?? "docs"), 50),
+            title:    sanStr(String(r["title"]    ?? r["name"]        ?? "No Title"), 120),
+            url:      sanStr(String(r["url"]      ?? r["path"]        ?? ""), 300),
+            snippet:  sanStr(String(r["snippet"]  ?? r["excerpt"]     ?? r["description"] ?? ""), 300),
+            category: sanStr(String(r["category"] ?? r["type"]        ?? "docs"), 50),
           })),
           source: "roblox_creator_docs",
-          query: q,
+          query:  q,
         };
         await ctx.runMutation(internal.store.setCacheEntry, {
-          key: cacheKey,
-          value: JSON.stringify(result),
+          key:       cacheKey,
+          value:     JSON.stringify(result),
           expiresAt: Date.now() + 10 * 60_000,
         });
         return result;
@@ -1115,6 +1097,7 @@ async function searchDocs(
     }
   } catch (_) {}
 
+  // Fall back to the bundled local index
   const index  = getLocalDocsIndex();
   const tokens = q.toLowerCase().split(/\s+/).filter(Boolean);
   const scored = index
@@ -1122,9 +1105,9 @@ async function searchDocs(
       let score = 0;
       const hay = `${entry.title} ${entry.keywords}`.toLowerCase();
       for (const t of tokens) {
-        if (hay.includes(t))                           score += t.length;
-        if (entry.title.toLowerCase().startsWith(t))   score += 10;
-        if (entry.title.toLowerCase() === t)           score += 20;
+        if (hay.includes(t))                          score += t.length;
+        if (entry.title.toLowerCase().startsWith(t)) score += 10;
+        if (entry.title.toLowerCase() === t)         score += 20;
       }
       return { ...entry, score };
     })
@@ -1134,33 +1117,32 @@ async function searchDocs(
 
   if (scored.length === 0) {
     return {
-      results: [
-        {
-          title:    "Roblox Creator Documentation",
-          url:      "https://create.roblox.com/docs",
-          snippet:  `No local results found for "${q}". Try the full docs site.`,
-          category: "fallback",
-        },
-      ],
+      results: [{
+        title:    "Roblox Creator Documentation",
+        url:      "https://create.roblox.com/docs",
+        snippet:  `No local results found for "${q}". Try the full docs site.`,
+        category: "fallback",
+      }],
       source: "local_fallback",
-      query: q,
+      query:  q,
     };
   }
 
   const result: DocsResult = {
     results: scored.map(({ score: _s, keywords: _k, ...rest }) => rest),
-    source: "local_index",
-    query: q,
+    source:  "local_index",
+    query:   q,
   };
   await ctx.runMutation(internal.store.setCacheEntry, {
-    key: cacheKey,
-    value: JSON.stringify(result),
+    key:       cacheKey,
+    value:     JSON.stringify(result),
     expiresAt: Date.now() + 60 * 60_000,
   });
   return result;
 }
 
 // ── DATA STORE HELPERS ─────────────────────────────────────────────────────────
+
 async function saveData(
   ctx: ActionCtx,
   username: string,
@@ -1196,12 +1178,9 @@ async function dispatchWebhook(
     await safeFetch(
       wh.url,
       {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          "User-Agent": "NexusAI",
-        },
-        body: JSON.stringify({ event, user: u, data, ts: Date.now() }),
+        method:  "POST",
+        headers: { "Content-Type": "application/json", "User-Agent": "NexusAI" },
+        body:    JSON.stringify({ event, user: u, data, ts: Date.now() }),
       },
       5_000,
       0
@@ -1209,25 +1188,14 @@ async function dispatchWebhook(
   } catch (_) {}
 }
 
-// ── AI FEED (durable, ordered "messages to the AI") ─────────────────────────────
-// This is the mechanism that makes read_script / output_log / and other
-// plugin → server reports behave like messages sent to the AI rather than
-// just overwritten snapshots:
+// ── AI FEED ────────────────────────────────────────────────────────────────────
+// Durable, ordered outbox of messages the AI can pull at any time.
 //
-//   1. Every report-type action (read_script, output_log, workspace_scan,
-//      etc.) still saves its latest snapshot via saveData() as before, AND
-//      ALSO appends a small AiFeedEntry to a per-user, time-ordered feed
-//      table in Convex (internal.store.pushAiFeedEntry).
-//   2. The AI (in any chat/session, via the API or an MCP tool that calls
-//      this same Convex endpoint) can call GET ?ai_feed=1&user=... at any
-//      time to retrieve every entry that hasn't been read yet, oldest
-//      first, and those entries are atomically marked read so the next
-//      fetch doesn't repeat them. This is the standard "outbox" pattern
-//      for bridging a system that cannot push into a chat with a consumer
-//      that pulls on its own schedule.
-//   3. Nothing is ever lost: even if the AI never asks, the snapshot saved
-//      via saveData() is still retrievable through the existing
-//      get_script / get_output endpoints. The feed is additive.
+// Every plugin report (read_script, output_log, runcode_report, etc.) also
+// appends a small AiFeedEntry here. The AI polls GET ?ai_feed=1&user=... to
+// consume unread entries oldest-first; entries are marked read atomically on
+// retrieval so nothing is delivered twice. The snapshot written via saveData()
+// is always preserved, so the AI can still query the latest state directly.
 async function pushAiFeed(
   ctx: ActionCtx,
   username: string,
@@ -1239,12 +1207,13 @@ async function pushAiFeed(
     username,
     kind,
     summary: sanStr(summary, 300),
-    data: JSON.stringify(data ?? {}),
-    ts: Date.now(),
+    data:    JSON.stringify(data ?? {}),
+    ts:      Date.now(),
   });
 }
 
 // ── PROJECT ────────────────────────────────────────────────────────────────────
+
 async function getProject(ctx: ActionCtx, u: string): Promise<ProjectData> {
   const d = await loadData(ctx, u, "project");
   return d
@@ -1266,6 +1235,7 @@ async function saveProject(
 }
 
 // ── SESSION HELPERS ────────────────────────────────────────────────────────────
+
 async function setSessionDb(
   ctx: ActionCtx,
   username: string,
@@ -1287,15 +1257,13 @@ async function setSessionDb(
   });
   await ctx.runMutation(internal.store.pushSessionAudit, {
     username: u,
-    event: "connect",
-    data: JSON.stringify({ placeId, userId }),
+    event:    "connect",
+    data:     JSON.stringify({ placeId, userId }),
   });
 }
 
 async function getSessionStats(ctx: ActionCtx, username: string) {
-  const s = await ctx.runQuery(internal.store.getSession, {
-    username: san(username),
-  });
+  const s = await ctx.runQuery(internal.store.getSession, { username: san(username) });
   if (!s) return null;
   return {
     hasSession:  true,
@@ -1309,9 +1277,7 @@ async function getSessionStats(ctx: ActionCtx, username: string) {
 }
 
 // ── QUEUE ──────────────────────────────────────────────────────────────────────
-// NOTE: command deduplication (DEDUP_ACTIONS / hashForDedup / isDuplicateCommand)
-// has been removed entirely. Every pushQueue() call now always enqueues the
-// command — there is no silent drop based on a short-lived hash window.
+
 async function pushQueue(
   ctx: ActionCtx,
   u: string,
@@ -1320,16 +1286,17 @@ async function pushQueue(
 ): Promise<boolean> {
   const isPriority = priority === "critical" || priority === "high";
   await ctx.runMutation(internal.store.pushQueueItem, {
-    username:   u,
-    payload:    JSON.stringify({ ...cmd, _priority: priority, _ts: Date.now() }),
+    username:    u,
+    payload:     JSON.stringify({ ...cmd, _priority: priority, _ts: Date.now() }),
     priority,
-    ts:         Date.now(),
+    ts:          Date.now(),
     isPriority,
   });
   return true;
 }
 
 // ── MAIN HTTP ACTION ───────────────────────────────────────────────────────────
+
 export const controlHandler = httpAction(async (ctx, request) => {
   try {
     const cors = buildCorsHeaders(request);
@@ -1341,8 +1308,8 @@ export const controlHandler = httpAction(async (ctx, request) => {
     console.error("[NEXUS Convex]", (err as Error)?.message ?? err);
     return new Response(
       JSON.stringify({
-        ok: false,
-        error: "Internal server error.",
+        ok:      false,
+        error:   "Internal server error.",
         message: sanStr(String((err as Error)?.message ?? ""), 200),
       }),
       { status: 500, headers: { "Content-Type": "application/json" } }
@@ -1351,6 +1318,8 @@ export const controlHandler = httpAction(async (ctx, request) => {
 });
 
 // ── GET HANDLER ────────────────────────────────────────────────────────────────
+// NOTE: Nonce replay checking does NOT run for GET requests. GET polls are
+// read-only and may be repeated many times with the same nonce by the plugin.
 async function handleGet(
   ctx: ActionCtx,
   request: Request,
@@ -1359,17 +1328,21 @@ async function handleGet(
   const url = new URL(request.url);
   const q   = Object.fromEntries(url.searchParams.entries()) as Record<string, string>;
 
-  // Ping (no params)
+  // ── Ping (no params) ────────────────────────────────────────────────────────
   if (Object.keys(q).length === 0)
-    return jsonResp({ ok: true, status: "ok", required_plugin_version: REQUIRED_PLUGIN_VERSION }, 200, cors);
+    return jsonResp(
+      { ok: true, status: "ok", required_plugin_version: REQUIRED_PLUGIN_VERSION },
+      200,
+      cors
+    );
 
-  // Health check
+  // ── Health check ────────────────────────────────────────────────────────────
   if (q["health"] === "1") {
     const rawStats = await ctx.runQuery(internal.store.getGlobalStats, {});
     const s        = rawStats
       ? (JSON.parse(rawStats) as { totalCommands: number; totalUsers: number; startedAt: number })
       : { totalCommands: 0, totalUsers: 0, startedAt: Date.now() };
-    const upMs = Date.now() - (s.startedAt ?? Date.now());
+    const upMs           = Date.now() - (s.startedAt ?? Date.now());
     const activeSessions = await ctx.runQuery(internal.store.countActiveSessions, {});
     return jsonResp(
       {
@@ -1388,7 +1361,7 @@ async function handleGet(
     );
   }
 
-  // User info lookup
+  // ── User info lookup ────────────────────────────────────────────────────────
   if (q["userinfo"] === "1") {
     const uid = parseInt(String(q["userId"] ?? "0"), 10);
     if (!uid || uid <= 0 || uid > 9_999_999_999)
@@ -1401,7 +1374,7 @@ async function handleGet(
     }
   }
 
-  // Game info lookup
+  // ── Game info lookup ────────────────────────────────────────────────────────
   if (q["gameinfo"] === "1") {
     const id = parseInt(String(q["id"] ?? "0"), 10);
     if (!id) return errResp(cors, 400, 'Parameter "id" is required.');
@@ -1413,17 +1386,17 @@ async function handleGet(
     }
   }
 
-  // Connection / status check
+  // ── Connection / status check ────────────────────────────────────────────────
   if (q["check"] != null) {
     const u        = san(q["user"] ?? "");
     const rawStats = await ctx.runQuery(internal.store.getGlobalStats, {});
     const s        = rawStats
       ? (JSON.parse(rawStats) as { totalCommands: number; totalUsers: number })
       : { totalCommands: 0, totalUsers: 0 };
-    const sess        = await ctx.runQuery(internal.store.getSession, { username: u });
-    const qCount      = await ctx.runQuery(internal.store.countQueueItems, { username: u });
-    const lastPollTs  = await ctx.runQuery(internal.store.getLastPoll, { username: u });
-    const online      = Date.now() - lastPollTs < 8_000;
+    const sess       = await ctx.runQuery(internal.store.getSession,    { username: u });
+    const qCount     = await ctx.runQuery(internal.store.countQueueItems, { username: u });
+    const lastPollTs = await ctx.runQuery(internal.store.getLastPoll,   { username: u });
+    const online     = Date.now() - lastPollTs < 8_000;
     return jsonResp(
       {
         ok:                      true,
@@ -1448,7 +1421,7 @@ async function handleGet(
     );
   }
 
-  // Admin: clear cache
+  // ── Admin: clear cache ───────────────────────────────────────────────────────
   if (q["clear_cache"] != null) {
     if (!verifyAdminToken(request, q["token"]))
       return errResp(cors, 401, "Admin token required.");
@@ -1461,19 +1434,17 @@ async function handleGet(
 
   const u = san(q["user"] ?? "");
 
-  // ── AI FEED: the durable inbox of "messages to the AI" ───────────────────────
-  // GET ?ai_feed=1&user=<username>            → unread entries (oldest first),
-  //                                               marked read once returned.
-  // GET ?ai_feed=1&user=<username>&peek=1     → same, but does NOT mark read.
-  // GET ?ai_feed=1&user=<username>&all=1      → entire feed history (read + unread),
-  //                                               for catching up / debugging.
+  // ── AI Feed ──────────────────────────────────────────────────────────────────
+  // GET ?ai_feed=1&user=<username>          → unread entries (consumed, oldest first)
+  // GET ?ai_feed=1&user=<username>&peek=1   → unread entries (NOT consumed)
+  // GET ?ai_feed=1&user=<username>&all=1    → full history (read + unread)
   if (q["ai_feed"] != null) {
     if (!u) return errResp(cors, 400, '"user" parameter is required.');
     const limit = sanInt(q["limit"], AI_FEED_DEFAULT_LIMIT, 1, MAX_AI_FEED_ENTRIES);
 
     if (q["all"] === "1") {
       const entries = await ctx.runQuery(internal.store.getAiFeedEntries, {
-        username: u,
+        username:   u,
         limit,
         unreadOnly: false,
       });
@@ -1481,7 +1452,7 @@ async function handleGet(
     }
 
     const entries = await ctx.runQuery(internal.store.getAiFeedEntries, {
-      username: u,
+      username:   u,
       limit,
       unreadOnly: true,
     });
@@ -1489,7 +1460,7 @@ async function handleGet(
     if (q["peek"] !== "1" && entries.length > 0) {
       await ctx.runMutation(internal.store.markAiFeedRead, {
         username: u,
-        ids: entries.map((e: AiFeedEntry) => e.id),
+        ids:      entries.map((e: AiFeedEntry) => e.id),
       });
     }
 
@@ -1506,89 +1477,116 @@ async function handleGet(
     );
   }
 
-  // Webhook info
+  // ── Webhook info ─────────────────────────────────────────────────────────────
   if (q["get_webhook"] != null) {
     const wh = await ctx.runQuery(internal.store.getWebhook, { username: u });
     return jsonResp({ ok: true, webhook: wh, user: u }, 200, cors);
   }
 
-  // Project info
+  // ── Project info ─────────────────────────────────────────────────────────────
   if (q["get_project"] != null)
     return jsonResp({ ok: true, ...(await getProject(ctx, u)) }, 200, cors);
 
-  // Output report (renamed from "get_output", which now refers to the live
-  // Studio output log captured via the output_log action — see below)
+  // ── Output report snapshot ───────────────────────────────────────────────────
   if (q["get_output_data"] != null) {
     const d = await loadData(ctx, u, "output_report");
     return jsonResp({ ok: true, ...(d ?? { outputs: [] }) }, 200, cors);
   }
 
-  // Studio Output log (captured by the plugin's get_output action, reported
-  // to the server as "output_log")
+  // ── Studio Output log ────────────────────────────────────────────────────────
   if (q["get_output"] != null) {
-    const raw  = await ctx.runQuery(internal.store.getData, { username: u, key: "output_log" });
-    let logs   = raw ? (JSON.parse(raw) as Record<string, unknown>[]) : [];
+    const raw   = await ctx.runQuery(internal.store.getData, { username: u, key: "output_log" });
+    let logs    = raw ? (JSON.parse(raw) as Record<string, unknown>[]) : [];
     const since = sanInt(q["since"], 0, 0, Number.MAX_SAFE_INTEGER);
     if (since) logs = logs.filter((l) => ((l["ts"] as number) ?? 0) > since);
     if (q["level"]) logs = logs.filter((l) => l["level"] === q["level"] || l["type"] === q["level"]);
     return jsonResp({ ok: true, logs, count: logs.length }, 200, cors);
   }
 
-  // Generic data getters
+  // ── Generic data getters ──────────────────────────────────────────────────────
+  // FIX: ?get_workspace now returns an empty-but-valid response instead of 404
+  // when no workspace scan has been stored yet. This prevents the repeated red
+  // errors seen in devtools when the AI polls before the plugin has run a scan.
   const dataGetterKeys: Record<string, string> = {
-    get_workspace:        "workspace_scan",
-    get_script:           "read_script",
-    get_script_list:      "script_list_report",
-    get_script_lines:     "script_lines_report",
-    get_search:           "toolbox_search_report",
-    get_workspace_scan:   "workspace_scan",
-    get_descendants:      "descendants_report",
-    get_properties:       "properties_report",
-    get_action_list:      "action_list_report",
-    get_asset_lib:        "asset_library_report",
-    get_asset_id:         "asset_id_report",
-    get_asset_folder:     "asset_folder_report",
-    get_module_list:      "module_list_report",
-    get_module_deploy:    "module_deploy_report",
-    get_terrain:          "terrain_materials_report",
-    get_runcode_result:   "runcode_report",
-    get_expr_result:      "expression_report",
-    get_query_result:     "query_report",
+    get_workspace:       "workspace_scan",
+    get_script:          "read_script",
+    get_script_list:     "script_list_report",
+    get_script_lines:    "script_lines_report",
+    get_search:          "toolbox_search_report",
+    get_workspace_scan:  "workspace_scan",
+    get_descendants:     "descendants_report",
+    get_properties:      "properties_report",
+    get_action_list:     "action_list_report",
+    get_asset_lib:       "asset_library_report",
+    get_asset_id:        "asset_id_report",
+    get_asset_folder:    "asset_folder_report",
+    get_module_list:     "module_list_report",
+    get_module_deploy:   "module_deploy_report",
+    get_terrain:         "terrain_materials_report",
+    get_runcode_result:  "runcode_report",
+    get_expr_result:     "expression_report",
+    get_query_result:    "query_report",
+  };
+
+  // Empty-result defaults returned when no data has been stored yet.
+  // Avoids noisy 404s on early polls before the plugin has run any commands.
+  const emptyDefaults: Record<string, Record<string, unknown>> = {
+    workspace_scan:         { data: {}, ts: 0, user: u },
+    read_script:            { name: "", source: "", lineCount: 0, class: "Script" },
+    script_list_report:     { scripts: [], count: 0, total: 0, breakdown: {} },
+    script_lines_report:    { content: "", lineStart: 0, lineEnd: 0, total: 0 },
+    toolbox_search_report:  { results: [], count: 0, query: "" },
+    descendants_report:     { descendants: [], count: 0, target: "" },
+    properties_report:      { properties: {}, name: "" },
+    action_list_report:     { actions: [], count: 0 },
+    asset_library_report:   { data: {}, category: "all" },
+    asset_id_report:        { id: "", name: "", category: "" },
+    asset_folder_report:    { contents: {}, folder: "all" },
+    module_list_report:     { modules: [], count: 0 },
+    module_deploy_report:   { name: "", parent: "", source: "" },
+    terrain_materials_report: { materials: [], count: 0 },
+    runcode_report:         { success: false, output: null, log: [], mode: "pipeline" },
+    expression_report:      { expression: "", result: null },
+    query_report:           { results: [], count: 0 },
   };
 
   for (const [param, key] of Object.entries(dataGetterKeys)) {
     if (q[param] != null) {
       const d = await loadData(ctx, u, key);
-      if (!d) return errResp(cors, 404, `No data available for "${param}".`);
-      return jsonResp({ ok: true, ...d }, 200, cors);
+      // Return the stored snapshot if available, otherwise an empty-but-valid default.
+      return jsonResp(
+        { ok: true, ...(d ?? emptyDefaults[key] ?? {}) },
+        200,
+        cors
+      );
     }
   }
 
-  // Plugin errors
+  // ── Plugin errors ────────────────────────────────────────────────────────────
   if (q["get_plugin_errors"] != null) {
     const raw    = await ctx.runQuery(internal.store.getData, { username: u, key: "plugin_error_report" });
     const errors = raw ? (JSON.parse(raw) as unknown[]) : [];
     return jsonResp({ ok: true, errors, count: errors.length }, 200, cors);
   }
 
-  // Mentions
+  // ── Mentions ─────────────────────────────────────────────────────────────────
   if (q["get_mentions"] != null) {
     const raw      = await ctx.runQuery(internal.store.getData, { username: u, key: "mentions" });
     const mentions = raw ? (JSON.parse(raw) as unknown[]) : [];
     return jsonResp({ ok: true, mentions, count: mentions.length }, 200, cors);
   }
 
-  // Command history (per user)
+  // ── Command history (per user) ───────────────────────────────────────────────
   if (q["get_cmd_history"] != null) {
     const limit   = sanInt(q["limit"], 50, 1, MAX_USER_HIST);
     const history = await ctx.runQuery(internal.store.getUserHistory, { username: u, limit });
     return jsonResp({ ok: true, history, user: u }, 200, cors);
   }
 
-  // Queue stats
+  // ── Queue stats ──────────────────────────────────────────────────────────────
   if (q["queue_stats"] != null) {
     const qc         = await ctx.runQuery(internal.store.countQueueItems, { username: u });
-    const lastPollTs = await ctx.runQuery(internal.store.getLastPoll, { username: u });
+    const lastPollTs = await ctx.runQuery(internal.store.getLastPoll,     { username: u });
     return jsonResp(
       {
         ok:            true,
@@ -1604,7 +1602,7 @@ async function handleGet(
     );
   }
 
-  // Admin: raw logs
+  // ── Admin: raw logs ──────────────────────────────────────────────────────────
   if (q["get_logs"] != null) {
     if (!verifyAdminToken(request, q["token"]))
       return errResp(cors, 401, "Admin token required.");
@@ -1616,7 +1614,7 @@ async function handleGet(
     return jsonResp({ ok: true, logs, count: logs.length }, 200, cors);
   }
 
-  // Admin: history
+  // ── Admin: history ───────────────────────────────────────────────────────────
   if (q["get_history"] != null) {
     if (!verifyAdminToken(request, q["token"]))
       return errResp(cors, 401, "Admin token required.");
@@ -1625,11 +1623,16 @@ async function handleGet(
     return jsonResp({ ok: true, history, count: history.length }, 200, cors);
   }
 
-  // Admin: global stats
+  // ── Admin: global stats ──────────────────────────────────────────────────────
   if (q["get_stats"] != null) {
-    const rawStats       = await ctx.runQuery(internal.store.getGlobalStats, {});
-    const s              = rawStats
-      ? (JSON.parse(rawStats) as { totalCommands: number; totalUsers: number; startedAt: number; popularActions: Record<string, number> })
+    const rawStats = await ctx.runQuery(internal.store.getGlobalStats, {});
+    const s        = rawStats
+      ? (JSON.parse(rawStats) as {
+          totalCommands: number;
+          totalUsers:    number;
+          startedAt:     number;
+          popularActions: Record<string, number>;
+        })
       : { totalCommands: 0, totalUsers: 0, startedAt: Date.now(), popularActions: {} };
     const activeSessions = await ctx.runQuery(internal.store.countActiveSessions, {});
     return jsonResp(
@@ -1653,7 +1656,7 @@ async function handleGet(
     );
   }
 
-  // Admin: clear queue
+  // ── Admin: clear queue ───────────────────────────────────────────────────────
   if (q["clear_queue"] != null) {
     if (!verifyAdminToken(request, q["token"]))
       return errResp(cors, 401, "Admin token required.");
@@ -1712,11 +1715,11 @@ async function handlePost(
     body = (robustJsonParse(rawBody) as Record<string, unknown>) ?? {};
   }
 
-  const ip = getClientIp(request);
+  const ip          = getClientIp(request);
   const hasIdentity = !!(body["_user"] ?? body["user"]);
-  const ratUser = hasIdentity ? san(body["_user"] ?? body["user"]) : `ip_${ip || "unknown"}`;
+  const ratUser     = hasIdentity ? san(body["_user"] ?? body["user"]) : `ip_${ip || "unknown"}`;
 
-  // Rate limiting
+  // ── Rate limiting ────────────────────────────────────────────────────────────
   const okIp = await ctx.runMutation(internal.store.checkAndIncrRateLimit, {
     key: ip, kind: "ip", max: RATE_IP_PER_MIN, windowMs: 60_000,
   });
@@ -1732,7 +1735,7 @@ async function handlePost(
   });
   if (!okBurst) return rateLimitResp(cors, 5);
 
-  // HMAC + replay verification
+  // ── HMAC + nonce replay verification (POST only) ─────────────────────────────
   if (!(await verifyPluginHmac(request, rawBody)))
     return errResp(cors, 401, "Invalid HMAC signature.", { hint: "Check PLUGIN_HMAC_SECRET." });
 
@@ -1742,7 +1745,7 @@ async function handlePost(
   const rawAction    = migrateActionName(sanStr(String(body["action"] ?? body["type"] ?? ""), 80));
   const resolvedUser = san(body["_user"] ?? "");
 
-  // ── Plugin connect / disconnect ──────────────────────────────────────────────
+  // ── Plugin connect ───────────────────────────────────────────────────────────
   if (rawAction === "plugin_connect") {
     const token   = sanStr(String(body["token"] ?? body["session_token"] ?? ""), SESSION_TOKEN_MAX).trim();
     const placeId = body["place_id"] ? sanStr(String(body["place_id"]), 30) : null;
@@ -1750,8 +1753,8 @@ async function handlePost(
     if (token.length >= 16) await setSessionDb(ctx, resolvedUser, token, placeId, userId);
     await ctx.runMutation(internal.store.bumpPoll, { username: resolvedUser });
     await ctx.runMutation(internal.store.pushLog, {
-      action: "plugin_connect",
-      user:   resolvedUser,
+      action:  "plugin_connect",
+      user:    resolvedUser,
       details: JSON.stringify({ placeId, userId }),
     });
     const proj = await getProject(ctx, resolvedUser);
@@ -1769,19 +1772,16 @@ async function handlePost(
     );
   }
 
+  // ── Plugin disconnect ────────────────────────────────────────────────────────
   if (rawAction === "plugin_disconnect") {
-    const sess = await ctx.runQuery(internal.store.getSession, {
-      username: san(resolvedUser),
-    });
+    const sess = await ctx.runQuery(internal.store.getSession, { username: san(resolvedUser) });
     if (sess) {
       await ctx.runMutation(internal.store.pushSessionAudit, {
         username: san(resolvedUser),
-        event: "disconnect",
-        data: "{}",
+        event:    "disconnect",
+        data:     "{}",
       });
-      await ctx.runMutation(internal.store.deleteSession, {
-        username: san(resolvedUser),
-      });
+      await ctx.runMutation(internal.store.deleteSession, { username: san(resolvedUser) });
     }
     await ctx.runMutation(internal.store.pushLog, {
       action: "plugin_disconnect",
@@ -1790,16 +1790,15 @@ async function handlePost(
     return jsonResp({ ok: true, status: "ok" }, 200, cors);
   }
 
-  // ── read_script: plugin reports a script's source. This is forwarded to
-  //    the AI feed as a real message, not just an overwritten snapshot. ─────────
+  // ── read_script: plugin reports a script's source ───────────────────────────
   if (rawAction === "read_script") {
-    const name      = sanStr(body["name"]        ?? "", 100);
+    const name       = sanStr(body["name"] ?? "", 100);
     const reportData = {
       name,
-      parent:    sanStr(body["parentName"]  ?? body["parent"] ?? "", 100),
-      fullPath:  sanStr(body["fullPath"]    ?? "", 200),
-      class:     sanStr(body["class"]       ?? body["scriptType"] ?? "Script", 30),
-      source:    sanStrSafe(body["source"]  ?? ""),
+      parent:    sanStr(body["parentName"] ?? body["parent"] ?? "", 100),
+      fullPath:  sanStr(body["fullPath"]   ?? "", 200),
+      class:     sanStr(body["class"]      ?? body["scriptType"] ?? "Script", 30),
+      source:    sanStrSafe(body["source"] ?? ""),
       lineCount: sanInt(body["lineCount"], 0, 0, 99_999),
       disabled:  !!body["disabled"],
       updatedAt: Date.now(),
@@ -1820,20 +1819,23 @@ async function handlePost(
     return jsonResp({ ok: true, status: "ok", name }, 200, cors);
   }
 
+  // ── workspace_scan ───────────────────────────────────────────────────────────
   if (rawAction === "workspace_scan") {
     const d = { data: sanObj(body["data"]), ts: (body["ts"] as number) ?? Date.now(), user: resolvedUser };
     await saveData(ctx, resolvedUser, "workspace_scan", d);
     return jsonResp({ ok: true, status: "ok", ts: d.ts }, 200, cors);
   }
 
+  // ── output_report ────────────────────────────────────────────────────────────
   if (rawAction === "output_report") {
     await saveData(ctx, resolvedUser, "output_report", {
       outputs: sanArr(body["outputs"], 200),
-      ts: Date.now(),
+      ts:      Date.now(),
     });
     return jsonResp({ ok: true, status: "ok" }, 200, cors);
   }
 
+  // ── script_list_report ───────────────────────────────────────────────────────
   if (rawAction === "script_list_report") {
     const count = sanInt(body["total"] ?? body["count"], 0, 0, 99_999);
     await saveData(ctx, resolvedUser, "script_list_report", {
@@ -1852,6 +1854,7 @@ async function handlePost(
     return jsonResp({ ok: true, status: "ok", count }, 200, cors);
   }
 
+  // ── script_lines_report ──────────────────────────────────────────────────────
   if (rawAction === "script_lines_report") {
     await saveData(ctx, resolvedUser, "script_lines_report", {
       name:      sanStr(body["name"] ?? "", 100),
@@ -1863,8 +1866,7 @@ async function handlePost(
     return jsonResp({ ok: true, status: "ok" }, 200, cors);
   }
 
-  // ── output_log: plugin reports captured Studio Output entries. Also
-  //    forwarded to the AI feed so the AI can react to errors/warnings. ────────
+  // ── output_log: plugin reports captured Studio Output log entries ─────────────
   if (rawAction === "output_log") {
     const logs = sanArr(body["logs"], 100);
     await ctx.runMutation(internal.store.pushLogSvc, {
@@ -1886,8 +1888,8 @@ async function handlePost(
     return jsonResp({ ok: true, status: "ok", received: logs.length }, 200, cors);
   }
 
+  // ── mention_report ───────────────────────────────────────────────────────────
   if (rawAction === "mention_report") {
-    const found = rawAction === "mention_report" && body["object"] != null;
     await ctx.runMutation(internal.store.pushMention, {
       username: resolvedUser,
       item: JSON.stringify({
@@ -1900,6 +1902,7 @@ async function handlePost(
     return jsonResp({ ok: true, status: "ok" }, 200, cors);
   }
 
+  // ── toolbox_search_report ────────────────────────────────────────────────────
   if (rawAction === "toolbox_search_report") {
     const count = sanInt(body["count"], 0, 0, 99_999);
     await saveData(ctx, resolvedUser, "toolbox_search_report", {
@@ -1910,6 +1913,7 @@ async function handlePost(
     return jsonResp({ ok: true, status: "ok", count }, 200, cors);
   }
 
+  // ── descendants_report ───────────────────────────────────────────────────────
   if (rawAction === "descendants_report") {
     await saveData(ctx, resolvedUser, "descendants_report", {
       target:      sanStr(body["target"] ?? "", 100),
@@ -1919,6 +1923,7 @@ async function handlePost(
     return jsonResp({ ok: true, status: "ok" }, 200, cors);
   }
 
+  // ── properties_report ────────────────────────────────────────────────────────
   if (rawAction === "properties_report") {
     await saveData(ctx, resolvedUser, "properties_report", {
       name:       sanStr(body["name"] ?? "", 100),
@@ -1927,6 +1932,7 @@ async function handlePost(
     return jsonResp({ ok: true, status: "ok" }, 200, cors);
   }
 
+  // ── properties_set_report ────────────────────────────────────────────────────
   if (rawAction === "properties_set_report") {
     await saveData(ctx, resolvedUser, "properties_report", {
       name:       sanStr(body["name"] ?? body["instance"] ?? "", 100),
@@ -1942,6 +1948,7 @@ async function handlePost(
     return jsonResp({ ok: true, status: "ok" }, 200, cors);
   }
 
+  // ── action_list_report ───────────────────────────────────────────────────────
   if (rawAction === "action_list_report") {
     await saveData(ctx, resolvedUser, "action_list_report", {
       actions: sanArr(body["actions"]),
@@ -1950,6 +1957,7 @@ async function handlePost(
     return jsonResp({ ok: true, status: "ok" }, 200, cors);
   }
 
+  // ── asset_library_report ─────────────────────────────────────────────────────
   if (rawAction === "asset_library_report") {
     await saveData(ctx, resolvedUser, "asset_library_report", {
       category: sanStr(body["category"] ?? "all", 50),
@@ -1958,6 +1966,7 @@ async function handlePost(
     return jsonResp({ ok: true, status: "ok" }, 200, cors);
   }
 
+  // ── asset_id_report ──────────────────────────────────────────────────────────
   if (rawAction === "asset_id_report") {
     await saveData(ctx, resolvedUser, "asset_id_report", {
       category: sanStr(body["category"] ?? "", 50),
@@ -1968,6 +1977,7 @@ async function handlePost(
     return jsonResp({ ok: true, status: "ok" }, 200, cors);
   }
 
+  // ── asset_folder_report ──────────────────────────────────────────────────────
   if (rawAction === "asset_folder_report") {
     await saveData(ctx, resolvedUser, "asset_folder_report", {
       folder:   sanStr(body["folder"] ?? "all", 50),
@@ -1976,6 +1986,7 @@ async function handlePost(
     return jsonResp({ ok: true, status: "ok" }, 200, cors);
   }
 
+  // ── module_deploy_report ─────────────────────────────────────────────────────
   if (rawAction === "module_deploy_report") {
     await saveData(ctx, resolvedUser, "module_deploy_report", {
       name:   sanStr(body["name"]   ?? "", 100),
@@ -1985,6 +1996,7 @@ async function handlePost(
     return jsonResp({ ok: true, status: "ok" }, 200, cors);
   }
 
+  // ── module_list_report ───────────────────────────────────────────────────────
   if (rawAction === "module_list_report") {
     await saveData(ctx, resolvedUser, "module_list_report", {
       folder:  sanStr(body["folder"] ?? "modulescripts", 100),
@@ -1994,6 +2006,7 @@ async function handlePost(
     return jsonResp({ ok: true, status: "ok" }, 200, cors);
   }
 
+  // ── terrain_materials_report ─────────────────────────────────────────────────
   if (rawAction === "terrain_materials_report") {
     await saveData(ctx, resolvedUser, "terrain_materials_report", {
       materials: sanArr(body["materials"]),
@@ -2002,8 +2015,7 @@ async function handlePost(
     return jsonResp({ ok: true, status: "ok" }, 200, cors);
   }
 
-  // ── runcode_report: result of a RunCode/run_code action. Forwarded to the
-  //    AI feed since it's the direct output of code the AI asked to run. ───────
+  // ── runcode_report: result of a run_code action, forwarded to the AI feed ────
   if (rawAction === "runcode_report") {
     const result = {
       mode:    sanStr(body["mode"] ?? "pipeline", 20),
@@ -2028,6 +2040,7 @@ async function handlePost(
     return jsonResp({ ok: true, status: "ok", mode: result.mode, success: result.success }, 200, cors);
   }
 
+  // ── expression_report ────────────────────────────────────────────────────────
   if (rawAction === "expression_report") {
     const result = {
       expression: sanStr(body["expression"] ?? "", 300),
@@ -2038,6 +2051,7 @@ async function handlePost(
     return jsonResp({ ok: true, status: "ok", expression: result.expression }, 200, cors);
   }
 
+  // ── query_report ─────────────────────────────────────────────────────────────
   if (rawAction === "query_report") {
     const result = {
       results: sanArr(body["results"], 200),
@@ -2048,8 +2062,7 @@ async function handlePost(
     return jsonResp({ ok: true, status: "ok", count: result.count }, 200, cors);
   }
 
-  // ── plugin_error_report: forwarded to the AI feed so problems surface
-  //    proactively the next time the AI checks in. ────────────────────────────
+  // ── plugin_error_report: forwarded to AI feed so problems surface proactively ─
   if (rawAction === "plugin_error_report") {
     const errorEntry = {
       actionName: sanStr(body["actionName"] ?? body["action_name"] ?? "unknown", 80),
@@ -2076,10 +2089,10 @@ async function handlePost(
     return jsonResp({ ok: true, status: "ok" }, 200, cors);
   }
 
-  // ── dispatch_command: web → plugin single-command injection ──────────────────
+  // ── dispatch_command: web/AI → plugin, single command ────────────────────────
   if (rawAction === "dispatch_command") {
-    const sender = san(body["_user"]         ?? "");
-    const target = san(body["_target_user"]  ?? sender);
+    const sender   = san(body["_user"]        ?? "");
+    const target   = san(body["_target_user"] ?? sender);
     const cmd      = sanObj(body["command"]);
     const priority = sanPriority(body["priority"] ?? body["_priority"]);
 
@@ -2092,25 +2105,29 @@ async function handlePost(
 
     const auth = await authorizeCommand(ctx, request, body, sender, target, act);
     if (!auth.ok)
-      return jsonResp({ ok: false, status: "error", error: auth.error, pushed: 0, required_plugin_version: REQUIRED_PLUGIN_VERSION }, 200, cors);
+      return jsonResp(
+        { ok: false, status: "error", error: auth.error, pushed: 0, required_plugin_version: REQUIRED_PLUGIN_VERSION },
+        200,
+        cors
+      );
 
     const cmdToQueue: QueueCommand = {
       ...(cmd as QueueCommand),
-      action:       act,
-      _user:        String(body["_user"] ?? "web").substring(0, 50),
-      _target_user: target,
+      action:         act,
+      _user:          String(body["_user"] ?? "web").substring(0, 50),
+      _target_user:   target,
       _apiKey:        undefined,
       _session_token: undefined,
       _place_id:      undefined,
     };
 
-    const pushed = await pushQueue(ctx, target, cmdToQueue, priority);
+    const pushed     = await pushQueue(ctx, target, cmdToQueue, priority);
+    const lastPollTs = await ctx.runQuery(internal.store.getLastPoll,     { username: target });
+    const qc         = await ctx.runQuery(internal.store.countQueueItems, { username: target });
+
     await ctx.runMutation(internal.store.bumpStats,       { user: sender ?? "web", action: act });
     await ctx.runMutation(internal.store.pushLog,         { action: act, user: sender ?? "web", target, details: sanStr(String(cmd["name"] ?? ""), 50) });
     await ctx.runMutation(internal.store.pushUserHistory, { username: sender, action: act, details: sanStr(String(cmd["name"] ?? ""), 60) });
-
-    const lastPollTs = await ctx.runQuery(internal.store.getLastPoll,      { username: target });
-    const qc         = await ctx.runQuery(internal.store.countQueueItems,  { username: target });
 
     return jsonResp(
       {
@@ -2129,7 +2146,7 @@ async function handlePost(
     );
   }
 
-  // ── Control: reset queue ─────────────────────────────────────────────────────
+  // ── reset: clear queue ───────────────────────────────────────────────────────
   if (rawAction === "reset") {
     const target = san(body["_user"] ?? body["user"] ?? "");
     if (!target) return errResp(cors, 400, '"user" is required.');
@@ -2139,10 +2156,10 @@ async function handlePost(
     return jsonResp({ ok: true, status: "ok", message: "Queue reset.", user: target }, 200, cors);
   }
 
-  // ── Control: status ──────────────────────────────────────────────────────────
+  // ── status ───────────────────────────────────────────────────────────────────
   if (rawAction === "status") {
     const target     = san(body["_user"] ?? body["user"] ?? "");
-    const sess       = await ctx.runQuery(internal.store.getSession,     { username: target });
+    const sess       = await ctx.runQuery(internal.store.getSession,      { username: target });
     const qc         = await ctx.runQuery(internal.store.countQueueItems, { username: target });
     const lastPollTs = await ctx.runQuery(internal.store.getLastPoll,     { username: target });
     return jsonResp(
@@ -2164,7 +2181,7 @@ async function handlePost(
     );
   }
 
-  // ── Control: set_project ─────────────────────────────────────────────────────
+  // ── set_project ──────────────────────────────────────────────────────────────
   if (rawAction === "set_project") {
     if (!resolvedUser) return errResp(cors, 400, '"_user" is required.');
     const auth = await authorizeCommand(ctx, request, body, ratUser, resolvedUser, "set_project");
@@ -2183,7 +2200,7 @@ async function handlePost(
     return jsonResp({ ok: true, status: "ok", ...data }, 200, cors);
   }
 
-  // ── Control: set_webhook ─────────────────────────────────────────────────────
+  // ── set_webhook ──────────────────────────────────────────────────────────────
   if (rawAction === "set_webhook") {
     if (!resolvedUser) return errResp(cors, 400, '"_user" is required.');
     const auth = await authorizeCommand(ctx, request, body, ratUser, resolvedUser, null);
@@ -2205,7 +2222,7 @@ async function handlePost(
     );
   }
 
-  // ── Control: dispatch_multi_target (admin only) ──────────────────────────────
+  // ── dispatch_multi_target (admin only) ───────────────────────────────────────
   if (rawAction === "dispatch_multi_target" && Array.isArray(body["targets"])) {
     if (!verifyAdminToken(request))
       return errResp(cors, 401, "Admin token required for dispatch_multi_target.");
@@ -2222,11 +2239,11 @@ async function handlePost(
 
     for (const target of targets) {
       const lastPollTs = await ctx.runQuery(internal.store.getLastPoll, { username: target });
-      const sent = await pushQueue(ctx, target, {
+      const sent       = await pushQueue(ctx, target, {
         ...(cmd as QueueCommand),
-        action:       act,
-        _user:        resolvedUser,
-        _target_user: target,
+        action:         act,
+        _user:          resolvedUser,
+        _target_user:   target,
         _apiKey:        undefined,
         _session_token: undefined,
         _place_id:      undefined,
@@ -2344,12 +2361,12 @@ async function handlePost(
         _target_user:  target,
       }, priority);
 
+      const lastPollTs = await ctx.runQuery(internal.store.getLastPoll,     { username: target });
+      const qc         = await ctx.runQuery(internal.store.countQueueItems, { username: target });
+
       await ctx.runMutation(internal.store.bumpStats,       { user: sender ?? "web", action: "insert_model" });
       await ctx.runMutation(internal.store.pushLog,         { action: "insert_model", user: sender ?? "web", target, details: JSON.stringify({ assetId: asset.assetId, assetName: sanStr(asset.name, 50), parent }) });
       await ctx.runMutation(internal.store.pushUserHistory, { username: sender, action: "insert_model", details: `${asset.name} (${asset.assetId})` });
-
-      const lastPollTs = await ctx.runQuery(internal.store.getLastPoll,     { username: target });
-      const qc         = await ctx.runQuery(internal.store.countQueueItems, { username: target });
 
       return jsonResp(
         {
@@ -2470,8 +2487,8 @@ async function handlePost(
     if (!target) return errResp(cors, 400, '"target" is required.');
 
     let rawCommands: unknown[] = [];
-    if (Array.isArray(body["commands"]))          rawCommands = body["commands"] as unknown[];
-    else if (typeof body["text"] === "string")    rawCommands = extractCommandsFromText(body["text"] as string);
+    if (Array.isArray(body["commands"]))       rawCommands = body["commands"] as unknown[];
+    else if (typeof body["text"] === "string") rawCommands = extractCommandsFromText(body["text"] as string);
 
     const isAdmin = verifyAdminToken(request);
     if (!isAdmin && sender !== target)
@@ -2491,9 +2508,9 @@ async function handlePost(
       if (!act) { skipped.push(String(cmd.action)); continue; }
       await pushQueue(ctx, target, {
         ...cmd,
-        action:       act,
-        _user:        String(body["_user"] ?? "web").substring(0, 50),
-        _target_user: target,
+        action:         act,
+        _user:          String(body["_user"] ?? "web").substring(0, 50),
+        _target_user:   target,
         _apiKey:        undefined,
         _session_token: undefined,
         _place_id:      undefined,
@@ -2501,14 +2518,14 @@ async function handlePost(
       pushed++;
     }
 
-    await ctx.runMutation(internal.store.bumpStats,       { user: sender ?? "web", action: "dispatch_batch" });
-    await ctx.runMutation(internal.store.pushLog,         { action: "dispatch_batch", user: sender ?? "web", target, details: JSON.stringify({ count: pushed, skipped, priority }) });
-    await ctx.runMutation(internal.store.pushUserHistory, { username: sender, action: "dispatch_batch", details: `${pushed} commands → ${target}` });
-
     dispatchWebhook(ctx, sender, "dispatch_batch", { pushed, target }).catch(() => {});
 
     const lastPollTs = await ctx.runQuery(internal.store.getLastPoll,     { username: target });
     const qc         = await ctx.runQuery(internal.store.countQueueItems, { username: target });
+
+    await ctx.runMutation(internal.store.bumpStats,       { user: sender ?? "web", action: "dispatch_batch" });
+    await ctx.runMutation(internal.store.pushLog,         { action: "dispatch_batch", user: sender ?? "web", target, details: JSON.stringify({ count: pushed, skipped, priority }) });
+    await ctx.runMutation(internal.store.pushUserHistory, { username: sender, action: "dispatch_batch", details: `${pushed} commands → ${target}` });
 
     return jsonResp(
       {
@@ -2548,21 +2565,21 @@ async function handlePost(
       (Array.isArray(body["commands"]) ? JSON.stringify({ commands: body["commands"] }) : "")
     );
 
-    const extracted    = extractCommandsFromText(inputText);
-    const adminGated   = getAdminGatedActions();
+    const extracted  = extractCommandsFromText(inputText);
+    const adminGated = getAdminGatedActions();
     let pushed = 0;
     const skipped: string[] = [];
 
     for (const cmd of extracted) {
       if (!cmd?.action) continue;
       const act = migrateActionName(sanAction(cmd.action));
-      if (!act)                          { skipped.push(String(cmd.action)); continue; }
+      if (!act)                            { skipped.push(String(cmd.action)); continue; }
       if (!isAdmin && adminGated.has(act)) { skipped.push(`[admin-only] ${act}`); continue; }
       await pushQueue(ctx, target, {
         ...cmd,
-        action:       act,
-        _user:        String(body["_user"] ?? "web").substring(0, 50),
-        _target_user: target,
+        action:         act,
+        _user:          String(body["_user"] ?? "web").substring(0, 50),
+        _target_user:   target,
         _apiKey:        undefined,
         _session_token: undefined,
         _place_id:      undefined,
@@ -2570,21 +2587,21 @@ async function handlePost(
       pushed++;
     }
 
-    await ctx.runMutation(internal.store.bumpStats, { user: sender ?? "web", action: "dispatch_from_text" });
-    await ctx.runMutation(internal.store.pushLog,   { action: "dispatch_from_text", user: sender ?? "web", target, details: JSON.stringify({ count: pushed, skipped }) });
-
     const lastPollTs = await ctx.runQuery(internal.store.getLastPoll,     { username: target });
     const qc         = await ctx.runQuery(internal.store.countQueueItems, { username: target });
 
+    await ctx.runMutation(internal.store.bumpStats, { user: sender ?? "web", action: "dispatch_from_text" });
+    await ctx.runMutation(internal.store.pushLog,   { action: "dispatch_from_text", user: sender ?? "web", target, details: JSON.stringify({ count: pushed, skipped }) });
+
     return jsonResp(
       {
-        ok:             true,
-        status:         "ok",
+        ok:              true,
+        status:          "ok",
         pushed,
         skipped,
         priority,
         pluginConnected: Date.now() - lastPollTs < 8_000,
-        queueLength:    qc.total,
+        queueLength:     qc.total,
       },
       200,
       cors
@@ -2592,11 +2609,11 @@ async function handlePost(
   }
 
   // ── Generic single-action dispatch ───────────────────────────────────────────
-  // Covers everything else the plugin actually has registered:
+  // Handles all plugin-registered actions not covered above:
   // create_instance, create_script, edit_script, set_properties, rename,
   // delete, parent, list, insert_asset, play_test, run_test, stop_test,
-  // terrain, undo, redo, resolve_mention, run_code / RunCode, ping,
-  // get_info, set_project, get_all_actions, none.
+  // terrain, undo, redo, resolve_mention, run_code, ping, get_info,
+  // get_all_actions, none, etc.
   if (rawAction) {
     const act      = migrateActionName(sanAction(rawAction));
     const priority = sanPriority(body["priority"] ?? body["_priority"]);
@@ -2619,15 +2636,15 @@ async function handlePost(
       _place_id:      undefined,
     }, priority);
 
-    await ctx.runMutation(internal.store.bumpStats,       { user: sender ?? "web", action: act });
-    await ctx.runMutation(internal.store.pushLog,         { action: act, user: sender ?? "web", target, details: sanStr(String(body["name"] ?? ""), 50) });
-    await ctx.runMutation(internal.store.pushHistory,     { action: act, details: sanStr(String(body["name"] ?? JSON.stringify(body).substring(0, 80)), 200), user: sender ?? "web", target });
-    await ctx.runMutation(internal.store.pushUserHistory, { username: sender, action: act, details: sanStr(String(body["name"] ?? ""), 60) });
-
     dispatchWebhook(ctx, sender, "command_queued", { action: act, target }).catch(() => {});
 
     const lastPollTs = await ctx.runQuery(internal.store.getLastPoll,     { username: target });
     const qc         = await ctx.runQuery(internal.store.countQueueItems, { username: target });
+
+    await ctx.runMutation(internal.store.bumpStats,       { user: sender ?? "web", action: act });
+    await ctx.runMutation(internal.store.pushLog,         { action: act, user: sender ?? "web", target, details: sanStr(String(body["name"] ?? ""), 50) });
+    await ctx.runMutation(internal.store.pushHistory,     { action: act, details: sanStr(String(body["name"] ?? JSON.stringify(body).substring(0, 80)), 200), user: sender ?? "web", target });
+    await ctx.runMutation(internal.store.pushUserHistory, { username: sender, action: act, details: sanStr(String(body["name"] ?? ""), 60) });
 
     return jsonResp(
       {
@@ -2650,8 +2667,6 @@ async function handlePost(
     cors,
     400,
     'Request not recognised. Include a valid "action" or query parameter.',
-    {
-      hint:        'POST with { "action": "your_action", "_user": "username", ... }',
-    }
+    { hint: 'POST with { "action": "your_action", "_user": "username", ... }' }
   );
 }
