@@ -66,35 +66,19 @@ function genTxId(): string {
 function Toast({ toast }: { toast: ToastState }) {
   return (
     <div
+      className="nx-toast"
       style={{
-        position: "fixed",
-        bottom: 24,
-        right: 24,
-        zIndex: 9999,
         background: "rgba(8,8,42,.96)",
         border: "1px solid rgba(0,229,255,.15)",
-        borderRadius: 14,
-        padding: "12px 18px",
-        fontSize: 12,
-        lineHeight: 1.5,
-        display: "flex",
-        alignItems: "center",
-        gap: 10,
-        maxWidth: 300,
-        backdropFilter: "blur(24px)",
-        boxShadow: "0 8px 32px rgba(0,0,0,.6)",
-        transform: toast.visible ? "translateY(0) scale(1)" : "translateY(20px) scale(.96)",
+        transform: toast.visible
+          ? "translateY(0) scale(1)"
+          : "translateY(20px) scale(.96)",
         opacity: toast.visible ? 1 : 0,
-        transition: "0.3s cubic-bezier(.34,1.56,.64,1)",
-        pointerEvents: "none",
       }}
     >
       <div
+        className="nx-toast-dot"
         style={{
-          width: 8,
-          height: 8,
-          borderRadius: "50%",
-          flexShrink: 0,
           background: toast.color,
           boxShadow: `0 0 10px ${toast.color}`,
         }}
@@ -111,28 +95,21 @@ function Toast({ toast }: { toast: ToastState }) {
 function StepsBar({ current }: { current: View }) {
   const steps = ["Select Package", "Payment Method", "Confirm Transfer"];
   return (
-    <div style={{ marginBottom: 36 }}>
-      <div style={{ display: "flex", alignItems: "center", justifyContent: "center" }}>
+    <div className="nx-steps">
+      <div className="nx-steps-row">
         {steps.map((_, i) => {
           const n = i + 1;
           const done = n < current;
           const active = n === current;
           return (
-            <div key={n} style={{ display: "flex", alignItems: "center" }}>
+            <div key={n} className="nx-step-item">
               <div
+                className="nx-step-circle"
                 style={{
-                  width: 38,
-                  height: 38,
-                  borderRadius: "50%",
                   border: `1.5px solid ${
                     done ? "var(--green)" : active ? "var(--cyan)" : "rgba(58,74,122,.5)"
                   }`,
-                  display: "flex",
-                  alignItems: "center",
-                  justifyContent: "center",
                   fontSize: done ? 15 : 11,
-                  fontFamily: "Orbitron, sans-serif",
-                  fontWeight: 700,
                   color: done ? "var(--bg)" : active ? "var(--cyan)" : "var(--dim)",
                   background: done
                     ? "var(--green)"
@@ -145,23 +122,18 @@ function StepsBar({ current }: { current: View }) {
                     ? "0 0 14px rgba(0,255,163,.3)"
                     : "none",
                   transform: active ? "scale(1.12)" : "scale(1)",
-                  transition: "0.4s cubic-bezier(.34,1.56,.64,1)",
-                  flexShrink: 0,
-                  zIndex: 1,
                 }}
               >
                 {done ? "✓" : n}
               </div>
               {n < 3 && (
                 <div
+                  className="nx-step-line"
                   style={{
-                    width: 90,
-                    height: 2,
                     background:
                       n < current
                         ? "linear-gradient(90deg,var(--green),rgba(0,255,163,.3))"
                         : "rgba(0,229,255,.06)",
-                    transition: "background 0.6s ease",
                   }}
                 />
               )}
@@ -169,16 +141,7 @@ function StepsBar({ current }: { current: View }) {
           );
         })}
       </div>
-      <div
-        style={{
-          display: "flex",
-          justifyContent: "space-between",
-          padding: "10px 2px 0",
-          fontSize: 9.5,
-          fontFamily: "JetBrains Mono, monospace",
-          letterSpacing: "0.5px",
-        }}
-      >
+      <div className="nx-steps-labels">
         {steps.map((label, i) => {
           const n = i + 1;
           const color =
@@ -215,13 +178,14 @@ function AuthLoader() {
           gap: 20,
           zIndex: 9999,
           animation: "fadeInLoader .2s ease",
+          padding: "0 20px",
+          textAlign: "center",
         }}
       >
-        {/* Logo */}
         <div
           style={{
             fontFamily: "Orbitron, sans-serif",
-            fontSize: 22,
+            fontSize: "clamp(18px, 5vw, 22px)",
             fontWeight: 900,
             background: "linear-gradient(135deg, #00e5ff, #7c3aed)",
             WebkitBackgroundClip: "text",
@@ -231,7 +195,6 @@ function AuthLoader() {
         >
           NEXUS AI
         </div>
-        {/* Spinner */}
         <div
           style={{
             width: 40,
@@ -242,7 +205,6 @@ function AuthLoader() {
             animation: "spin .85s linear infinite",
           }}
         />
-        {/* Label */}
         <p
           style={{
             fontFamily: "JetBrains Mono, monospace",
@@ -305,13 +267,12 @@ export default function PaymentPage() {
   const [submitting, setSubmitting] = useState(false);
 
   /* ═══════════════════════════════════════════════════════════
-     ✅ AUTH GUARD — runs first, before anything else renders
+     AUTH GUARD — runs first, before anything else renders
   ═══════════════════════════════════════════════════════════ */
   useEffect(() => {
     try {
       const raw = localStorage.getItem("nexus_session");
 
-      // No session → redirect to login
       if (!raw) {
         window.location.replace("/");
         return;
@@ -326,21 +287,18 @@ export default function PaymentPage() {
         return;
       }
 
-      // Malformed session (no user.username)
       if (!sess?.user?.username) {
         localStorage.removeItem("nexus_session");
         window.location.replace("/");
         return;
       }
 
-      // Session expired — 7-day TTL
       if (Date.now() - (sess.loginTime || 0) > 86_400_000 * 7) {
         localStorage.removeItem("nexus_session");
         window.location.replace("/");
         return;
       }
 
-      // ── Valid session — hydrate state ──
       setSession(sess);
       const u = sess.user || {};
       const d = sess.data || {};
@@ -349,7 +307,6 @@ export default function PaymentPage() {
       setDisplayName(name);
       setUsername(u.username || "user");
 
-      // Avatar: prefer stored, fall back to Roblox CDN
       if (u.avatar) {
         setAvatarUrl(u.avatar);
       } else if (u.robloxId) {
@@ -358,7 +315,6 @@ export default function PaymentPage() {
         );
       }
 
-      // Credits
       const roles = d.roles || [];
       const planRaw = (d.plan || "free").toLowerCase();
       const isOwner =
@@ -542,7 +498,7 @@ export default function PaymentPage() {
       <style>{`
         @import url('https://fonts.googleapis.com/css2?family=Orbitron:wght@400;600;700;900&family=Space+Grotesk:wght@300;400;500;600;700&family=JetBrains+Mono:wght@300;400;500&display=swap');
         *, *::before, *::after { margin:0; padding:0; box-sizing:border-box; }
-        html { scroll-behavior:smooth; }
+        html { scroll-behavior:smooth; -webkit-text-size-adjust:100%; }
         :root {
           --bg:      #020210;
           --bg2:     #05051a;
@@ -569,6 +525,8 @@ export default function PaymentPage() {
           background:var(--bg); color:var(--text);
           font-size:14px; overflow-x:hidden;
         }
+        img { max-width:100%; }
+        button, input { font-family:inherit; }
         /* Animated grid background */
         body::before {
           content:''; position:fixed; inset:0; z-index:0;
@@ -580,15 +538,13 @@ export default function PaymentPage() {
           pointer-events:none;
         }
         @keyframes gridShift { to { background-position:50px 50px; } }
-        /* Purple ambient glow */
         body::after {
           content:''; position:fixed;
           top:-20%; left:50%; transform:translateX(-50%);
-          width:1000px; height:600px;
+          width:1000px; height:600px; max-width:200vw;
           background:radial-gradient(ellipse,rgba(124,58,237,.1) 0%,transparent 60%);
           pointer-events:none; z-index:0;
         }
-        /* Subtle scanlines */
         .scanlines {
           position:fixed; inset:0; z-index:1;
           background:repeating-linear-gradient(
@@ -598,15 +554,42 @@ export default function PaymentPage() {
           pointer-events:none;
         }
         @keyframes spin { to { transform:rotate(360deg); } }
+        @keyframes fadeUp { from{opacity:0;transform:translateY(14px)} to{opacity:1;transform:none} }
+        @keyframes heroIn { from{opacity:0;transform:translateY(-18px)} to{opacity:1;transform:none} }
+        @keyframes iconFloat { 0%,100%{transform:translateY(0)} 50%{transform:translateY(-7px)} }
+        @keyframes blink { 0%,100%{opacity:1} 50%{opacity:.25} }
+        @keyframes hotPulse {
+          0%,100%{box-shadow:0 0 8px rgba(0,229,255,.3)}
+          50%{box-shadow:0 0 22px rgba(0,229,255,.55)}
+        }
+        @keyframes successPop { from{transform:scale(.4);opacity:0} to{transform:scale(1);opacity:1} }
+
+        /* ── TOAST ── */
+        .nx-toast {
+          position:fixed; bottom:16px; right:16px; left:16px;
+          z-index:9999;
+          margin-left:auto;
+          border-radius:14px;
+          padding:12px 16px;
+          font-size:12px; line-height:1.5;
+          display:flex; align-items:center; gap:10px;
+          max-width:320px;
+          backdrop-filter:blur(24px);
+          box-shadow:0 8px 32px rgba(0,0,0,.6);
+          transition:0.3s cubic-bezier(.34,1.56,.64,1);
+          pointer-events:none;
+        }
+        .nx-toast-dot { width:8px; height:8px; border-radius:50%; flex-shrink:0; }
 
         /* ── NAV ── */
         .nav {
           position:sticky; top:0; z-index:200;
           display:flex; align-items:center; justify-content:space-between;
-          padding:0 24px; height:56px;
+          padding:0 16px; height:56px;
           background:rgba(2,2,16,.92);
           border-bottom:1px solid rgba(0,229,255,.09);
           backdrop-filter:blur(24px);
+          gap:8px;
         }
         .nav::after {
           content:''; position:absolute; bottom:0; left:0; right:0; height:1px;
@@ -614,80 +597,105 @@ export default function PaymentPage() {
         }
         .nav-logo {
           font-family:'Orbitron',sans-serif;
-          font-size:15px; font-weight:900;
+          font-size:14px; font-weight:900;
           background:linear-gradient(135deg,var(--cyan),var(--purple));
           -webkit-background-clip:text; -webkit-text-fill-color:transparent;
-          text-decoration:none; letter-spacing:2px;
-          display:flex; align-items:center; gap:10px;
+          text-decoration:none; letter-spacing:1.5px;
+          display:flex; align-items:center; gap:8px;
+          flex-shrink:0; min-width:0;
         }
         .nav-logo-icon {
-          width:28px; height:28px; border-radius:7px;
+          width:26px; height:26px; border-radius:7px;
           overflow:hidden; border:1px solid rgba(0,229,255,.18);
           flex-shrink:0;
         }
         .nav-logo-icon img { width:100%; height:100%; object-fit:cover; display:block; }
-        .nav-center { display:flex; align-items:center; gap:6px; }
+        .nav-center { display:flex; align-items:center; gap:6px; flex-shrink:0; }
         .nav-status-dot {
           width:6px; height:6px; border-radius:50%;
           background:var(--green); box-shadow:0 0 8px var(--green);
           animation:blink 2.2s ease-in-out infinite;
         }
-        @keyframes blink { 0%,100%{opacity:1} 50%{opacity:.25} }
         .nav-status-text {
           font-size:10px; color:var(--green);
           font-family:'JetBrains Mono',monospace; letter-spacing:1px;
         }
         .nav-back {
-          display:flex; align-items:center; gap:6px;
+          display:flex; align-items:center; gap:5px;
           color:var(--dim2); font-size:11px;
           font-family:'JetBrains Mono',monospace;
           cursor:pointer; border:1px solid rgba(0,229,255,.1);
-          background:transparent; padding:7px 16px; border-radius:22px;
-          transition:.18s; letter-spacing:.5px;
+          background:transparent; padding:7px 14px; border-radius:22px;
+          transition:.18s; letter-spacing:.5px; flex-shrink:0;
+          white-space:nowrap;
         }
         .nav-back:hover { color:var(--cyan); border-color:var(--cyan2); background:var(--cyan3); }
-        .nav-back svg { width:11px; height:11px; stroke:currentColor; fill:none; stroke-width:2.5; }
+        .nav-back svg { width:11px; height:11px; stroke:currentColor; fill:none; stroke-width:2.5; flex-shrink:0; }
 
         /* ── MAIN CONTAINER ── */
         .main {
           max-width:740px; margin:0 auto;
-          padding:40px 20px 100px;
+          padding:32px 16px 80px;
           position:relative; z-index:2;
+          width:100%;
         }
 
         /* ── HERO ── */
         .hero {
-          text-align:center; margin-bottom:40px;
+          text-align:center; margin-bottom:32px;
           animation:heroIn .55s cubic-bezier(.16,1,.3,1) both;
         }
-        @keyframes heroIn { from{opacity:0;transform:translateY(-18px)} to{opacity:1;transform:none} }
         .hero-icon-wrap {
           display:inline-flex; align-items:center; justify-content:center;
-          width:76px; height:76px; border-radius:50%;
+          width:64px; height:64px; border-radius:50%;
           background:linear-gradient(135deg,rgba(0,229,255,.12),rgba(124,58,237,.12));
           border:1px solid rgba(0,229,255,.22);
-          margin-bottom:20px;
+          margin-bottom:16px;
           box-shadow:0 0 36px rgba(0,229,255,.1), 0 0 72px rgba(124,58,237,.06);
           animation:iconFloat 3.2s ease-in-out infinite;
         }
-        @keyframes iconFloat { 0%,100%{transform:translateY(0)} 50%{transform:translateY(-7px)} }
         .hero-title {
-          font-family:'Orbitron',sans-serif; font-size:30px; font-weight:900;
+          font-family:'Orbitron',sans-serif; font-size:clamp(22px, 6vw, 30px); font-weight:900;
           background:linear-gradient(135deg,#fff 0%,var(--cyan) 50%,var(--purple) 100%);
           -webkit-background-clip:text; -webkit-text-fill-color:transparent;
           margin-bottom:8px; letter-spacing:1px;
         }
         .hero-sub {
-          font-size:12px; color:var(--dim);
+          font-size:11px; color:var(--dim);
           font-family:'JetBrains Mono',monospace; letter-spacing:.5px;
+          padding:0 8px;
         }
         .hero-sub span { color:var(--cyan); opacity:.65; }
 
+        /* ── STEPS ── */
+        .nx-steps { margin-bottom:28px; }
+        .nx-steps-row { display:flex; align-items:center; justify-content:center; }
+        .nx-step-item { display:flex; align-items:center; }
+        .nx-step-circle {
+          width:32px; height:32px; border-radius:50%;
+          display:flex; align-items:center; justify-content:center;
+          font-family:'Orbitron',sans-serif; font-weight:700;
+          transition:.4s cubic-bezier(.34,1.56,.64,1);
+          flex-shrink:0; z-index:1;
+        }
+        .nx-step-line {
+          width:48px; height:2px; min-width:16px;
+          transition:background 0.6s ease;
+        }
+        .nx-steps-labels {
+          display:flex; justify-content:space-between;
+          padding:8px 0 0;
+          font-size:8px;
+          font-family:'JetBrains Mono',monospace; letter-spacing:.3px;
+          text-align:center;
+        }
+        .nx-steps-labels span { flex:1; padding:0 2px; }
+
         /* ── USER CARD ── */
         .user-card {
-          display:flex; align-items:center; gap:14px;
+          display:flex; align-items:center; gap:12px;
           background:var(--bg2); border:1px solid rgba(0,229,255,.09);
-          border-radius:var(--r); padding:14px 18px; margin-bottom:32px;
+          border-radius:var(--r); padding:14px 16px; margin-bottom:28px;
           animation:fadeUp .5s .1s cubic-bezier(.16,1,.3,1) both;
           position:relative; overflow:hidden;
         }
@@ -695,31 +703,31 @@ export default function PaymentPage() {
           content:''; position:absolute; top:0; left:0; right:0; height:1.5px;
           background:linear-gradient(90deg,transparent,rgba(0,229,255,.35),transparent);
         }
-        @keyframes fadeUp { from{opacity:0;transform:translateY(14px)} to{opacity:1;transform:none} }
         .user-av {
-          width:46px; height:46px; border-radius:50%;
+          width:42px; height:42px; border-radius:50%;
           border:2px solid rgba(0,229,255,.25);
           object-fit:cover; flex-shrink:0;
           box-shadow:0 0 16px rgba(0,229,255,.15);
         }
         .user-info { flex:1; min-width:0; }
-        .user-name { font-size:13px; color:white; font-weight:600; margin-bottom:3px; }
+        .user-name { font-size:13px; color:white; font-weight:600; margin-bottom:3px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
         .user-credits {
           font-size:11px; color:var(--dim2);
           font-family:'JetBrains Mono',monospace;
         }
         .user-credits span { color:var(--yellow); font-weight:700; }
         .plan-pill {
-          padding:4px 14px; border-radius:20px;
-          font-size:9.5px; font-family:'JetBrains Mono',monospace;
+          padding:4px 12px; border-radius:20px;
+          font-size:9px; font-family:'JetBrains Mono',monospace;
           font-weight:700; letter-spacing:1px; flex-shrink:0;
+          white-space:nowrap;
         }
 
         /* ── SECTION TITLE ── */
         .sec-title {
           font-family:'Orbitron',sans-serif; font-size:9px;
-          color:var(--dim); letter-spacing:3px; text-transform:uppercase;
-          margin-bottom:16px; padding-bottom:10px;
+          color:var(--dim); letter-spacing:2.5px; text-transform:uppercase;
+          margin-bottom:14px; padding-bottom:10px;
           border-bottom:1px solid rgba(0,229,255,.05);
           display:flex; align-items:center; gap:10px;
         }
@@ -730,12 +738,13 @@ export default function PaymentPage() {
         }
 
         /* ── PLAN CARDS ── */
-        .plans { display:grid; grid-template-columns:1fr 1fr; gap:14px; margin-bottom:32px; }
+        .plans { display:grid; grid-template-columns:1fr 1fr; gap:12px; margin-bottom:28px; }
         .plan-card {
           background:var(--bg2); border:1px solid rgba(0,229,255,.07);
-          border-radius:var(--r); padding:22px 18px;
+          border-radius:var(--r); padding:18px 14px;
           cursor:pointer; transition:.25s cubic-bezier(.34,1.56,.64,1);
           position:relative; overflow:hidden;
+          min-width:0;
         }
         .plan-card::before {
           content:''; position:absolute; top:0; left:0; right:0;
@@ -744,38 +753,35 @@ export default function PaymentPage() {
         .plan-card:hover { border-color:rgba(0,229,255,.18); transform:translateY(-3px); }
         .plan-card.selected { border-color:var(--cyan); box-shadow:0 0 32px rgba(0,229,255,.1); }
         .plan-card.selected::before { background:linear-gradient(90deg,var(--cyan),var(--purple)); }
-        .plan-tier { font-size:9px; font-weight:700; letter-spacing:2.5px; margin-bottom:10px; }
+        .plan-tier { font-size:9px; font-weight:700; letter-spacing:2px; margin-bottom:8px; }
         .plan-price {
-          font-family:'Orbitron',sans-serif; font-size:26px; font-weight:900;
+          font-family:'Orbitron',sans-serif; font-size:clamp(20px, 5vw, 26px); font-weight:900;
           color:white; margin-bottom:2px; line-height:1;
         }
         .plan-freq {
-          font-size:10px; color:var(--dim);
+          font-size:9.5px; color:var(--dim);
           font-family:'JetBrains Mono',monospace; margin-bottom:4px;
         }
-        .plan-usd { font-size:10px; opacity:.55; margin-bottom:14px; }
+        .plan-usd { font-size:10px; opacity:.55; margin-bottom:12px; }
         .plan-features { list-style:none; }
         .plan-feature-item {
-          font-size:11px; padding:4px 0;
-          display:flex; align-items:center; gap:8px; line-height:1.5;
+          font-size:10.5px; padding:4px 0;
+          display:flex; align-items:flex-start; gap:7px; line-height:1.5;
         }
-        .feature-bullet { font-size:10px; flex-shrink:0; }
+        .feature-bullet { font-size:10px; flex-shrink:0; line-height:1.6; }
         .pro-hot {
-          position:absolute; top:12px; right:12px;
+          position:absolute; top:10px; right:10px;
           background:linear-gradient(135deg,var(--cyan),var(--purple));
-          color:white; font-size:7.5px; font-family:'Orbitron',sans-serif;
-          padding:3px 10px; border-radius:20px; font-weight:700; letter-spacing:1.5px;
+          color:white; font-size:7px; font-family:'Orbitron',sans-serif;
+          padding:3px 9px; border-radius:20px; font-weight:700; letter-spacing:1px;
           animation:hotPulse 2.2s ease-in-out infinite;
-        }
-        @keyframes hotPulse {
-          0%,100%{box-shadow:0 0 8px rgba(0,229,255,.3)}
-          50%{box-shadow:0 0 22px rgba(0,229,255,.55)}
+          white-space:nowrap;
         }
         .plan-btn {
-          width:100%; padding:10px; margin-top:16px;
+          width:100%; padding:10px; margin-top:14px;
           border:none; border-radius:var(--r2);
-          font-family:'Orbitron',sans-serif; font-size:9px; font-weight:700;
-          cursor:pointer; letter-spacing:1.5px; transition:.2s;
+          font-family:'Orbitron',sans-serif; font-size:8.5px; font-weight:700;
+          cursor:pointer; letter-spacing:1px; transition:.2s;
         }
         .plan-btn-free {
           background:rgba(0,255,163,.05); color:var(--green);
@@ -789,12 +795,13 @@ export default function PaymentPage() {
         .plan-btn:disabled { opacity:.38; cursor:not-allowed; }
 
         /* ── CREDIT PACKS ── */
-        .packs { display:grid; grid-template-columns:repeat(2,1fr); gap:12px; margin-bottom:32px; }
+        .packs { display:grid; grid-template-columns:repeat(2,1fr); gap:10px; margin-bottom:28px; }
         .pack-card {
           background:var(--bg2); border:1px solid rgba(0,229,255,.07);
-          border-radius:var(--r); padding:22px 16px;
+          border-radius:var(--r); padding:18px 12px;
           cursor:pointer; transition:.25s cubic-bezier(.34,1.56,.64,1);
           text-align:center; position:relative; overflow:hidden;
+          min-width:0;
         }
         .pack-card:hover { border-color:rgba(251,191,36,.2); transform:translateY(-3px); }
         .pack-card.selected {
@@ -805,26 +812,28 @@ export default function PaymentPage() {
         .pack-popular-tag {
           position:absolute; top:-1px; left:50%; transform:translateX(-50%);
           background:linear-gradient(135deg,var(--yellow),var(--orange));
-          color:#000; font-size:7px; font-weight:800;
-          padding:3px 14px; border-radius:0 0 8px 8px;
-          font-family:'Orbitron',sans-serif; letter-spacing:2px;
+          color:#000; font-size:6.5px; font-weight:800;
+          padding:3px 12px; border-radius:0 0 8px 8px;
+          font-family:'Orbitron',sans-serif; letter-spacing:1.5px;
+          white-space:nowrap;
         }
         .pack-cr {
-          font-family:'Orbitron',sans-serif; font-size:32px; font-weight:900;
+          font-family:'Orbitron',sans-serif; font-size:clamp(24px, 7vw, 32px); font-weight:900;
           color:var(--yellow); line-height:1; margin-bottom:4px;
         }
-        .pack-sub { font-size:9px; color:var(--dim); letter-spacing:1.5px; margin-bottom:12px; }
-        .pack-price { font-size:15px; color:white; font-weight:700; margin-bottom:4px; }
-        .pack-usd { font-size:10px; color:var(--text); opacity:.55; font-family:'JetBrains Mono',monospace; }
-        .pack-val { margin-top:8px; font-size:9px; color:var(--green); font-family:'JetBrains Mono',monospace; }
+        .pack-sub { font-size:8.5px; color:var(--dim); letter-spacing:1px; margin-bottom:10px; }
+        .pack-price { font-size:14px; color:white; font-weight:700; margin-bottom:4px; word-break:break-word; }
+        .pack-usd { font-size:9.5px; color:var(--text); opacity:.55; font-family:'JetBrains Mono',monospace; }
+        .pack-val { margin-top:8px; font-size:8.5px; color:var(--green); font-family:'JetBrains Mono',monospace; }
 
         /* ── PAYMENT METHODS ── */
-        .pay-methods { display:grid; grid-template-columns:1fr 1fr; gap:12px; margin-bottom:28px; }
+        .pay-methods { display:grid; grid-template-columns:1fr 1fr; gap:10px; margin-bottom:24px; }
         .pay-card {
           background:var(--bg2); border:1px solid rgba(0,229,255,.07);
-          border-radius:var(--r); padding:16px 18px;
+          border-radius:var(--r); padding:14px;
           cursor:pointer; transition:.22s;
-          display:flex; align-items:center; gap:12px; position:relative;
+          display:flex; flex-direction:column; align-items:center; gap:10px;
+          position:relative; text-align:center;
         }
         .pay-card:hover { border-color:rgba(0,229,255,.2); transform:translateY(-2px); }
         .pay-card.selected {
@@ -833,25 +842,25 @@ export default function PaymentPage() {
           background:rgba(0,229,255,.04);
         }
         .pay-icon-wrap {
-          width:50px; height:50px; border-radius:10px;
+          width:48px; height:48px; border-radius:10px;
           background:white; display:flex; align-items:center;
           justify-content:center; overflow:hidden; flex-shrink:0;
           box-shadow:0 2px 8px rgba(0,0,0,.3);
         }
-        .pay-icon { width:46px; height:46px; object-fit:contain; }
-        .pay-label { font-size:14px; font-weight:700; color:white; margin-bottom:3px; }
-        .pay-sub { font-size:10px; color:var(--dim); }
+        .pay-icon { width:44px; height:44px; object-fit:contain; }
+        .pay-label { font-size:13px; font-weight:700; color:white; margin-bottom:2px; }
+        .pay-sub { font-size:9.5px; color:var(--dim); }
         .pay-radio {
-          width:20px; height:20px; border-radius:50%; flex-shrink:0;
+          position:absolute; top:10px; right:10px;
+          width:18px; height:18px; border-radius:50%; flex-shrink:0;
           display:flex; align-items:center; justify-content:center; transition:.18s;
-          margin-left:auto;
         }
-        .pay-radio-dot { width:7px; height:7px; border-radius:50%; background:var(--bg); }
+        .pay-radio-dot { width:6px; height:6px; border-radius:50%; background:var(--bg); }
 
         /* ── ORDER BOX ── */
         .order-box {
           background:var(--bg2); border:1px solid rgba(0,229,255,.09);
-          border-radius:var(--r); padding:18px 20px; margin-bottom:22px;
+          border-radius:var(--r); padding:16px; margin-bottom:20px;
           position:relative; overflow:hidden;
         }
         .order-box::before {
@@ -861,17 +870,18 @@ export default function PaymentPage() {
         .order-row {
           display:flex; justify-content:space-between; align-items:center;
           padding:8px 0; border-top:1px solid rgba(0,229,255,.04);
+          gap:10px;
         }
         .order-row:first-child { border-top:none; }
-        .order-label { font-size:12px; color:var(--dim); }
-        .order-val { font-size:12px; color:var(--text); }
-        .order-total-label { font-size:13.5px; color:white; font-weight:700; }
+        .order-label { font-size:11.5px; color:var(--dim); flex-shrink:0; }
+        .order-val { font-size:11.5px; color:var(--text); text-align:right; word-break:break-word; }
+        .order-total-label { font-size:13px; color:white; font-weight:700; }
         .order-total-val {
-          font-family:'Orbitron',sans-serif; font-size:20px;
+          font-family:'Orbitron',sans-serif; font-size:clamp(16px, 4vw, 20px);
           color:var(--yellow); font-weight:700;
         }
         .order-total-usd {
-          font-size:10px; color:var(--dim);
+          font-size:9.5px; color:var(--dim);
           font-family:'JetBrains Mono',monospace; text-align:right; margin-top:2px;
         }
 
@@ -879,7 +889,7 @@ export default function PaymentPage() {
         .pay-instruction {
           background:linear-gradient(135deg,rgba(0,229,255,.025),rgba(124,58,237,.025));
           border:1px solid rgba(0,229,255,.14);
-          border-radius:var(--r); padding:22px; margin-bottom:22px;
+          border-radius:var(--r); padding:18px; margin-bottom:20px;
           position:relative;
         }
         .pay-instruction::before {
@@ -887,21 +897,22 @@ export default function PaymentPage() {
           background:linear-gradient(90deg,var(--cyan),var(--purple));
         }
         .inst-method-hdr {
-          display:flex; align-items:center; gap:10px; margin-bottom:18px; flex-wrap:wrap;
+          display:flex; align-items:center; gap:8px; margin-bottom:16px; flex-wrap:wrap;
         }
         .inst-method-badge {
-          padding:4px 14px; border-radius:20px;
-          font-family:'Orbitron',sans-serif; font-size:10px; font-weight:700;
+          padding:4px 12px; border-radius:20px;
+          font-family:'Orbitron',sans-serif; font-size:9.5px; font-weight:700;
           background:linear-gradient(135deg,var(--cyan),var(--purple));
           color:white; letter-spacing:1px;
         }
-        .inst-method-title { font-size:12px; color:white; font-weight:600; }
-        .inst-owner { font-size:11px; color:var(--dim); margin-left:auto; }
+        .inst-method-title { font-size:11.5px; color:white; font-weight:600; }
+        .inst-owner { font-size:10.5px; color:var(--dim); margin-left:auto; }
         .inst-number-box {
           background:var(--bg3); border:1px solid rgba(0,229,255,.1);
-          border-radius:var(--r2); padding:16px 18px; margin-bottom:20px;
+          border-radius:var(--r2); padding:14px 16px; margin-bottom:18px;
           cursor:pointer; transition:.2s; position:relative; overflow:hidden;
           display:flex; align-items:center; justify-content:space-between;
+          flex-wrap:wrap; gap:8px;
         }
         .inst-number-box:hover { border-color:var(--cyan2); background:var(--bg4); }
         .inst-number-box::after {
@@ -911,35 +922,38 @@ export default function PaymentPage() {
         }
         .inst-number-box:hover::after { opacity:1; }
         .inst-num-label {
-          font-size:9px; color:var(--dim);
-          font-family:'JetBrains Mono',monospace; letter-spacing:1.5px; margin-bottom:7px;
+          font-size:8.5px; color:var(--dim);
+          font-family:'JetBrains Mono',monospace; letter-spacing:1.2px; margin-bottom:6px;
         }
         .inst-num {
-          font-size:22px; font-weight:700; color:white;
-          letter-spacing:3px; font-family:'JetBrains Mono',monospace;
+          font-size:clamp(16px, 5vw, 22px); font-weight:700; color:white;
+          letter-spacing:2px; font-family:'JetBrains Mono',monospace;
+          word-break:break-all;
         }
         .inst-copy-hint {
           display:flex; align-items:center; gap:5px;
-          font-size:9px; color:var(--dim);
+          font-size:8.5px; color:var(--dim);
           font-family:'JetBrains Mono',monospace; letter-spacing:.5px;
+          white-space:nowrap; flex-shrink:0;
         }
-        .step-list { list-style:none; margin-bottom:18px; }
+        .step-list { list-style:none; margin-bottom:16px; }
         .step-item {
-          font-size:12px; color:var(--text); padding:6px 0;
+          font-size:11.5px; color:var(--text); padding:6px 0;
           display:flex; align-items:flex-start; gap:10px; line-height:1.6;
         }
         .step-num {
           display:flex; align-items:center; justify-content:center;
-          width:20px; height:20px; border-radius:50%; flex-shrink:0;
+          width:19px; height:19px; border-radius:50%; flex-shrink:0;
           background:rgba(0,229,255,.08); border:1px solid rgba(0,229,255,.18);
-          font-size:9px; color:var(--cyan); font-weight:700; margin-top:2px;
+          font-size:9px; color:var(--cyan); font-weight:700; margin-top:1px;
         }
         .code-tag {
           display:inline-block;
           background:var(--bg3); border:1px solid rgba(0,229,255,.1);
-          padding:2px 8px; border-radius:4px;
-          font-family:'JetBrains Mono',monospace; font-size:11px;
+          padding:2px 7px; border-radius:4px;
+          font-family:'JetBrains Mono',monospace; font-size:10.5px;
           color:var(--yellow);
+          word-break:break-all;
         }
 
         /* ── AMOUNT INPUT ── */
@@ -951,8 +965,8 @@ export default function PaymentPage() {
         }
         .amount-input {
           width:100%; background:var(--bg3); border:1px solid rgba(0,229,255,.1);
-          border-radius:var(--r2); padding:12px 14px 12px 42px;
-          color:white; font-family:'JetBrains Mono',monospace; font-size:16px;
+          border-radius:var(--r2); padding:12px 14px 12px 40px;
+          color:white; font-family:'JetBrains Mono',monospace; font-size:15px;
           outline:none; transition:border-color .2s, background .2s;
           -moz-appearance:textfield;
         }
@@ -962,16 +976,16 @@ export default function PaymentPage() {
         .amount-input.valid { border-color:var(--green); background:rgba(0,255,163,.04); }
         .amount-input.close { border-color:var(--yellow); background:rgba(251,191,36,.04); }
         .amount-input.invalid { border-color:var(--pink); background:rgba(244,63,94,.04); }
-        .amount-feedback { font-size:11px; margin-top:8px; min-height:18px; display:flex; align-items:center; gap:6px; }
+        .amount-feedback { font-size:10.5px; margin-top:8px; min-height:18px; display:flex; align-items:center; gap:6px; }
         .amount-verify-box {
           background:rgba(0,229,255,.025); border:1px solid rgba(0,229,255,.1);
           border-radius:var(--r2); padding:14px;
         }
-        .amount-verify-label { font-size:11px; color:var(--dim); margin-bottom:10px; display:block; }
+        .amount-verify-label { font-size:10.5px; color:var(--dim); margin-bottom:10px; display:block; }
         .warning-box {
           background:rgba(251,191,36,.04); border:1px solid rgba(251,191,36,.18);
           border-radius:var(--r2); padding:13px 14px;
-          font-size:11px; color:var(--yellow); line-height:1.75;
+          font-size:10.5px; color:var(--yellow); line-height:1.75;
           display:flex; gap:9px; align-items:flex-start; margin-top:16px;
         }
 
@@ -980,9 +994,10 @@ export default function PaymentPage() {
           width:100%; padding:15px;
           background:linear-gradient(135deg,var(--cyan),var(--purple));
           border:none; border-radius:var(--r);
-          color:white; font-family:'Orbitron',sans-serif; font-size:11px; font-weight:700;
-          cursor:pointer; transition:.2s; letter-spacing:1.5px;
+          color:white; font-family:'Orbitron',sans-serif; font-size:10.5px; font-weight:700;
+          cursor:pointer; transition:.2s; letter-spacing:1px;
           display:flex; align-items:center; justify-content:center; gap:8px;
+          text-align:center;
         }
         .btn-primary:hover:not(:disabled) {
           transform:translateY(-2px);
@@ -1001,39 +1016,89 @@ export default function PaymentPage() {
         /* ── CONFIRMED ── */
         .confirmed-check {
           display:inline-flex; align-items:center; justify-content:center;
-          width:90px; height:90px; border-radius:50%;
+          width:80px; height:80px; border-radius:50%;
           background:rgba(0,255,163,.07); border:2px solid rgba(0,255,163,.28);
-          margin-bottom:24px;
+          margin-bottom:22px;
           box-shadow:0 0 48px rgba(0,255,163,.12);
           animation:successPop .55s cubic-bezier(.34,1.56,.64,1) both;
         }
-        @keyframes successPop { from{transform:scale(.4);opacity:0} to{transform:scale(1);opacity:1} }
         .confirmed-title {
-          font-family:'Orbitron',sans-serif; font-size:21px;
+          font-family:'Orbitron',sans-serif; font-size:clamp(17px, 5vw, 21px);
           color:var(--green); margin-bottom:14px; letter-spacing:1px;
         }
         .confirmed-desc {
-          color:var(--dim2); font-size:12.5px; line-height:1.9; margin-bottom:12px;
+          color:var(--dim2); font-size:12px; line-height:1.9; margin-bottom:12px;
+          padding:0 8px;
         }
         .tx-badge {
           display:inline-block; background:var(--bg2);
           border:1px solid rgba(0,229,255,.1); border-radius:var(--r2);
-          padding:6px 20px; font-size:11px; color:var(--dim2);
-          font-family:'JetBrains Mono',monospace; margin-bottom:28px;
+          padding:6px 16px; font-size:10.5px; color:var(--dim2);
+          font-family:'JetBrains Mono',monospace; margin-bottom:26px;
+          word-break:break-all; max-width:100%;
         }
         .tx-badge span { color:var(--yellow); }
         .contact-block {
-          color:var(--text); font-size:12px; margin-bottom:36px; line-height:2;
+          color:var(--text); font-size:11.5px; margin-bottom:32px; line-height:2;
         }
-        .contact-block a { color:var(--cyan); text-decoration:none; }
+        .contact-block a { color:var(--cyan); text-decoration:none; word-break:break-all; }
         .contact-block a:hover { text-decoration:underline; }
 
-        /* ── RESPONSIVE ── */
-        @media(max-width:520px) {
-          .main { padding:24px 14px 80px; }
-          .hero-title { font-size:24px; }
-          .plans,.packs,.pay-methods { grid-template-columns:1fr 1fr; }
-          .nav { padding:0 14px; }
+        /* ── RESPONSIVE: TABLET ── */
+        @media(max-width:768px) {
+          .main { padding:28px 16px 80px; }
+        }
+
+        /* ── RESPONSIVE: MOBILE ── */
+        @media(max-width:480px) {
+          .main { padding:20px 12px 72px; }
+          .nav { padding:0 12px; height:52px; }
+          .nav-logo { font-size:12px; letter-spacing:1px; }
+          .nav-back span { display:none; }
+          .nav-back { padding:8px; border-radius:50%; }
+          .nav-back svg { width:13px; height:13px; }
+          .hero { margin-bottom:24px; }
+          .hero-icon-wrap { width:54px; height:54px; margin-bottom:12px; }
+          .hero-icon-wrap span { font-size:28px; }
+          .user-card { padding:12px 14px; margin-bottom:22px; }
+          .user-av { width:38px; height:38px; }
+          .plans { gap:8px; }
+          .plan-card { padding:14px 10px; }
+          .plan-feature-item { font-size:9.5px; }
+          .packs { gap:8px; }
+          .pack-card { padding:14px 8px; }
+          .pay-methods { gap:8px; }
+          .pay-card { padding:12px 8px; }
+          .pay-icon-wrap { width:40px; height:40px; }
+          .pay-icon { width:36px; height:36px; }
+          .pay-label { font-size:11.5px; }
+          .pay-sub { font-size:8.5px; }
+          .order-box, .pay-instruction { padding:14px; }
+          .inst-num { font-size:15px; letter-spacing:1px; }
+          .step-item { font-size:10.5px; gap:8px; }
+          .btn-row { flex-direction:column; }
+          .btn-row .btn-secondary { order:2; }
+          .btn-row .btn-primary { order:1; }
+        }
+
+        @media(max-width:360px) {
+          .plans, .packs, .pay-methods { grid-template-columns:1fr; }
+          .pro-hot { top:8px; right:8px; }
+        }
+
+        /* Respect reduced motion */
+        @media (prefers-reduced-motion: reduce) {
+          *, *::before, *::after {
+            animation-duration:0.01ms !important;
+            animation-iteration-count:1 !important;
+            transition-duration:0.01ms !important;
+          }
+        }
+
+        /* Visible keyboard focus */
+        button:focus-visible, input:focus-visible, a:focus-visible, [onClick]:focus-visible {
+          outline:2px solid var(--cyan);
+          outline-offset:2px;
         }
       `}</style>
 
@@ -1059,11 +1124,11 @@ export default function PaymentPage() {
           <span className="nav-status-text">LIVE</span>
         </div>
 
-        <button className="nav-back" onClick={handleBack}>
+        <button className="nav-back" onClick={handleBack} aria-label="Go back">
           <svg viewBox="0 0 24 24">
             <polyline points="15 18 9 12 15 6" />
           </svg>
-          Back
+          <span>Back</span>
         </button>
       </nav>
 
@@ -1071,7 +1136,7 @@ export default function PaymentPage() {
         {/* ── HERO ── */}
         <div className="hero">
           <div className="hero-icon-wrap">
-            <span style={{ fontSize: 36 }}>⚡</span>
+            <span style={{ fontSize: 32 }}>⚡</span>
           </div>
           <div className="hero-title">Get Credits</div>
           <div className="hero-sub">
@@ -1232,6 +1297,16 @@ export default function PaymentPage() {
                     className={`pay-card${selected ? " selected" : ""}`}
                     onClick={() => selectMethod(m)}
                   >
+                    <div
+                      className="pay-radio"
+                      style={{
+                        border: `1.5px solid ${selected ? "var(--cyan)" : "var(--dim)"}`,
+                        background: selected ? "var(--cyan)" : "transparent",
+                        boxShadow: selected ? "0 0 10px rgba(0,229,255,.4)" : "none",
+                      }}
+                    >
+                      {selected && <div className="pay-radio-dot" />}
+                    </div>
                     <div className="pay-icon-wrap">
                       <img
                         className="pay-icon"
@@ -1255,16 +1330,6 @@ export default function PaymentPage() {
                     <div>
                       <div className="pay-label">{isOvo ? "OVO" : "DANA"}</div>
                       <div className="pay-sub">Transfer via {isOvo ? "OVO" : "DANA"}</div>
-                    </div>
-                    <div
-                      className="pay-radio"
-                      style={{
-                        border: `1.5px solid ${selected ? "var(--cyan)" : "var(--dim)"}`,
-                        background: selected ? "var(--cyan)" : "transparent",
-                        boxShadow: selected ? "0 0 10px rgba(0,229,255,.4)" : "none",
-                      }}
-                    >
-                      {selected && <div className="pay-radio-dot" />}
                     </div>
                   </div>
                 );
@@ -1371,6 +1436,7 @@ export default function PaymentPage() {
                   <span className="amount-prefix">Rp</span>
                   <input
                     type="number"
+                    inputMode="numeric"
                     className={`amount-input${
                       amountStatus === "valid"
                         ? " valid"
@@ -1474,12 +1540,12 @@ export default function PaymentPage() {
           <div
             style={{
               textAlign: "center",
-              padding: "56px 0",
+              padding: "44px 0",
               animation: "fadeUp .45s cubic-bezier(.16,1,.3,1) both",
             }}
           >
             <div className="confirmed-check">
-              <span style={{ fontSize: 46 }}>✅</span>
+              <span style={{ fontSize: 40 }}>✅</span>
             </div>
             <div className="confirmed-title">Payment Submitted!</div>
             <p className="confirmed-desc">
