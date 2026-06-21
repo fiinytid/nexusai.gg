@@ -4,7 +4,7 @@ import { buildSysPrompt } from './system_prompt'
 // ── TYPE DECLARATIONS ─────────────────────────────────────────────────────────
 interface NexusUser   { username: string; robloxId: string; avatar?: string }
 interface NexusSession { user: NexusUser; data: Record<string, unknown>; loginTime: number }
-interface ModelEntry  { grp?: string; id?: string; prov?: string; cost?: number; label?: string; icon?: string; badge?: string }
+interface ModelEntry  { grp?: string; id?: string; prov?: string; cost?: number; label?: string; icon?: string; badge?: string; inputImages?: 'enabled' | 'disabled' }
 interface ConvMsg {
   role: string; content: string | unknown[]; time?: number
   attachments?: AttachItem[]; studioSummary?: string[]
@@ -26,6 +26,21 @@ interface AppState {
   currentProjectId: string | null; currentProjectName: string | null
   projects: { id: string; name: string }[]
   playTestEnabled: boolean; playTestDuration: number
+}
+
+// AI feed entry returned by the Convex backend's `ai_feed` endpoint —
+// see control.ts pushAiFeed() / getAiFeedEntries(). Each entry is a durable,
+// ordered "message to the AI" (read_script reports, output_log captures,
+// runcode results, plugin errors, etc.) that survives independently of
+// chat history, so the AI can react to Studio events even across sessions.
+interface AiFeedEntry {
+  id: string
+  username: string
+  kind: string
+  summary: string
+  data: unknown
+  ts: number
+  read: boolean
 }
 
 // ══════════════════════════════════════════════════════════════════════════════
@@ -87,11 +102,6 @@ let SESSION: NexusSession | null = null
 let studioConnected = false
 let studioPollTimer: ReturnType<typeof setInterval> | null = null
 // ── NEXUS AI STUDIO PLUGIN BACKEND (Convex) ───────────────────────────────────
-// All URLs the Studio plugin's backend could be running at — e.g. one for
-// local/dev testing and one for the live production deployment. To switch
-// environments, just change NEXUS_API_ENV below (or edit the array entries);
-// every fetch() in this file reads from API_URL, which always resolves to
-// NEXUS_API_URLS[NEXUS_API_ENV].
 const NEXUS_API_URLS = [
   'https://fine-setter-131.convex.site', // [0] production
   'https://brazen-lapwing-697.convex.site', // [1] development
@@ -120,9 +130,6 @@ function hideLoader(): void {
   l.classList.add('hide'); setTimeout(() => { l.style.display = 'none' }, 500)
 }
 
-// Strips fenced code blocks and JSON action blocks from AI text before it
-// is shown to the user (the chat bubble should read like a normal reply,
-// not show the raw action payloads that were sent to Studio).
 function stripAllCode(text: string): string {
   if (!text) return ''
   text = text.replace(/```[a-zA-Z]*\n[\s\S]*?```/g, '').replace(/```[\s\S]*?```/g, '')
@@ -164,8 +171,6 @@ function _isAbortError(e: unknown): boolean {
   return err.name === 'AbortError' || String(err.message || '').includes('AbortError')
 }
 
-// Generates a short, unique-enough id used to make credit deductions
-// idempotent (so a retried network call never double-charges).
 function _genRequestId(): string {
   try {
     return Array.from(crypto.getRandomValues(new Uint8Array(12)))
@@ -179,6 +184,111 @@ function safeMarked(md: string): string {
     if (!w.marked) return esc(md)
     return sanitizeHtml(w.marked.parse(String(md || '')))
   } catch { return esc(md) }
+}
+
+// ══════════════════════════════════════════════════════════════════════════════
+// PART 1B — INJECTED UI FIXES
+// ══════════════════════════════════════════════════════════════════════════════
+// page.tsx ships its own <style> block (PAGE_CSS) that we cannot edit
+// directly from here. The fixes below are appended as a SEPARATE stylesheet
+// with higher specificity / !important so they win without touching
+// page.tsx. This covers:
+//   1. Attach <label> vs <button> misalignment in the input bar
+//   2. Model dropdown visual polish (spacing, badges, group headers, shadow)
+//   3. Small steps-card stability tweak (paired with the JS timing fix below)
+function _injectUiFixStyles(): void {
+  if (document.getElementById('nx-ui-fix-styles')) return
+  const s = document.createElement('style')
+  s.id = 'nx-ui-fix-styles'
+  s.textContent = `
+/* ─── FIX: input-bar icon buttons (label vs button) perfectly aligned ─── */
+.inp-l { align-items: center !important; }
+.inp-l > .ib,
+.inp-l > label.ib,
+.inp-l > button.ib {
+  display: inline-flex !important;
+  align-items: center !important;
+  justify-content: center !important;
+  vertical-align: middle !important;
+  line-height: 0 !important;
+  box-sizing: border-box !important;
+  margin: 0 !important;
+  -webkit-appearance: none;
+  appearance: none;
+}
+.inp-l > label.ib { padding: 0 !important; }
+.inp-l > label.ib svg, .inp-l > button.ib svg {
+  display: block !important;
+  margin: 0 auto !important;
+  pointer-events: none;
+}
+.inp-bar { align-items: center !important; }
+
+/* ─── FIX: model dropdown — full visual redesign ─── */
+.model-dd {
+  padding: 8px !important;
+  border-radius: 14px !important;
+  border: 1px solid rgba(0,229,255,.22) !important;
+  box-shadow: 0 24px 70px rgba(0,0,0,.92), 0 0 0 1px rgba(0,229,255,.06), 0 0 24px rgba(0,229,255,.04) !important;
+  background: linear-gradient(180deg, rgba(10,11,34,.99), rgba(6,7,26,.99)) !important;
+}
+.model-dd .mg {
+  padding: 9px 8px 6px !important;
+  margin-top: 4px !important;
+  font-size: 8px !important;
+  letter-spacing: 2.2px !important;
+  font-weight: 800 !important;
+  color: rgba(184,207,255,.4) !important;
+}
+.model-dd .mg:first-child { margin-top: 2px !important; }
+.model-dd .mo {
+  padding: 9px 10px !important;
+  border-radius: 10px !important;
+  gap: 11px !important;
+  min-height: 52px !important;
+  border: 1px solid transparent !important;
+  transition: background .12s ease, border-color .12s ease, transform .12s ease !important;
+}
+.model-dd .mo:hover {
+  background: rgba(0,229,255,.08) !important;
+  border-color: rgba(0,229,255,.16) !important;
+  transform: translateX(1px);
+}
+.model-dd .mo.act {
+  background: rgba(0,229,255,.1) !important;
+  border-color: rgba(0,229,255,.28) !important;
+}
+.model-dd .mo-icon {
+  width: 30px !important; height: 30px !important; border-radius: 8px !important;
+  background: rgba(0,229,255,.08) !important;
+  border: 1px solid rgba(0,229,255,.14) !important;
+}
+.model-dd .mo-n { font-size: 11.5px !important; letter-spacing: .1px; }
+.model-dd .mo-s { font-size: 9px !important; margin-top: 3px !important; }
+.model-dd .mb-badge {
+  font-size: 8px !important; font-weight: 800 !important; letter-spacing: .4px !important;
+  padding: 3px 7px !important; border-radius: 5px !important; border: 1px solid !important;
+  white-space: nowrap !important; line-height: 1.5 !important;
+}
+.model-dd .mb-badge.f { color: var(--green) !important; border-color: rgba(0,255,170,.32) !important; background: rgba(0,255,170,.08) !important; }
+.model-dd .mb-badge.p { color: #cc55ff !important; border-color: rgba(136,0,255,.38) !important; background: rgba(136,0,255,.1) !important; }
+.model-dd .mb-badge.s { color: var(--cyan) !important; border-color: rgba(0,229,255,.32) !important; background: rgba(0,229,255,.08) !important; }
+.model-dd::-webkit-scrollbar { width: 4px !important; }
+
+/* ─── FIX: steps card cannot collapse / flicker mid-stream ─── */
+.steps-wrap { min-height: 60px; }
+.steps-box  { min-height: 56px !important; }
+
+/* ─── Attach button — visual cue when active model has no image input ─── */
+.ib-disabled { position: relative; }
+.ib-disabled svg { opacity: .55; }
+.ib-disabled::after {
+  content: ''; position: absolute; left: 5px; right: 5px; top: 50%;
+  height: 1.5px; background: var(--pink); transform: rotate(-38deg);
+  border-radius: 2px; opacity: .85; pointer-events: none;
+}
+`
+  document.head.appendChild(s)
 }
 
 // ══════════════════════════════════════════════════════════════════════════════
@@ -213,6 +323,49 @@ function _buildDocsContext(docsResult: unknown): string {
   const lines = ['[ROBLOX DOCS REFERENCE — Retrieved live for this query]']
   dr.results.slice(0, 4).forEach((r) => lines.push(`• ${r.title}: ${r.snippet} → ${r.url}`))
   lines.push('[Use these references to write accurate, up-to-date Roblox code]')
+  return lines.join('\n')
+}
+
+// ── AI FEED FETCH ──────────────────────────────────────────────────────────────
+// Pulls unread "messages to the AI" (read_script reports, output_log
+// captures, runcode results, plugin errors, ...) from the Convex backend's
+// durable per-user feed (see control.ts pushAiFeed / GET ?ai_feed=1).
+// Entries are marked read server-side as soon as they're returned, so this
+// is safe to call every time without re-processing the same event twice.
+let _aiFeedInFlight = false
+async function fetchAiFeed(maxResults = 8): Promise<AiFeedEntry[] | null> {
+  if (!SESSION || !studioConnected || _aiFeedInFlight) return null
+  _aiFeedInFlight = true
+  try {
+    const ctrl = new AbortController(); const tid = setTimeout(() => ctrl.abort(), 7000)
+    const user = (SESSION.user.username || '').toLowerCase()
+    const r = await fetch(`${API_URL}/?ai_feed=1&user=${encodeURIComponent(user)}&limit=${maxResults}`, { signal: ctrl.signal })
+    clearTimeout(tid)
+    if (!r.ok) return null
+    const d = await r.json() as { entries?: AiFeedEntry[] }
+    return d?.entries?.length ? d.entries : null
+  } catch { return null }
+  finally { _aiFeedInFlight = false }
+}
+
+// True when the user's message + recent context suggests the AI feed
+// (Studio-reported events) is actually relevant — avoids spending a round
+// trip on every single "hi" or unrelated question.
+function _shouldCheckAiFeed(txt: string): boolean {
+  if (!studioConnected) return false
+  if (isPureGreeting(txt)) return false
+  return /error|bug|debug|broken|crash|not work|failed|fix|read|check|output|log|result|test|ran|run/i.test(txt)
+    || detectType(txt) === 'debug' || detectType(txt) === 'read' || detectType(txt) === 'edit' || detectType(txt) === 'test'
+}
+
+function _buildAiFeedContext(entries: AiFeedEntry[]): string {
+  if (!entries?.length) return ''
+  const lines = ['[NEXUS STUDIO FEED — Recent reports from the Studio plugin, oldest first]']
+  entries.forEach((e) => {
+    const when = e.ts ? new Date(e.ts).toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' }) : ''
+    lines.push(`• [${when}] (${e.kind}) ${e.summary}`)
+  })
+  lines.push('[Use this information if relevant to the current request. Do not repeat it verbatim unless asked.]')
   return lines.join('\n')
 }
 
@@ -257,7 +410,7 @@ function _shouldSearchDocs(txt: string): boolean {
   return _DOCS_KEYWORDS.some((k) => lower.includes(k))
 }
 
-// ── UI STRINGS (inline — no LANG_EN object) ───────────────────────────────────
+// ── UI STRINGS ─────────────────────────────────────────────────────────────────
 const UI = {
   placeholder:    'Ask NEXUS AI about Roblox... (type @ to mention)',
   noConv:         'No conversations yet',
@@ -284,6 +437,7 @@ const UI = {
   buildingComponents:'Building components...',
   preparingEdit:  'Preparing edit...',
   preparingTest:  'Preparing test...',
+  checkingFeed:   'Checking Studio feed...',
   projectLabel:   'Project',
   testRunning:    'Running play_test',
   testDone:       'Test done',
@@ -312,20 +466,23 @@ const UI = {
 }
 
 // ── MODEL LIST ────────────────────────────────────────────────────────────────
+// `inputImages` marks whether a model's provider/endpoint actually accepts
+// image content blocks. Models with 'disabled' will have the attach button
+// disabled in the UI whenever they're the active model, and any pending
+// image attachments are dropped (with a toast) if the user switches into
+// one of these models while images are queued up.
 const MODEL_LIST: ModelEntry[] = [
   { grp: 'Google' },
-  { id: 'gemini-3.5-flash',     prov: 'gemini',     cost: 3,  label: 'Gemini 3.5 Flash',    icon: '/images/gemini.png',   badge: 'FAST' },
-  { id: 'gemini-3.1-flash-lite',prov: 'gemini',     cost: 2,  label: 'Gemini 3.1 Flash Lite',icon: '/images/gemini.png',  badge: 'FAST' },
-  { id: 'gemini-3.1-pro',       prov: 'gemini',     cost: 12, label: 'Gemini 3.1 Pro',       icon: '/images/gemini.png',  badge: 'BEST' },
+  { id: 'gemini-3.5-flash',     prov: 'gemini',     cost: 3,  label: 'Gemini 3.5 Flash',    icon: '/images/gemini.png',   badge: 'FAST', inputImages: 'enabled' },
+  { id: 'gemini-3.1-flash-lite',prov: 'gemini',     cost: 2,  label: 'Gemini 3.1 Flash Lite',icon: '/images/gemini.png',  badge: 'FAST', inputImages: 'enabled' },
+  { id: 'gemini-3.1-pro',       prov: 'gemini',     cost: 12, label: 'Gemini 3.1 Pro',       icon: '/images/gemini.png',  badge: 'BEST', inputImages: 'enabled' },
   { grp: 'ChatGPT' },
-  { id: 'openai/gpt-oss-120b:free', prov: 'openrouter', cost: 0, label: 'ChatGPT 4o',       icon: '/images/chatgpt.png', badge: 'FREE' },
+  { id: 'openai/gpt-oss-120b:free', prov: 'openrouter', cost: 0, label: 'ChatGPT 4o',       icon: '/images/chatgpt.png', badge: 'FREE', inputImages: 'disabled' },
   { grp: 'DeepSeek' },
-  { id: 'deepseek/deepseek-v4-flash', prov: 'openrouter', cost: 15, label: 'DeepSeek V4',   icon: '/images/deepseek.svg', badge: 'BEST' },
+  { id: 'deepseek/deepseek-v4-flash', prov: 'openrouter', cost: 15, label: 'DeepSeek V4',   icon: '/images/deepseek.svg', badge: 'BEST', inputImages: 'disabled' },
 ]
 
-// Find the first real model entry (free/cheapest cost), not a group header
 function getFreeModel(): ModelEntry {
-  // prefer cost === 0 first, then lowest cost
   const real = MODEL_LIST.filter((m) => m.id && !m.grp)
   const free = real.find((m) => (m.cost ?? 999) === 0)
   if (free) return free
@@ -339,6 +496,70 @@ function _resolveModel(modelObj: unknown): ModelEntry {
   if (!m.id) return getFreeModel()
   const found = MODEL_LIST.find((x) => x.id === m.id && !x.grp)
   return found ?? getFreeModel()
+}
+
+// True if the given model entry's provider/endpoint accepts image content
+// blocks. Defaults to enabled for any model that doesn't explicitly set
+// the flag (keeps older/未来 entries working without edits).
+function modelSupportsImages(m: ModelEntry): boolean {
+  return m.inputImages !== 'disabled'
+}
+
+const MAX_IMAGE_ATTACHMENTS = 5
+
+// Per-image cost: 0.15x the model's base text cost, rounded to 2 decimals.
+// Free models (cost 0) always cost 0 CR per image — no minimum floor.
+// This is intentionally proportional rather than flat: a premium model
+// (e.g. Gemini 3.1 Pro at 12 CR) costs more per attached image than a
+// cheap one (Gemini 3.1 Flash Lite at 2 CR), matching how much more the
+// underlying request actually costs upstream.
+const IMAGE_COST_MULTIPLIER = 0.15
+function costPerImageForModel(m: ModelEntry): number {
+  const base = m.cost || 0
+  if (base <= 0) return 0
+  return parseFloat((base * IMAGE_COST_MULTIPLIER).toFixed(2))
+}
+
+// Drops any queued image attachments if the now-active model can't accept
+// them, with a toast so the user isn't left wondering where their images
+// went. Non-image attachments (text files) are unaffected since every
+// model accepts plain text content.
+function _dropUnsupportedImageAttachments(): void {
+  if (modelSupportsImages(S.model)) return
+  const before = S.attachments.length
+  const hadImages = S.attachments.some((a) => a.type === 'image')
+  if (!hadImages) return
+  S.attachments = S.attachments.filter((a) => a.type !== 'image')
+  renderAttachRow()
+  if (before !== S.attachments.length) {
+    toast(`${S.model.label || S.model.id} doesn't support image input — removed attached image(s).`, 'var(--yellow)', 3600)
+  }
+}
+
+// Reflects current model's image support in the attach button (disabled +
+// tooltip) so the limitation is visible before the user even tries.
+function updateAttachAvailability(): void {
+  const lbl = document.getElementById('fi')?.closest('label') as HTMLLabelElement | null
+    ?? (document.querySelector('label[for="fi"]') as HTMLLabelElement | null)
+  if (!lbl) return
+  const supported = modelSupportsImages(S.model)
+  if (supported) {
+    lbl.classList.remove('ib-disabled')
+    lbl.removeAttribute('aria-disabled')
+    lbl.title = 'Attach image or file'
+    lbl.style.opacity = ''
+    lbl.style.pointerEvents = ''
+  } else {
+    lbl.classList.add('ib-disabled')
+    lbl.setAttribute('aria-disabled', 'true')
+    lbl.title = `${S.model.label || S.model.id} doesn't support image input. Attach text files only, or switch model.`
+    lbl.style.opacity = '0.4'
+    // Text files are still fine for any model, so we don't fully block
+    // clicking — the file input itself still accepts .lua/.txt/etc. We
+    // just signal reduced capability visually rather than hard-disabling,
+    // since the same input also handles non-image files.
+    lbl.style.pointerEvents = ''
+  }
 }
 
 const _defaultModel = { id: 'gemini-3.5-flash', prov: 'gemini', cost: 3, label: 'Gemini 3.5 Flash' }
@@ -401,7 +622,6 @@ function saveS(): void {
   SESSION.data.lastClaim = S.lastClaim
   SESSION.data.projects = S.projects || SESSION.data.projects
   SESSION.data.convs = getStoreConvs()
-  // DO NOT persist credits to localStorage — server is authoritative
   try { localStorage.setItem('nexus_session', JSON.stringify(SESSION)) } catch {
     try { SESSION.data.convs = getStoreConvs().slice(-5); localStorage.setItem('nexus_session', JSON.stringify(SESSION)) } catch { console.warn('[NEXUS] localStorage full') }
   }
@@ -435,9 +655,6 @@ async function syncToServer(): Promise<void> {
       user: (SESSION.user.username || '').toLowerCase(),
       robloxId: SESSION.user.robloxId,
       data: {
-        // NEVER send credits from client in a regular sync — server owns
-        // credits. Actual usage deductions go exclusively through
-        // deductCredits() / the dedicated "deduct-credits" action.
         plan: S.plan, model: S.model, lastClaim: S.lastClaim,
         convs: convsTrimmed, projects: S.projects || [], lastSync: Date.now(),
       },
@@ -449,7 +666,6 @@ async function syncToServer(): Promise<void> {
     clearTimeout(timeoutId)
     if (resp.ok) {
       const d = await resp.json() as { credits?: number; plan?: string }
-      // ALWAYS trust server credits
       if (d && typeof d.credits === 'number') {
         S.credits = d.credits; updateCreds()
         if (SESSION) {
@@ -479,7 +695,6 @@ function startAutoSync(): void {
 
 async function loadS(): Promise<void> {
   if (!SESSION) return
-  // Always fetch from server first — server is authoritative for credits
   try {
     const ctrl = new AbortController(); const tid = setTimeout(() => ctrl.abort(), 12000)
     const r = await fetch(
@@ -490,7 +705,6 @@ async function loadS(): Promise<void> {
     if (r.ok) {
       const d = await r.json() as { credits?: number; plan?: string; lastClaim?: string; convs?: Conv[]; projects?: AppState['projects'] }
       if (d) {
-        // Server credits are ALWAYS used — ignore any cached local value
         S.credits = typeof d.credits === 'number' ? d.credits : parseFloat(String(SESSION.data?.credits ?? 30)) || 30
         S.plan = d.plan || (SESSION.data?.plan as string) || 'free'
         S.lastClaim = d.lastClaim || (SESSION.data?.lastClaim as string) || null
@@ -511,7 +725,6 @@ async function loadS(): Promise<void> {
     }
   } catch (e) { console.warn('[NEXUS loadS] server fetch failed:', (e as Error).message) }
 
-  // Fallback to localStorage only if server unreachable
   S.credits = parseFloat(String(SESSION.data?.credits ?? 30)) || 30
   S.plan = (SESSION.data?.plan as string) || 'free'
   S.lastClaim = (SESSION.data?.lastClaim as string) || null
@@ -602,14 +815,6 @@ function updatePlayTestUI(): void {
 }
 
 // ── CREDITS ───────────────────────────────────────────────────────────────────
-// Atomically deducts `cost` credits on the SERVER for the request identified
-// by `requestId`, then applies the server's authoritative response to local
-// state. This is what fixes the "credits bounce back to old value" bug:
-// previously the deduction only ever happened in local memory (S.credits -=
-// cost) and was never sent anywhere, so the very next syncToServer() call
-// would overwrite it with the untouched database value. Now the database
-// value itself is updated first, and the UI reflects what the server
-// confirms — so there is nothing left for a later sync to "undo".
 async function deductCredits(cost: number): Promise<boolean> {
   if (!SESSION || cost <= 0) return true
   if (isOwner() || isAdmin()) return true
@@ -632,8 +837,6 @@ async function deductCredits(cost: number): Promise<boolean> {
     const d = await r.json().catch(() => null) as { success?: boolean; credits?: number; error?: string } | null
 
     if (d && typeof d.credits === 'number') {
-      // Server is authoritative — adopt its number directly, do not layer
-      // any further local subtraction on top of it.
       S.credits = d.credits
       updateCreds()
       if (SESSION) {
@@ -649,8 +852,6 @@ async function deductCredits(cost: number): Promise<boolean> {
     return true
   } catch (e) {
     console.warn('[NEXUS deductCredits] error:', (e as Error).message)
-    // Network failure: do not touch S.credits — better to show a stale
-    // (but real) balance than a fabricated optimistic one.
     return false
   }
 }
@@ -738,23 +939,7 @@ async function retryStudio(): Promise<void> { _pollFailCount = 0; toast(UI.recon
 // ══════════════════════════════════════════════════════════════════════════════
 // PART 4 — ACTION PARSING (24 official NEXUS AI Studio plugin actions)
 // ══════════════════════════════════════════════════════════════════════════════
-//
-// The AI is instructed (via the system prompt) to express every Studio
-// command as a fenced ```json block containing either:
-//   { "action": "<name>", ...params }
-// or a batch:
-//   { "actions": [ { "action": "<name>", ...params }, ... ] }
-//
-// This is the exact shape the plugin's ActionsManager:dispatch() /
-// :dispatchBatch() expect — see Features/ActionsManager in the Studio
-// plugin. There is intentionally no support left for the old free-form
-// Lua-block injection or call-style syntax (inject_script(...), etc.) —
-// those actions no longer exist in the plugin and have been removed.
 
-// The 24 actions the Studio plugin's ActionsManager actually registers.
-// Keeping this list in sync with Features/ActionsManager.lua's
-// ACTION_MODULES + built-in inline handlers is what lets the client
-// validate/label actions without guessing at names that no longer exist.
 const NEXUS_ACTIONS = [
   'create_instance', 'create_script', 'edit_script', 'read_script',
   'set_properties', 'rename', 'delete', 'parent', 'list',
@@ -770,9 +955,6 @@ function isKnownAction(name: string): boolean {
   return _NEXUS_ACTIONS_SET.has(name)
 }
 
-// Strips Lua engine-call syntax (e.g. Vector3.new(1,2,3)) down to plain
-// JSON-compatible arrays/strings, in case a model still emits them despite
-// instructions. Harmless no-op for clean JSON.
 function _stripLuaExpressions(str: string): string {
   if (typeof str !== 'string') return str
   str = str.replace(/Vector3\.new\s*\(\s*([-\d.\s,]+)\s*\)/g, (_, args) => '[' + args.split(',').map((p: string) => parseFloat(p.trim()) || 0).join(',') + ']')
@@ -838,10 +1020,6 @@ function _tryParseJson(raw: string): unknown {
   return null
 }
 
-// Parses every ```json fenced block in the AI's reply, extracting valid
-// NEXUS AI action commands (single `{action:...}` objects or
-// `{actions:[...]}` batches). Anything that doesn't resolve to one of the
-// 24 known action names is silently dropped.
 function parseActionBlocks(text: string): ActionCmd[] {
   const cmds: ActionCmd[] = []
   const re = /```(?:json|JSON|Json)\s*\n?([\s\S]*?)```/g
@@ -869,8 +1047,6 @@ function parseActionBlocks(text: string): ActionCmd[] {
   return cmds
 }
 
-// Fallback: if no fenced ```json block was found at all, try to locate a
-// bare JSON object/array containing an "action" key anywhere in the text.
 function parseAllCommands(text: string): ActionCmd[] {
   const cmds = parseActionBlocks(text)
   if (cmds.length > 0) return cmds
@@ -893,8 +1069,6 @@ function parseAllCommands(text: string): ActionCmd[] {
   return cmds
 }
 
-// Human-readable one-line label for a parsed action, used in the
-// "thinking steps" UI and the final "Built in Studio" summary list.
 function makeStepLabel(cmd: ActionCmd): string | null {
   const a = cmd.action || ''
   const nm = String(cmd.name || cmd.target || '')
@@ -932,10 +1106,6 @@ function makeStepLabel(cmd: ActionCmd): string | null {
 // PART 5 — FETCH HELPERS + AUTO INJECT PIPELINE
 // ══════════════════════════════════════════════════════════════════════════════
 
-// True if `url` points at one of the configured NEXUS AI plugin backends
-// (see NEXUS_API_URLS above) — used to decide whether to attach the
-// plugin-only auth headers below, regardless of which environment's
-// domain is currently active.
 function _isNexusBackendUrl(url: string): boolean {
   return NEXUS_API_URLS.some((base) => base && url.startsWith(base))
 }
@@ -986,9 +1156,6 @@ async function safeFetchWithRetry(bodyData: Record<string, unknown>, signal?: Ab
   return null
 }
 
-// Sends a single action command to the Studio plugin via the polling
-// backend. The plugin picks this up on its next poll (Config.POLL_INTERVAL,
-// 3s) and runs it through ActionsManager:dispatch().
 async function _injectCommand(cmdToSend: ActionCmd, user: string, signal?: AbortSignal): Promise<{ ok: boolean; data?: unknown; error?: string }> {
   const r = await safeFetchWithRetry({ type: 'inject_command', command: cmdToSend, _user: user, _target_user: user }, signal, 2)
   if (!r) return { ok: false, error: 'No response (network error)' }
@@ -998,9 +1165,6 @@ async function _injectCommand(cmdToSend: ActionCmd, user: string, signal?: Abort
   return { ok: false, error: rd.error ? rd.error.slice(0, 120) : ('HTTP ' + r.status) }
 }
 
-// Parses every action the AI emitted, sends each one to Studio in order
-// (with a "thinking steps" UI showing progress), and returns a plain-text
-// summary list for display under the chat bubble.
 async function autoInjectToStudio(aiResponse: string, _userPrompt: string): Promise<string[] | null> {
   if (!studioConnected) return null
   const summary: string[] = [], user = (SESSION?.user.username ?? '').toLowerCase()
@@ -1062,7 +1226,6 @@ async function autoInjectToStudio(aiResponse: string, _userPrompt: string): Prom
 }
 
 // ── SYSTEM PROMPT ──────────────────────────────────────────────────────────────
-let _sysPromptReady = true
 function _fallbackBuildSysPrompt(): string { return '' }
 
 function buildApiMsgs(): { role: string; content: string | unknown[] }[] {
@@ -1151,10 +1314,30 @@ async function send(): Promise<void> {
   const txt = inp?.value.trim() ?? ''; const attachments = S.attachments.slice()
   if (!txt && !attachments.length) return
   if (!checkClientRateLimit('send', 20)) return
+
+  // Defense-in-depth: handleFile/paste already prevent queuing images for
+  // a model that doesn't support them, but if the user queued images then
+  // switched models through some other path, block here rather than
+  // silently sending image blocks a provider will reject.
+  const imageCount = attachments.filter((a) => a.type === 'image').length
+  if (imageCount > 0 && !modelSupportsImages(S.model)) {
+    toast(`${S.model.label || S.model.id} doesn't support image input. Remove the image(s) or switch model.`, 'var(--pink)', 3800)
+    return
+  }
+  if (imageCount > MAX_IMAGE_ATTACHMENTS) {
+    toast(`Maximum ${MAX_IMAGE_ATTACHMENTS} images per message.`, 'var(--yellow)', 3200)
+    return
+  }
+
   if (!isOwner() && !isAdmin()) {
     const _mc = S.model.cost || 0
+    const _imgCost = imageCount * costPerImageForModel(S.model)
+    const _estTotal = _mc + _imgCost
     if (_mc > 0 && S.credits <= 0) { toast(UI.creditsExhausted, 'var(--pink)'); return }
-    if (_mc > 0 && S.credits < _mc) { toast('Need at least ' + _mc + ' CR for this model', 'var(--yellow)'); return }
+    if (_estTotal > 0 && S.credits < _estTotal) {
+      toast(`Need at least ${_estTotal.toFixed(2)} CR for this model${imageCount ? ' + ' + imageCount + ' image(s)' : ''}`, 'var(--yellow)')
+      return
+    }
   }
   if (!S.curConv) newChat()
   let cv = S.convs.find((x) => x.id === S.curConv)
@@ -1169,22 +1352,53 @@ async function send(): Promise<void> {
   const lastPrompt = txt; S.attachments = []; renderAttachRow()
   if (cv.msgs.length === 1) setConvTitle(S.curConv!, txt); hideMentionDD()
   const showThinking = !isPureGreeting(txt)
+
+  // ── THINKING CARD ────────────────────────────────────────────────────────
+  // FIX (flicker bug): the steps card is created once here and is only ever
+  // removed in exactly two places for the success path: right before
+  // appendMsg(aiMsg) at the very end, or inside one of the early-return
+  // branches below. There is no longer any intermediate
+  // "finalizeSteps(); await _sleep(...); removeStepsCard()" pattern with a
+  // gap before the bubble is appended — that gap was the empty/flicker
+  // window users were seeing between "thinking disappears" and "AI message
+  // appears". Now finalizeSteps() (success checkmark sweep) and
+  // removeStepsCard() + appendMsg() happen back-to-back with no awaits
+  // between them.
   if (showThinking) {
     createStepsCard(); const rtype = detectType(txt)
-    if (rtype === 'debug') { addStep(UI.readingScript, 'running'); await _sleep(600); updateStep(1, 'done'); addStep(UI.analyzingError, 'running'); await _sleep(400); updateStep(2, 'done'); addStep(UI.designingFix, 'running') }
-    else if (rtype === 'gui') { addStep(UI.designingUI, 'running'); await _sleep(400); updateStep(1, 'done'); addStep(UI.buildingComponents, 'running') }
+    if (rtype === 'debug') { addStep(UI.readingScript, 'running'); await _sleep(500); updateStep(1, 'done'); addStep(UI.analyzingError, 'running'); await _sleep(350); updateStep(2, 'done'); addStep(UI.designingFix, 'running') }
+    else if (rtype === 'gui') { addStep(UI.designingUI, 'running'); await _sleep(350); updateStep(1, 'done'); addStep(UI.buildingComponents, 'running') }
     else if (rtype === 'read') { addStep(UI.readingScript, 'running') }
     else if (rtype === 'edit') { addStep(UI.preparingEdit, 'running') }
     else if (rtype === 'test') { addStep(UI.preparingTest, 'running') }
-    else { addStep(UI.analyzingReq, 'running'); await _sleep(400); updateStep(1, 'done'); addStep(UI.designingSolution, 'running') }
+    else { addStep(UI.analyzingReq, 'running'); await _sleep(350); updateStep(1, 'done'); addStep(UI.designingSolution, 'running') }
   }
   if (!S.gen || S.cancelCtrl?.signal.aborted) { _resetGenState(); return }
+
+  // ── AI FEED CHECK ────────────────────────────────────────────────────────
+  // Pulls unread Studio-reported events (read_script results, output_log
+  // captures, runcode results, plugin errors) from the durable Convex feed
+  // and folds them into the system prompt as extra context — but only when
+  // it's actually likely to matter (Studio connected + relevant message),
+  // so a plain "hi" doesn't spend a round trip on this.
+  let aiFeedCtx = ''
+  if (_shouldCheckAiFeed(txt)) {
+    const feedStep = showThinking ? addStep(UI.checkingFeed, 'running') : null
+    try {
+      const entries = await fetchAiFeed(8)
+      if (entries?.length) aiFeedCtx = _buildAiFeedContext(entries)
+      if (feedStep) updateStep(feedStep, entries?.length ? 'done' : 'info', entries?.length ? undefined : 'No new Studio events')
+    } catch { if (feedStep) updateStep(feedStep, 'error', 'Feed check failed') }
+  }
+  if (!S.gen || S.cancelCtrl?.signal.aborted) { _resetGenState(); return }
+
   let msgs = buildApiMsgs()
   let sysPrompt = buildSysPrompt({
     session: SESSION ? { user: { username: SESSION.user.username, displayName: SESSION.user.username } } : null,
     settings: { credits: S.credits, plan: S.plan, currentProjectName: S.currentProjectName, playTestEnabled: S.playTestEnabled, playTestDuration: S.playTestDuration },
     studioConnected, isOwnerFn: isOwner, isAdminFn: isAdmin,
   })
+  if (aiFeedCtx) sysPrompt = sysPrompt + '\n\n' + aiFeedCtx
   if (_shouldSearchDocs(txt) && sysPrompt) {
     try { const _docsResult = await searchRobloxDocs(txt, 5); if (_docsResult) { const _docsCtx = _buildDocsContext(_docsResult); if (_docsCtx) sysPrompt = sysPrompt + '\n\n' + _docsCtx } } catch { }
   }
@@ -1216,16 +1430,19 @@ async function send(): Promise<void> {
   const hasError = aiText && (aiText.startsWith('**Failed') || aiText.startsWith('**Error'))
 
   // ── CREDIT DEDUCTION (server-authoritative) ─────────────────────────
-  // Cost scales with the number of actions the AI emitted, same formula as
-  // before, but the actual subtraction now happens on the server via
-  // deductCredits() — see PART 3 for why this fixes the "credits revert"
-  // bug. The UI is updated with whatever the server confirms, not with a
-  // value computed purely in memory.
+  // Total cost = base model cost (skipped/min'd for pure greetings) +
+  // extra per additional action beyond the first + per-image surcharge
+  // (proportional to the model's base cost — see costPerImageForModel()).
+  // Credits can be fractional (e.g. "3.45 CR"), matching the server side
+  // which already stores/returns credits as a float.
   if (!isOwner() && !isAdmin() && aiText && !hasError) {
     const _baseCost = S.model.cost || 0
-    if (_baseCost > 0) {
+    const _imageCost = imageCount * costPerImageForModel(S.model)
+    if (_baseCost > 0 || _imageCost > 0) {
       const _numActions = parseAllCommands(aiText).length
-      const _totalCost = isPureGreeting(lastPrompt) ? 1 : parseFloat((_baseCost + Math.max(0, _numActions - 1) * 0.5).toFixed(2))
+      const _actionCost = isPureGreeting(lastPrompt) ? 0 : Math.max(0, _numActions - 1) * 0.5
+      const _textCost = isPureGreeting(lastPrompt) ? (_baseCost > 0 ? 1 : 0) : _baseCost + _actionCost
+      const _totalCost = parseFloat((_textCost + _imageCost).toFixed(2))
       if (_totalCost > 0) { await deductCredits(_totalCost) }
     }
   }
@@ -1239,19 +1456,31 @@ async function send(): Promise<void> {
       studioSummary = await autoInjectToStudio(aiText, lastPrompt)
       if (!S.gen || _localCancelSignal?.aborted) { _resetGenState(); const cancelMsg: ConvMsg = { role: 'ai', content: 'Process cancelled.', time: Date.now() }; cv.msgs.push(cancelMsg); appendMsg(cancelMsg); saveS(); return }
     } else {
-      if (showThinking) { finalizeSteps(); await _sleep(300); removeStepsCard() }
+      // No actions detected — finalize + remove the card and append the
+      // message immediately afterward, with no awaited gap between them.
+      if (showThinking) finalizeSteps()
       displayText = cleanAIResponse(aiText) + '\n\n> ⚠️ No actions detected.'
       const aiMsg0: ConvMsg & { _rawContent: string } = { role: 'ai', content: displayText, time: Date.now(), _rawContent: aiText }
+      removeStepsCard()
       cv.msgs.push(aiMsg0); appendMsg(aiMsg0); _resetGenState(); saveS(); return
     }
     displayText = stripAllCode(aiText)
     if (!displayText || displayText.length < 20) displayText = studioSummary?.length ? 'Successfully sent to Studio:\n' + studioSummary.map((s) => '• ' + s).join('\n') : 'Done. Check Explorer in Studio.'
-    if (!_playTestActive) { if (showThinking) { finalizeSteps(); await _sleep(400); removeStepsCard() } }
+    if (!_playTestActive) { if (showThinking) finalizeSteps() }
     else { document.getElementById('stepsCancel')?.remove() }
-  } else { displayText = cleanAIResponse(aiText); if (showThinking) { finalizeSteps(); await _sleep(300); removeStepsCard() } }
-  cv = S.convs.find((x) => x.id === S.curConv); if (!cv) { _resetGenState(); saveS(); return }
+  } else {
+    displayText = cleanAIResponse(aiText)
+    if (showThinking) finalizeSteps()
+  }
+  cv = S.convs.find((x) => x.id === S.curConv); if (!cv) { removeStepsCard(); _resetGenState(); saveS(); return }
   const aiMsg: ConvMsg & { _rawContent: string; studioSummary?: string[] } = { role: 'ai', content: displayText, time: Date.now(), _rawContent: aiText }
   if (studioSummary) aiMsg.studioSummary = studioSummary
+  // Remove the steps card and append the real message back-to-back — this
+  // is the core of the flicker fix: there is no "removeStepsCard() ...
+  // (gap) ... appendMsg()" anymore. Whatever delay existed (network,
+  // injection) already happened *before* this point, while the steps card
+  // was still visibly progressing.
+  removeStepsCard()
   cv.msgs.push(aiMsg); appendMsg(aiMsg); _resetGenState(); saveS()
 }
 
@@ -1347,11 +1576,9 @@ function getProjectName(pid: string): string | null {
 
 function updateProjectUI(): void {
   const n = S.currentProjectName
-  // Update header project pill (new page.tsx layout)
   const pill = document.getElementById('projNamePill'), pillText = document.getElementById('projNameText')
   if (n) { if (pill) { pill.style.display = 'flex'; } if (pillText) pillText.textContent = n }
   else { if (pill) pill.style.display = 'none' }
-  // Legacy chip support
   const chip = document.getElementById('sbProjChip'), cn = document.getElementById('sbProjName')
   if (chip) { chip.style.display = n ? '' : 'none'; if (cn && n) cn.textContent = n }
 }
@@ -1364,15 +1591,33 @@ function updateModelUI(): void {
   if (b) { b.textContent = (m.cost || 0) <= 0 ? 'FREE' : m.cost + ' CR'; b.style.color = (m.cost || 0) <= 0 ? 'var(--green)' : (m.cost || 0) <= 1 ? 'var(--cyan)' : (m.cost || 0) <= 3 ? 'var(--yellow)' : 'var(--pink)' }
   const ic = document.getElementById('inpMIcon') as HTMLImageElement | null
   if (ic) { ic.src = m.icon || ''; ic.style.display = m.icon ? '' : 'none' }
+  updateAttachAvailability()
 }
 
+// ── MODEL DROPDOWN — REDESIGNED MARKUP ────────────────────────────────────────
+// Cleaner structure: explicit per-row layout, badge classes mapped to the
+// `.mb-badge` rules injected in _injectUiFixStyles() above (f = free,
+// p = premium/best, s = standard/fast). Group headers get a small icon-less
+// divider rhythm via CSS only — markup just needs the right classes/text.
 function buildMDDHtml(): string {
   const curId = S.model.id; let html = ''
   MODEL_LIST.forEach((m) => {
     if (m.grp) { html += `<div class="mg">${esc(m.grp)}</div>`; return }
-    const act = m.id === curId; const bc = (m.cost || 0) <= 0 ? 'f' : m.badge === 'BEST' ? 'p' : 's'
-    const iconHtml = m.icon ? `<img src="${m.icon}" onerror="this.style.display='none'" style="width:18px;height:18px;object-fit:contain;border-radius:3px;">` : `<div style="width:18px;height:18px;border-radius:3px;background:rgba(0,229,255,.1);font-size:9px;display:flex;align-items:center;justify-content:center;color:var(--cyan);">AI</div>`
-    html += `<div class="mo${act ? ' act' : ''}" onclick="window.selModel('${m.id}')"><div class="mo-icon">${iconHtml}</div><div><div class="mo-n">${esc(m.label || m.id || '')}</div><div class="mo-s">${(m.cost || 0) <= 0 ? 'Free' : m.cost + ' CR/msg'}</div></div><span class="mb-badge ${bc}">${m.badge || (m.cost + ' CR')}</span></div>`
+    const act = m.id === curId
+    const bc = (m.cost || 0) <= 0 ? 'f' : m.badge === 'BEST' ? 'p' : 's'
+    const iconHtml = m.icon
+      ? `<img src="${m.icon}" onerror="this.style.display='none'" style="width:18px;height:18px;object-fit:contain;border-radius:4px;">`
+      : `<div style="width:18px;height:18px;border-radius:4px;background:rgba(0,229,255,.12);font-size:9px;display:flex;align-items:center;justify-content:center;color:var(--cyan);font-weight:700;">AI</div>`
+    const costLabel = (m.cost || 0) <= 0 ? 'Free' : m.cost + ' CR / msg'
+    const noImageTag = !modelSupportsImages(m)
+      ? `<span title="Does not support image input" style="display:inline-flex;align-items:center;gap:2px;color:var(--dim);font-size:8px;margin-top:2px;"><svg width="9" height="9" viewBox="0 0 24 24" stroke="currentColor" fill="none" stroke-width="2"><rect x="3" y="3" width="18" height="18" rx="2"/><circle cx="8.5" cy="8.5" r="1.5"/><line x1="3" y1="21" x2="21" y2="3"/></svg>No images</span>`
+      : ''
+    html += `<div class="mo${act ? ' act' : ''}" onclick="window.selModel('${m.id}')">` +
+      `<div class="mo-icon">${iconHtml}</div>` +
+      `<div class="mo-info"><div class="mo-n">${esc(m.label || m.id || '')}</div><div class="mo-s">${esc(costLabel)}</div>${noImageTag}</div>` +
+      `<div class="mo-right"><span class="mb-badge ${bc}">${esc(m.badge || (m.cost + ' CR'))}</span></div>` +
+      (act ? `<div class="mo-sel-dot"></div>` : '') +
+      `</div>`
   })
   return html
 }
@@ -1381,13 +1626,14 @@ function toggleMDD(e: Event): void {
   e.stopPropagation(); const dd = document.getElementById('mDD'); if (!dd) return
   dd.innerHTML = buildMDDHtml()
   const btn = document.getElementById('inpModelBtn')
-  if (btn) { const r = btn.getBoundingClientRect(); dd.style.bottom = (window.innerHeight - r.top + 4) + 'px'; dd.style.left = r.left + 'px'; dd.style.right = 'auto' }
+  if (btn) { const r = btn.getBoundingClientRect(); dd.style.bottom = (window.innerHeight - r.top + 8) + 'px'; dd.style.left = r.left + 'px'; dd.style.right = 'auto' }
   dd.classList.toggle('open')
 }
 
 function selModel(id: string): void {
   const m = MODEL_LIST.find((x) => x.id === id); if (!m || m.grp) return
-  S.model = m; updateModelUI(); const dd = document.getElementById('mDD'); if (dd) dd.classList.remove('open'); saveS()
+  S.model = m; updateModelUI(); _dropUnsupportedImageAttachments(); updateAttachAvailability()
+  const dd = document.getElementById('mDD'); if (dd) dd.classList.remove('open'); saveS()
 }
 
 // ── SUGGESTION CHIPS ──────────────────────────────────────────────────────────
@@ -1681,11 +1927,26 @@ function selectCurrentMention(): boolean {
 
 function handleFile(e: Event): void {
   const files = Array.from((e.target as HTMLInputElement).files || [])
-  files.forEach((file) => {
-    if (file.type.startsWith('image/')) {
-      const reader = new FileReader(); reader.onload = (ev) => { const d = (ev.target!.result as string); S.attachments.push({ type: 'image', name: file.name, mime: file.type, data: d.split(',')[1], preview: d }); renderAttachRow() }; reader.readAsDataURL(file)
-    } else { const reader = new FileReader(); reader.onload = (ev) => { S.attachments.push({ type: 'file', name: file.name, text: ev.target!.result as string }); renderAttachRow() }; reader.readAsText(file) }
-  })
+  const imageFiles = files.filter((f) => f.type.startsWith('image/'))
+  const otherFiles = files.filter((f) => !f.type.startsWith('image/'))
+
+  if (imageFiles.length && !modelSupportsImages(S.model)) {
+    toast(`${S.model.label || S.model.id} doesn't support image input. Switch model to attach images.`, 'var(--pink)', 3600)
+  } else if (imageFiles.length) {
+    const currentImageCount = S.attachments.filter((a) => a.type === 'image').length
+    const room = Math.max(0, MAX_IMAGE_ATTACHMENTS - currentImageCount)
+    if (room <= 0) {
+      toast(`Maximum ${MAX_IMAGE_ATTACHMENTS} images per message.`, 'var(--yellow)', 3200)
+    } else {
+      const toAdd = imageFiles.slice(0, room)
+      if (imageFiles.length > room) toast(`Only ${room} more image(s) added — ${MAX_IMAGE_ATTACHMENTS} max per message.`, 'var(--yellow)', 3600)
+      toAdd.forEach((file) => {
+        const reader = new FileReader(); reader.onload = (ev) => { const d = (ev.target!.result as string); S.attachments.push({ type: 'image', name: file.name, mime: file.type, data: d.split(',')[1], preview: d }); renderAttachRow() }; reader.readAsDataURL(file)
+      })
+    }
+  }
+
+  otherFiles.forEach((file) => { const reader = new FileReader(); reader.onload = (ev) => { S.attachments.push({ type: 'file', name: file.name, text: ev.target!.result as string }); renderAttachRow() }; reader.readAsText(file) })
   ;(e.target as HTMLInputElement).value = ''
 }
 
@@ -1812,7 +2073,7 @@ async function redeemCode(): Promise<void> {
 // ══════════════════════════════════════════════════════════════════════════════
 async function initApp(): Promise<void> {
   if (!SESSION) return
-  _injectSuggChipStyles(); updateLoader(8, UI.loaderInit)
+  _injectUiFixStyles(); _injectSuggChipStyles(); updateLoader(8, UI.loaderInit)
   S.currentProjectId = getProjectIdFromUrl(); updateLoader(22, UI.loaderLoadData)
   await loadS(); updateLoader(42, UI.loaderLoadData)
   if (S.currentProjectId) {
@@ -1839,7 +2100,6 @@ async function initApp(): Promise<void> {
   checkDailyCredits(); checkDailyOnLoad(); updateLoader(100, UI.loaderReady); setTimeout(hideLoader, 500)
   const urlp = new URLSearchParams(window.location.search)
   if (urlp.get('settings') === 'true') setTimeout(() => openSettings(), 800)
-  // Trigger a sync immediately on load to ensure credits are fresh from server
   setTimeout(() => { if (!_syncInProgress) syncToServer() }, 2000)
 }
 
@@ -1883,19 +2143,28 @@ const _inpPasteEl = document.getElementById('inp') as HTMLTextAreaElement | null
 if (_inpPasteEl) {
   _inpPasteEl.addEventListener('paste', (e: ClipboardEvent) => {
     const items = e.clipboardData?.items; if (!items) return
-    for (let i = 0; i < items.length; i++) {
-      if (items[i].type.startsWith('image/')) {
-        const file = items[i].getAsFile(); if (!file) continue
-        const reader = new FileReader()
-        reader.onload = (ev) => { const d = (ev.target!.result as string); S.attachments.push({ type: 'image', name: 'pasted_image.png', mime: file.type, data: d.split(',')[1], preview: d }); renderAttachRow() }
-        reader.readAsDataURL(file); e.preventDefault()
-      }
+    const imageItems: DataTransferItem[] = []
+    for (let i = 0; i < items.length; i++) { if (items[i].type.startsWith('image/')) imageItems.push(items[i]) }
+    if (!imageItems.length) return
+    if (!modelSupportsImages(S.model)) {
+      toast(`${S.model.label || S.model.id} doesn't support image input. Switch model to paste images.`, 'var(--pink)', 3600)
+      e.preventDefault(); return
     }
+    const currentImageCount = S.attachments.filter((a) => a.type === 'image').length
+    const room = Math.max(0, MAX_IMAGE_ATTACHMENTS - currentImageCount)
+    if (room <= 0) { toast(`Maximum ${MAX_IMAGE_ATTACHMENTS} images per message.`, 'var(--yellow)', 3200); e.preventDefault(); return }
+    if (imageItems.length > room) toast(`Only ${room} more image(s) added — ${MAX_IMAGE_ATTACHMENTS} max per message.`, 'var(--yellow)', 3600)
+    imageItems.slice(0, room).forEach((item) => {
+      const file = item.getAsFile(); if (!file) return
+      const reader = new FileReader()
+      reader.onload = (ev) => { const d = (ev.target!.result as string); S.attachments.push({ type: 'image', name: 'pasted_image.png', mime: file.type, data: d.split(',')[1], preview: d }); renderAttachRow() }
+      reader.readAsDataURL(file)
+    })
+    e.preventDefault()
   })
 }
 
 document.addEventListener('visibilitychange', () => {
-  // When user returns to tab, refresh credits from server
   if (!document.hidden && SESSION) {
     if (!_syncInProgress && !_syncDebounceTimer) syncToServer()
   }

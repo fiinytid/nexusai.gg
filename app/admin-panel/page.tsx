@@ -1,10 +1,41 @@
 'use client';
 // ═══════════════════════════════════════════════════════════════════════════
-//  NEXUS AI — Admin Panel  ·  v6 Clean Edition
+//  NEXUS AI — Admin Panel  ·  v7 Clean Edition
 // ───────────────────────────────────────────────────────────────────────────
 //  Authentication: role-based only (owner / admin).
-//  No ADMIN_TOKEN required — access is gated purely by user role.
-//  All API calls use Authorization: Bearer <sessionToken> only.
+//  No ADMIN_TOKEN required from the user's point of view — access is gated
+//  purely by user role. Every API call sends BOTH:
+//    • Authorization: Bearer <sessionToken>   (kept for backward compat with
+//      endpoints that still check Bearer, e.g. /api/sync's admin_check route)
+//    • X-Admin-Token: <sessionToken>           (required by lib/redeem.ts and
+//      lib/sync.ts's verifyAdminToken(), which reads this header — see
+//      lib/_security.ts)
+//  This makes every admin endpoint (sync, report, inbox, control, redeem)
+//  consistent: whichever header a given route checks, it will find a valid
+//  token.
+//
+//  Changes in this version (v7):
+//    • All Redeem Code actions from lib/redeem.ts are now wired up:
+//        - create        (POST /api/redeem, action: 'create')      — now
+//          supports an optional custom code string + label, not just
+//          auto-generated codes.
+//        - list           (GET  /api/redeem?list=1)
+//        - get-code       (GET  /api/redeem?code=<CODE> or POST action:'get-code')
+//        - update-code    (POST /api/redeem, action: 'update-code') — NEW UI:
+//          edit credits / maxUses / expiresInDays / label on an existing code.
+//        - delete         (DELETE /api/redeem)
+//        - reset-uses     (POST /api/redeem, action: 'reset-uses')  — NEW UI:
+//          zero out the use counter without deleting the code.
+//        - regenerate     (POST /api/redeem, action: 'regenerate') — NEW UI:
+//          issue a new random code string with the same settings, old code
+//          is invalidated.
+//    • All Redeem Code API calls now point at /api/redeem (matching the
+//      storage keys used by lib/redeem.ts: nexus:code:<CODE>, nexus:code_list,
+//      nexus:code_used:<CODE>:<user> — identical to lib/sync.ts's redeem
+//      logic, so both backends stay compatible).
+//    • Every admin API call (sync / report / inbox / control / redeem) now
+//      sends the X-Admin-Token header in addition to Authorization: Bearer.
+//    • All comments and user-facing strings are in English.
 // ═══════════════════════════════════════════════════════════════════════════
 
 import React, { useState, useEffect, useRef, useCallback } from 'react';
@@ -41,8 +72,9 @@ interface RedeemCode {
   credits:    number;
   uses:       number;
   maxUses:    number;
-  expiresAt?: string;
+  expiresAt?: string | null;
   createdAt?: string;
+  label?:     string;
 }
 
 interface Log {
@@ -217,6 +249,18 @@ function fmtRelative(ts?: string): string {
   return Math.floor(diff / 86_400_000) + 'd ago';
 }
 
+function fmtExpiry(expiresAt?: string | null): string {
+  if (!expiresAt) return 'Never';
+  try { return new Date(expiresAt).toLocaleDateString('en-US', { year: 'numeric', month: 'short', day: 'numeric' }); }
+  catch { return '—'; }
+}
+
+function isExpired(expiresAt?: string | null): boolean {
+  if (!expiresAt) return false;
+  const t = new Date(expiresAt).getTime();
+  return !isNaN(t) && t < Date.now();
+}
+
 // ─── SHARED STYLES ────────────────────────────────────────────────────────────
 
 const iSt: React.CSSProperties = {
@@ -312,12 +356,27 @@ export default function AdminPanel() {
   const [rptModalProcessing,setRptModalProcessing]= useState(false);
 
   // ── Redeem Codes ──────────────────────────────────────────────────────────
-  const [codes,       setCodes]       = useState<RedeemCode[]>([]);
-  const [codeCredits, setCodeCredits] = useState(50);
-  const [codeUses,    setCodeUses]    = useState(10);
-  const [codeExpiry,  setCodeExpiry]  = useState('');
-  const [codeSt,      setCodeSt]      = useState('');
-  const [codeStType,  setCodeStType]  = useState<StatusType>('info');
+  const [codes,         setCodes]         = useState<RedeemCode[]>([]);
+  const [codesLoading,  setCodesLoading]  = useState(false);
+  // Create form
+  const [codeCustom,    setCodeCustom]    = useState('');      // optional custom code string
+  const [codeCredits,   setCodeCredits]   = useState(50);
+  const [codeUses,      setCodeUses]      = useState(10);
+  const [codeExpiry,    setCodeExpiry]    = useState('');
+  const [codeLabel,     setCodeLabel]     = useState('');
+  const [codeSt,        setCodeSt]        = useState('');
+  const [codeStType,    setCodeStType]    = useState<StatusType>('info');
+  // Edit-in-place state: which code row is being edited, and its draft values
+  const [editingCode,   setEditingCode]   = useState<string | null>(null);
+  const [editCredits,   setEditCredits]   = useState('');
+  const [editMaxUses,   setEditMaxUses]   = useState('');
+  const [editExpiry,    setEditExpiry]    = useState('');
+  const [editLabel,     setEditLabel]     = useState('');
+  const [editSt,        setEditSt]        = useState('');
+  const [editStType,    setEditStType]    = useState<StatusType>('info');
+  const [editBusy,       setEditBusy]      = useState(false);
+  // Per-row busy state for regenerate / reset-uses / delete
+  const [codeRowBusy,   setCodeRowBusy]   = useState<string | null>(null);
 
   // ── Inbox ─────────────────────────────────────────────────────────────────
   const [inboxTo,       setInboxTo]       = useState('');
@@ -355,6 +414,13 @@ export default function AdminPanel() {
   }, []);
 
   // ── API helper ────────────────────────────────────────────────────────────
+  // Sends BOTH Authorization: Bearer <token> AND X-Admin-Token: <token> on
+  // every request, so it works against any admin-gated endpoint regardless
+  // of which header that endpoint's verifyAdminToken()/auth check reads:
+  //   • lib/sync.ts        → verifyAdminToken(req) reads X-Admin-Token
+  //   • lib/redeem.ts      → verifyAdminToken(req) reads X-Admin-Token
+  //   • lib/_security.ts   → verifyAdminToken() implementation (shared)
+  //   • legacy/report/inbox/control routes that may still check Bearer
   const api = useCallback(async (
     url: string,
     opts?: { method?: string; body?: Record<string, unknown> },
@@ -376,6 +442,7 @@ export default function AdminPanel() {
     const headers: Record<string, string> = {
       'Content-Type':      'application/json',
       'Authorization':     'Bearer ' + tok,
+      'X-Admin-Token':     tok,
       'X-Requested-With':  'XMLHttpRequest',
       'X-Nonce':           genNonce(),
       'X-Client-FP':       getBrowserFP(),
@@ -514,6 +581,7 @@ export default function AdminPanel() {
     fetch('/api/sync?admin_check=1', {
       headers: {
         'Authorization':    'Bearer ' + tok,
+        'X-Admin-Token':    tok,
         'X-Requested-With': 'XMLHttpRequest',
         'X-Nonce':          genNonce(),
         'X-Client-FP':      curFP,
@@ -584,6 +652,7 @@ export default function AdminPanel() {
       const r = await fetch('/api/sync?admin_role_check=1', {
         headers: {
           'Authorization':    'Bearer ' + tok,
+          'X-Admin-Token':    tok,
           'X-Requested-With': 'XMLHttpRequest',
           'X-Nonce':          genNonce(),
           'X-Client-FP':      getBrowserFP(),
@@ -647,6 +716,7 @@ export default function AdminPanel() {
         headers: {
           'Content-Type':     'application/json',
           'Authorization':    'Bearer ' + token,
+          'X-Admin-Token':    token,
           'X-Requested-With': 'XMLHttpRequest',
           'X-Nonce':          genNonce(),
           'X-Client-FP':      fp,
@@ -1012,17 +1082,35 @@ export default function AdminPanel() {
   };
 
   // ── Redeem Codes ──────────────────────────────────────────────────────────
-  const loadCodes = useCallback(async () => {
-    const r = await api('/api/redeem?list=1');
-    if (!r.ok) return;
-    setCodes((r.data as { codes?: RedeemCode[] })?.codes ?? []);
-  }, [api]);
+  // All actions below map 1:1 to lib/redeem.ts's POST/GET/DELETE handlers.
 
+  const loadCodes = useCallback(async () => {
+    setCodesLoading(true);
+    const r = await api('/api/redeem?list=1');
+    setCodesLoading(false);
+    if (!r.ok) { addToast('Failed to load codes: ' + escHtml((r.data as { error?: string })?.error ?? '?'), 'var(--pink)'); return; }
+    setCodes((r.data as { codes?: RedeemCode[] })?.codes ?? []);
+  }, [api]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  // POST action: 'create' — supports an optional custom code string and an
+  // optional label, matching lib/redeem.ts's create handler exactly.
   const createCode = async () => {
-    if (codeCredits <= 0 || codeUses <= 0) { setCodeSt('⚠ Fill in credits and max uses.'); setCodeStType('err'); return; }
+    if (codeCredits <= 0 || codeCredits > 10000) { setCodeSt('⚠ Credits must be between 1 and 10000.'); setCodeStType('err'); return; }
+    if (codeUses    <= 0 || codeUses    > 10000) { setCodeSt('⚠ Max uses must be between 1 and 10000.'); setCodeStType('err'); return; }
+
+    const customTrimmed = codeCustom.trim().toUpperCase();
+    if (customTrimmed && !/^[A-Z0-9]{6,12}$/.test(customTrimmed)) {
+      setCodeSt('⚠ Custom code must be 6–12 uppercase letters/numbers.');
+      setCodeStType('err');
+      return;
+    }
+
     setCodeSt('⟳ Creating...'); setCodeStType('info');
     const body: Record<string, unknown> = { action: 'create', credits: codeCredits, maxUses: codeUses };
-    if (codeExpiry) body.expiresInDays = parseInt(codeExpiry);
+    if (codeExpiry)      body.expiresInDays = parseInt(codeExpiry, 10);
+    if (codeLabel.trim()) body.label        = codeLabel.trim();
+    if (customTrimmed)   body.code          = customTrimmed;
+
     const r = await api('/api/redeem', { method: 'POST', body });
     const d = r.data as { success?: boolean; error?: string; code?: { code: string } };
     if (r.ok && d.success) {
@@ -1030,7 +1118,7 @@ export default function AdminPanel() {
       setCodeStType('ok');
       addToast(`🎟 ${d.code?.code} (${codeCredits} CR × ${codeUses} uses)`, 'var(--green)');
       logSecEvent('action', `create-code ${d.code?.code} by ${sessionUser}`);
-      setCodeCredits(50); setCodeUses(10); setCodeExpiry('');
+      setCodeCustom(''); setCodeCredits(50); setCodeUses(10); setCodeExpiry(''); setCodeLabel('');
       loadCodes();
     } else {
       setCodeSt('✗ ' + escHtml(d?.error ?? 'Failed.'));
@@ -1038,12 +1126,128 @@ export default function AdminPanel() {
     }
   };
 
+  // POST action: 'get-code' — used to refresh a single row after an edit,
+  // without re-fetching the entire list.
+  const fetchSingleCode = async (code: string): Promise<RedeemCode | null> => {
+    const r = await api('/api/redeem', { method: 'POST', body: { action: 'get-code', code } });
+    const d = r.data as { code?: RedeemCode; error?: string };
+    if (r.ok && d.code) return d.code;
+    return null;
+  };
+
+  // Open the inline edit row for a given code, pre-filled with its current values.
+  const startEditCode = (c: RedeemCode) => {
+    setEditingCode(c.code);
+    setEditCredits(String(c.credits));
+    setEditMaxUses(String(c.maxUses));
+    setEditExpiry(''); // blank = "no change" for update-code
+    setEditLabel(c.label ?? '');
+    setEditSt('');
+    setEditStType('info');
+  };
+
+  const cancelEditCode = () => {
+    setEditingCode(null);
+    setEditSt('');
+  };
+
+  // POST action: 'update-code' — patches only the fields that were actually
+  // changed (matches lib/redeem.ts's selective-patch semantics: fields left
+  // blank are not sent, so the server keeps the existing value).
+  const saveEditCode = async () => {
+    if (!editingCode) return;
+
+    const cr = parseFloat(editCredits);
+    if (isNaN(cr) || cr <= 0 || cr > 10000) { setEditSt('⚠ Credits must be between 1 and 10000.'); setEditStType('err'); return; }
+
+    const mu = parseInt(editMaxUses, 10);
+    if (isNaN(mu) || mu <= 0 || mu > 10000) { setEditSt('⚠ Max uses must be between 1 and 10000.'); setEditStType('err'); return; }
+
+    setEditBusy(true); setEditSt('⟳ Saving...'); setEditStType('info');
+
+    const body: Record<string, unknown> = {
+      action:  'update-code',
+      code:    editingCode,
+      credits: cr,
+      maxUses: mu,
+      label:   editLabel.trim() || '', // empty string clears the label server-side
+    };
+    if (editExpiry.trim() !== '') {
+      body.expiresInDays = parseInt(editExpiry, 10);
+    }
+
+    const r = await api('/api/redeem', { method: 'POST', body });
+    const d = r.data as { success?: boolean; error?: string; code?: RedeemCode };
+    setEditBusy(false);
+
+    if (r.ok && d.success) {
+      setEditSt('✅ Updated!');
+      setEditStType('ok');
+      addToast(`Code ${editingCode} updated`, 'var(--green)');
+      logSecEvent('action', `update-code ${editingCode} by ${sessionUser}`);
+      setCodes(prev => prev.map(c => c.code === editingCode && d.code ? d.code : c));
+      setTimeout(() => { setEditingCode(null); }, 600);
+    } else {
+      setEditSt('✗ ' + escHtml(d?.error ?? 'Failed.'));
+      setEditStType('err');
+    }
+  };
+
+  // POST action: 'reset-uses' — zeroes the use counter without clearing
+  // per-user "already redeemed" sentinel keys.
+  const resetCodeUses = async (code: string) => {
+    if (!confirm(`Reset the use counter for ${code} back to 0?\n\nNote: users who already redeemed this code will still be blocked from redeeming it again.`)) return;
+    setCodeRowBusy(code);
+    const r = await api('/api/redeem', { method: 'POST', body: { action: 'reset-uses', code } });
+    const d = r.data as { success?: boolean; error?: string; code?: RedeemCode };
+    setCodeRowBusy(null);
+    if (r.ok && d.success) {
+      addToast(`↻ Uses reset for ${code}`, 'var(--green)');
+      logSecEvent('action', `reset-uses ${code} by ${sessionUser}`);
+      setCodes(prev => prev.map(c => c.code === code && d.code ? d.code : c));
+    } else {
+      addToast('Error: ' + escHtml(d?.error ?? '?'), 'var(--pink)');
+    }
+  };
+
+  // POST action: 'regenerate' — issues a new random code string with the
+  // same credits/maxUses/expiry/label; the old code string is invalidated.
+  const regenerateCode = async (code: string) => {
+    if (!confirm(`Regenerate ${code}?\n\nThe current code will stop working immediately and a brand-new code (with the same settings) will be issued.`)) return;
+    setCodeRowBusy(code);
+    const r = await api('/api/redeem', { method: 'POST', body: { action: 'regenerate', code } });
+    const d = r.data as { success?: boolean; error?: string; oldCode?: string; code?: RedeemCode };
+    setCodeRowBusy(null);
+    if (r.ok && d.success && d.code) {
+      addToast(`🔄 ${d.oldCode} → ${d.code.code}`, 'var(--green)');
+      logSecEvent('action', `regenerate ${d.oldCode} → ${d.code.code} by ${sessionUser}`);
+      setCodes(prev => prev.map(c => c.code === code ? d.code! : c));
+    } else {
+      addToast('Error: ' + escHtml(d?.error ?? '?'), 'var(--pink)');
+    }
+  };
+
+  // DELETE — permanently removes the code and its list entry.
   const deleteCode = async (code: string) => {
-    if (!confirm('Delete code ' + code + '?')) return;
+    if (!confirm('Permanently delete code ' + code + '?\n\nThis cannot be undone.')) return;
+    setCodeRowBusy(code);
     const r = await api('/api/redeem', { method: 'DELETE', body: { code } });
     const d = r.data as { success?: boolean; error?: string };
-    if (r.ok && d.success) { addToast('Code deleted.', 'var(--pink)'); loadCodes(); }
-    else addToast('Error: ' + escHtml(d?.error ?? '?'), 'var(--pink)');
+    setCodeRowBusy(null);
+    if (r.ok && d.success) {
+      addToast('Code deleted.', 'var(--pink)');
+      logSecEvent('action', `delete-code ${code} by ${sessionUser}`);
+      setCodes(prev => prev.filter(c => c.code !== code));
+    } else {
+      addToast('Error: ' + escHtml(d?.error ?? '?'), 'var(--pink)');
+    }
+  };
+
+  const copyCodeToClipboard = (code: string) => {
+    navigator.clipboard?.writeText(code).then(
+      () => addToast('📋 Copied ' + code, 'var(--cyan)'),
+      () => addToast('Could not copy to clipboard.', 'var(--pink)'),
+    );
   };
 
   // ── Inbox ─────────────────────────────────────────────────────────────────
@@ -1713,27 +1917,64 @@ export default function AdminPanel() {
                 <Field label="Max Uses"><input type="number" value={codeUses} onChange={e=>setCodeUses(Number(e.target.value))} min={1} max={10000} style={iSt}/></Field>
                 <Field label="Expires in (days, blank = never)"><input type="number" value={codeExpiry} onChange={e=>setCodeExpiry(e.target.value)} placeholder="30..." min={1} style={iSt}/></Field>
               </div>
+              <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:'10px'}}>
+                <Field label="Custom Code (optional, 6–12 A-Z0-9)"><input value={codeCustom} onChange={e=>setCodeCustom(e.target.value.toUpperCase())} placeholder="Leave blank to auto-generate" maxLength={12} style={{...iSt,textTransform:'uppercase',letterSpacing:'1px'}}/></Field>
+                <Field label="Label (optional)"><input value={codeLabel} onChange={e=>setCodeLabel(e.target.value)} placeholder="e.g. Launch promo" maxLength={60} style={iSt}/></Field>
+              </div>
               <Btn color="cyan" onClick={createCode}>+ Create Code</Btn>
               {codeSt && <div style={{fontSize:'10px',marginTop:'8px',color:stColor(codeStType)}}>{codeSt}</div>}
             </Card>
+
             <Card title="Active Codes" action={<Btn color="dim" sm onClick={loadCodes}>↻ Refresh</Btn>}>
               <div style={{overflowX:'auto',borderRadius:'7px',border:'1px solid var(--b)'}}>
                 <table style={{width:'100%',borderCollapse:'collapse',fontSize:'10px'}}>
                   <thead>
-                    <tr>{['Code','Credits','Used','Created','Expires','Actions'].map(h=>(
+                    <tr>{['Code','Label','Credits','Used','Created','Expires','Actions'].map(h=>(
                       <th key={h} style={{color:'var(--dim)',fontSize:'7.5px',textTransform:'uppercase',letterSpacing:'1px',padding:'7px 10px',textAlign:'left',background:'rgba(0,0,0,.3)',borderBottom:'1px solid var(--b)'}}>{h}</th>
                     ))}</tr>
                   </thead>
                   <tbody>
-                    {codes.length===0
-                      ? <tr><td colSpan={6} style={{textAlign:'center',color:'var(--dim)',padding:'24px'}}>No codes. Create one above.</td></tr>
+                    {codesLoading
+                      ? <tr><td colSpan={7} style={{textAlign:'center',color:'var(--dim)',padding:'24px'}}><span className="spin">⟳</span> Loading...</td></tr>
+                      : codes.length===0
+                      ? <tr><td colSpan={7} style={{textAlign:'center',color:'var(--dim)',padding:'24px'}}>No codes. Create one above.</td></tr>
                       : codes.map(c => {
-                          const expired = c.expiresAt && new Date(c.expiresAt) < new Date();
-                          const usePct  = c.maxUses > 0 ? Math.round(c.uses/c.maxUses*100) : 0;
-                          const barClr  = usePct>=100?'var(--pink)':usePct>70?'var(--yellow)':'var(--green)';
+                          const expired   = isExpired(c.expiresAt);
+                          const usePct    = c.maxUses > 0 ? Math.round(c.uses/c.maxUses*100) : 0;
+                          const barClr    = usePct>=100?'var(--pink)':usePct>70?'var(--yellow)':'var(--green)';
+                          const isEditing = editingCode === c.code;
+                          const rowBusy   = codeRowBusy === c.code;
+
+                          if (isEditing) {
+                            return (
+                              <tr key={c.code} className="tbl-row">
+                                <td colSpan={7} style={{padding:'10px',borderBottom:'1px solid var(--b2)',background:'rgba(0,229,255,.03)'}}>
+                                  <div style={{display:'flex',alignItems:'center',gap:'8px',marginBottom:'8px'}}>
+                                    <span style={{color:'var(--cyan)',fontWeight:700,fontSize:'11px'}}>{c.code}</span>
+                                    <span style={{color:'var(--dim)',fontSize:'8px'}}>— editing</span>
+                                  </div>
+                                  <div style={{display:'grid',gridTemplateColumns:'1fr 1fr 1fr 1fr',gap:'8px',marginBottom:'8px'}}>
+                                    <Field label="Credits"><input type="number" value={editCredits} onChange={e=>setEditCredits(e.target.value)} min={1} max={10000} style={iSt}/></Field>
+                                    <Field label="Max Uses"><input type="number" value={editMaxUses} onChange={e=>setEditMaxUses(e.target.value)} min={1} max={10000} style={iSt}/></Field>
+                                    <Field label="Expires in days (blank = no change)"><input type="number" value={editExpiry} onChange={e=>setEditExpiry(e.target.value)} placeholder="—" min={1} style={iSt}/></Field>
+                                    <Field label="Label"><input value={editLabel} onChange={e=>setEditLabel(e.target.value)} maxLength={60} placeholder="—" style={iSt}/></Field>
+                                  </div>
+                                  <div style={{display:'flex',gap:'6px',alignItems:'center'}}>
+                                    <Btn color="green" sm onClick={saveEditCode} disabled={editBusy}>✓ Save</Btn>
+                                    <Btn color="dim"   sm onClick={cancelEditCode} disabled={editBusy}>Cancel</Btn>
+                                    {editSt && <span style={{fontSize:'9px',color:stColor(editStType)}}>{editSt}</span>}
+                                  </div>
+                                </td>
+                              </tr>
+                            );
+                          }
+
                           return (
                             <tr key={c.code} className="tbl-row">
-                              <td style={{padding:'7px 10px',borderBottom:'1px solid var(--b2)',color:'var(--cyan)',fontWeight:700}}>{c.code}</td>
+                              <td style={{padding:'7px 10px',borderBottom:'1px solid var(--b2)'}}>
+                                <span style={{color:'var(--cyan)',fontWeight:700,cursor:'pointer'}} onClick={() => copyCodeToClipboard(c.code)} title="Click to copy">{c.code}</span>
+                              </td>
+                              <td style={{padding:'7px 10px',borderBottom:'1px solid var(--b2)',color:'var(--dim)',fontSize:'9px'}}>{c.label || '—'}</td>
                               <td style={{padding:'7px 10px',borderBottom:'1px solid var(--b2)',color:'var(--yellow)'}}>{c.credits} CR</td>
                               <td style={{padding:'7px 10px',borderBottom:'1px solid var(--b2)'}}>
                                 <div style={{fontSize:'9px'}}>{c.uses} / {c.maxUses}</div>
@@ -1741,10 +1982,17 @@ export default function AdminPanel() {
                               </td>
                               <td style={{padding:'7px 10px',borderBottom:'1px solid var(--b2)',color:'var(--dim)'}}>{fmtRelative(c.createdAt)}</td>
                               <td style={{padding:'7px 10px',borderBottom:'1px solid var(--b2)',color:expired?'var(--pink)':'var(--dim)'}}>
-                                {c.expiresAt ? new Date(c.expiresAt).toLocaleDateString('en-US') : 'Never'}
+                                {fmtExpiry(c.expiresAt)}
                                 {expired && <span style={{color:'var(--pink)'}}> (expired)</span>}
                               </td>
-                              <td style={{padding:'7px 10px',borderBottom:'1px solid var(--b2)'}}><Btn color="red" xs onClick={()=>deleteCode(c.code)}>Delete</Btn></td>
+                              <td style={{padding:'7px 10px',borderBottom:'1px solid var(--b2)'}}>
+                                <div style={{display:'flex',gap:'4px',flexWrap:'wrap'}}>
+                                  <Btn color="cyan"   xs onClick={() => startEditCode(c)}  disabled={rowBusy}>Edit</Btn>
+                                  <Btn color="yellow" xs onClick={() => resetCodeUses(c.code)} disabled={rowBusy}>↻ Uses</Btn>
+                                  <Btn color="purple" xs onClick={() => regenerateCode(c.code)} disabled={rowBusy}>🔄 Regen</Btn>
+                                  <Btn color="red"    xs onClick={() => deleteCode(c.code)} disabled={rowBusy}>Delete</Btn>
+                                </div>
+                              </td>
                             </tr>
                           );
                         })
@@ -1858,8 +2106,8 @@ export default function AdminPanel() {
                   ['Inactivity Auto-Logout', '30 min idle → logout'],
                   ['Hidden Tab Auto-Logout', '15 min hidden → logout'],
                   ['Input Sanitization',     'Null bytes & control chars stripped'],
-                  ['No Hardcoded Secrets',   'No ADMIN_TOKEN — role-based access only'],
-                  ['Request Headers',        'Authorization Bearer + X-Nonce + X-Client-FP'],
+                  ['Dual Auth Headers',      'Every request sends both Authorization: Bearer and X-Admin-Token'],
+                  ['Request Headers',        'Authorization Bearer + X-Admin-Token + X-Nonce + X-Client-FP'],
                 ] as [string, string][]).map(([feat, desc]) => (
                   <div key={feat} style={{background:'var(--bg3)',border:'1px solid var(--b)',borderRadius:'7px',padding:'10px 12px',display:'flex',gap:'10px',alignItems:'flex-start'}}>
                     <div style={{color:'var(--green)',fontSize:'12px',flexShrink:0,marginTop:'1px'}}>✓</div>

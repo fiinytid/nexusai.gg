@@ -53,9 +53,26 @@ export const upsertSession = internalMutation({
 export const touchSession = internalMutation({
   args: { username: v.string() },
   handler: async (ctx, { username }) => {
-    const s = await ctx.db.query("sessions")
-      .withIndex("by_username", q => q.eq("username", username)).first();
-    if (s) await ctx.db.patch(s._id, { lastSeen: Date.now(), cmdCount: (s.cmdCount || 0) + 1 });
+    // Same high-frequency-write situation as bumpPoll above: this fires on
+    // every plugin poll that doesn't carry a session_token. A patch (not
+    // insert) only, so it can never create a duplicate row — but it can
+    // still lose a race and throw an OCC conflict if two polls for the
+    // same username land at nearly the same instant. One manual retry
+    // keeps that from bubbling up and failing the whole GET /poll request
+    // over what is just liveness/counter bookkeeping.
+    try {
+      const s = await ctx.db.query("sessions")
+        .withIndex("by_username", q => q.eq("username", username)).first();
+      if (s) await ctx.db.patch(s._id, { lastSeen: Date.now(), cmdCount: (s.cmdCount || 0) + 1 });
+    } catch (_err) {
+      try {
+        const s2 = await ctx.db.query("sessions")
+          .withIndex("by_username", q => q.eq("username", username)).first();
+        if (s2) await ctx.db.patch(s2._id, { lastSeen: Date.now(), cmdCount: (s2.cmdCount || 0) + 1 });
+      } catch {
+        // Best-effort: skip silently, self-corrects on the next poll.
+      }
+    }
   },
 });
 
@@ -166,10 +183,67 @@ export const getLastPoll = internalQuery({
 export const bumpPoll = internalMutation({
   args: { username: v.string() },
   handler: async (ctx, { username }) => {
-    const p = await ctx.db.query("polls")
-      .withIndex("by_username", q => q.eq("username", username)).first();
-    if (p) await ctx.db.patch(p._id, { lastPoll: Date.now() });
-    else    await ctx.db.insert("polls", { username, lastPoll: Date.now() });
+    // bumpPoll fires on every plugin poll (high frequency), so it is the
+    // single most likely mutation to collide with itself when more than
+    // one Studio instance / plugin session polls under the same username
+    // at nearly the same moment. The original read-then-patch-or-insert
+    // pattern has a window between the query and the write where a
+    // concurrent call can insert first, causing either (a) an OCC write
+    // conflict on the same document, or (b) — worse — two "polls" rows
+    // for the same username if both calls see `p` as null and both insert.
+    //
+    // Fix: treat this as a single best-effort "upsert latest timestamp"
+    // operation. If the initial read is stale by the time we go to write
+    // (someone else inserted/patched in between), re-read once and patch
+    // the row that now exists instead of inserting a duplicate. lastPoll
+    // is liveness-tracking data only (used for an 8s "is plugin online"
+    // window) — losing a single update to a race is harmless, but ending
+    // up with two rows per username, or throwing and failing the whole
+    // GET /poll response, is not.
+    const now = Date.now();
+    try {
+      const p = await ctx.db.query("polls")
+        .withIndex("by_username", q => q.eq("username", username)).first();
+      if (p) {
+        await ctx.db.patch(p._id, { lastPoll: now });
+      } else {
+        await ctx.db.insert("polls", { username, lastPoll: now });
+      }
+    } catch (_err) {
+      // Lost a race against a concurrent bumpPoll for the same username.
+      // Re-read (the other call's write is now committed) and patch the
+      // row that exists rather than retrying the original insert, which
+      // would either conflict again or create a duplicate row.
+      try {
+        const p2 = await ctx.db.query("polls")
+          .withIndex("by_username", q => q.eq("username", username)).first();
+        if (p2) await ctx.db.patch(p2._id, { lastPoll: now });
+        else    await ctx.db.insert("polls", { username, lastPoll: now });
+      } catch {
+        // Best-effort: if it still fails, skip silently. A missed
+        // liveness timestamp on one poll cycle self-corrects on the very
+        // next poll a few seconds later.
+      }
+    }
+  },
+});
+
+// De-duplication safeguard: if two "polls" rows ever exist for the same
+// username (e.g. from before this fix shipped, or any other race), keep
+// only the most recently updated one. getLastPoll already takes .first()
+// off an index lookup, so a stray duplicate wouldn't break reads, but
+// cleaning up keeps the table honest. Not called automatically — run
+// manually from the Convex dashboard / a one-off script if you suspect
+// duplicates accumulated before this fix.
+export const dedupePollRows = internalMutation({
+  args: { username: v.string() },
+  handler: async (ctx, { username }) => {
+    const rows = await ctx.db.query("polls")
+      .withIndex("by_username", q => q.eq("username", username)).collect();
+    if (rows.length <= 1) return 0;
+    rows.sort((a, b) => b.lastPoll - a.lastPoll);
+    for (const stale of rows.slice(1)) await ctx.db.delete(stale._id);
+    return rows.length - 1;
   },
 });
 

@@ -37,8 +37,8 @@ const ALLOWED_ORIGINS = new Set<string>([
   "https://nexusai-rbx.vercel.app",
   "https://nexusai.gg",
   "http://localhost:3000",
-  "https://fine-setter-131.convex.site",
-  "https://brazen-lapwing-697.convex.site",
+  "https://fine-setter-131.convex.site", // production
+  "https://brazen-lapwing-697.convex.site", // development
 ]);
 
 const VALID_TOOLBOX_TYPES = new Set<string>([

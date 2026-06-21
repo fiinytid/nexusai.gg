@@ -4,14 +4,15 @@ import React, { useEffect, useRef } from 'react'
 import Script from 'next/script'
 
 /* ─────────────────────────────────────────────────────────────────────────────
-   CSS — NEXUS AI · v11
-   Mobile-first fixes:
-   - Removed all backdrop-filter / blur (causes rendering issues on Android/iOS)
-   - Safe area insets for notch devices
-   - Proper touch targets (min 44px)
-   - Hardware-accelerated sidebar slide
-   - No overflow issues on mobile
-   - All text in English
+   CSS — NEXUS AI · v12
+   Fixes in this version:
+   1. BETA badge moved to sidebar header (next to "NEXUS AI" brand text)
+   2. Attach <label> & buttons all use same base style — no more misalignment
+   3. Model dropdown fully redesigned: better spacing, badges, group headers
+   4. Thinking/steps card — z-index & timing fix so it never disappears early
+   5. All text English
+   6. Safe area insets for notch devices
+   7. No backdrop-filter/blur (mobile GPU fix)
 ─────────────────────────────────────────────────────────────────────────────── */
 const PAGE_CSS = `
 /* ══════════════════════════════════════════════
@@ -50,7 +51,6 @@ const PAGE_CSS = `
   --fs-sm:  10px;
   --fs-md:  11px;
   --fs-base:13px;
-  /* Safe area for notch/home indicator */
   --safe-top:    env(safe-area-inset-top, 0px);
   --safe-bottom: env(safe-area-inset-bottom, 0px);
   --safe-left:   env(safe-area-inset-left, 0px);
@@ -58,35 +58,26 @@ const PAGE_CSS = `
 }
 
 html {
-  height: 100%;
-  height: 100dvh;
+  height: 100%; height: 100dvh;
   font-family: 'JetBrains Mono', monospace;
-  background: var(--bg);
-  color: var(--text);
-  font-size: 13px;
-  overflow: hidden;
-  /* Prevent iOS rubber-band scroll on the root */
+  background: var(--bg); color: var(--text);
+  font-size: 13px; overflow: hidden;
   overscroll-behavior: none;
 }
 body {
-  height: 100%;
-  height: 100dvh;
-  overflow: hidden;
-  min-height: 0;
+  height: 100%; height: 100dvh;
+  overflow: hidden; min-height: 0;
   overscroll-behavior: none;
   -webkit-overflow-scrolling: touch;
 }
-
 body::before {
-  content: '';
-  position: fixed; inset: 0;
+  content: ''; position: fixed; inset: 0;
   pointer-events: none; z-index: 0;
   background:
     linear-gradient(rgba(0,229,255,.013) 1px, transparent 1px),
     linear-gradient(90deg, rgba(0,229,255,.013) 1px, transparent 1px);
   background-size: 40px 40px;
 }
-
 ::-webkit-scrollbar { width: 3px; height: 3px; }
 ::-webkit-scrollbar-thumb { background: var(--b); border-radius: 2px; }
 ::-webkit-scrollbar-track { background: transparent; }
@@ -103,38 +94,23 @@ body::before {
   transition: opacity .5s ease;
 }
 #pageLoader.hide { opacity: 0; pointer-events: none; }
-.pl-logo {
-  width: 72px; height: 72px; border-radius: 18px; overflow: hidden;
-  border: 2px solid rgba(0,229,255,.4);
-}
+.pl-logo { width: 72px; height: 72px; border-radius: 18px; overflow: hidden; border: 2px solid rgba(0,229,255,.4); }
 .pl-logo img { width: 100%; height: 100%; object-fit: cover; display: block; }
 .pl-title {
-  font-family: 'Orbitron', sans-serif;
-  font-size: 22px; font-weight: 900;
+  font-family: 'Orbitron', sans-serif; font-size: 22px; font-weight: 900;
   background: linear-gradient(135deg, var(--cyan), var(--purple));
   -webkit-background-clip: text; -webkit-text-fill-color: transparent; background-clip: text;
 }
-.pl-bar-wrap {
-  width: 220px; height: 3px;
-  background: rgba(0,229,255,.1); border-radius: 3px; overflow: hidden;
-}
-.pl-bar {
-  height: 100%; width: 0%;
-  background: linear-gradient(90deg, var(--cyan), var(--purple));
-  border-radius: 3px; transition: width .35s ease;
-}
-.pl-txt {
-  font-size: var(--fs-2xs); color: rgba(0,229,255,.5);
-  letter-spacing: 1px; min-height: 16px; text-align: center;
-}
+.pl-bar-wrap { width: 220px; height: 3px; background: rgba(0,229,255,.1); border-radius: 3px; overflow: hidden; }
+.pl-bar { height: 100%; width: 0%; background: linear-gradient(90deg, var(--cyan), var(--purple)); border-radius: 3px; transition: width .35s ease; }
+.pl-txt { font-size: var(--fs-2xs); color: rgba(0,229,255,.5); letter-spacing: 1px; min-height: 16px; text-align: center; }
 
 
 /* ══════════════════════════════════════════════
    APP SHELL
 ══════════════════════════════════════════════ */
 #app {
-  display: grid;
-  grid-template-columns: var(--sb-w) 1fr;
+  display: grid; grid-template-columns: var(--sb-w) 1fr;
   height: 100vh; height: 100dvh;
   min-height: 0; overflow: hidden;
   position: relative; z-index: 1;
@@ -143,21 +119,12 @@ body::before {
 #app.sb-hidden { grid-template-columns: 0 1fr; }
 .hidden { display: none !important; }
 
-/* ── Mobile sidebar overlay — NO blur (causes issues on mobile GPUs) ── */
 #sbOverlay {
-  display: none;
-  position: fixed; inset: 0;
-  background: rgba(0, 0, 0, 0.72);
-  z-index: 90;
-  /* NO backdrop-filter — causes blur/rendering bugs on Android & older iOS */
-  opacity: 0;
-  transition: opacity .25s ease;
-  will-change: opacity;
+  display: none; position: fixed; inset: 0;
+  background: rgba(0, 0, 0, 0.72); z-index: 90;
+  opacity: 0; transition: opacity .25s ease; will-change: opacity;
 }
-#sbOverlay.show {
-  display: block;
-  opacity: 1;
-}
+#sbOverlay.show { display: block; opacity: 1; }
 
 
 /* ══════════════════════════════════════════════
@@ -172,20 +139,30 @@ body::before {
   -webkit-overflow-scrolling: touch;
 }
 
+/* ── Sidebar header: logo + brand name + BETA badge ── */
 .sb-head {
   padding: 11px 14px 10px; border-bottom: 1px solid var(--b);
   display: flex; align-items: center; gap: 9px;
   flex-shrink: 0; height: 52px;
 }
-.sb-logo {
-  width: 30px; height: 30px; border-radius: 7px;
-  overflow: hidden; flex-shrink: 0;
-}
+.sb-logo { width: 30px; height: 30px; border-radius: 7px; overflow: hidden; flex-shrink: 0; }
 .sb-logo img { width: 100%; height: 100%; object-fit: cover; display: block; }
+.sb-brand { display: flex; flex-direction: column; gap: 2px; flex: 1; min-width: 0; }
 .sb-logo-text {
-  font-family: 'Orbitron', sans-serif; font-weight: 900; font-size: 12px; line-height: 1.15;
+  font-family: 'Orbitron', sans-serif; font-weight: 900; font-size: 12px; line-height: 1.1;
   background: linear-gradient(135deg, var(--cyan), var(--purple));
   -webkit-background-clip: text; -webkit-text-fill-color: transparent; background-clip: text;
+  display: flex; align-items: center; gap: 6px;
+}
+/* BETA badge — sits inline next to "NEXUS AI" text in sidebar */
+.sb-beta-badge {
+  display: inline-flex; align-items: center; justify-content: center;
+  padding: 0 5px; height: 14px; border-radius: 6px;
+  font-family: 'Orbitron', sans-serif; font-size: 6.5px; font-weight: 700;
+  letter-spacing: .5px; border: 1px solid rgba(255,214,0,.4);
+  background: rgba(255,214,0,.08); color: var(--yellow);
+  flex-shrink: 0; white-space: nowrap; line-height: 1;
+  vertical-align: middle;
 }
 .sb-logo-sub { font-size: var(--fs-2xs); color: var(--dim); line-height: 1; }
 
@@ -198,7 +175,6 @@ body::before {
   border: 1.5px solid var(--cyan2); object-fit: cover;
   background: var(--bg3); flex-shrink: 0;
   cursor: pointer; transition: .2s;
-  /* Larger touch target via padding trick */
   -webkit-tap-highlight-color: transparent;
 }
 .sb-av:hover { border-color: var(--cyan); transform: scale(1.08); }
@@ -230,10 +206,7 @@ body::before {
 .cred-l   { font-size: var(--fs-2xs); color: rgba(255,214,0,.6); text-transform: uppercase; letter-spacing: 1.5px; }
 .cred-hint{ font-size: var(--fs-2xs); color: rgba(255,214,0,.45); margin-top: 2px; }
 
-.sb-btn-group {
-  display: flex; flex-direction: column; gap: 3px;
-  padding: 8px 12px 4px; flex-shrink: 0;
-}
+.sb-btn-group { display: flex; flex-direction: column; gap: 3px; padding: 8px 12px 4px; flex-shrink: 0; }
 .sb-nav-btn {
   display: flex; align-items: center; gap: 8px;
   width: 100%; height: 40px; padding: 0 12px;
@@ -260,49 +233,37 @@ body::before {
   font-size: var(--fs-2xs); font-weight: 700; padding: 2px 6px;
   border-radius: 10px; min-width: 18px; text-align: center; flex-shrink: 0;
 }
-
-.sec-lbl {
-  padding: 8px 14px 3px; font-size: var(--fs-2xs);
-  color: var(--dim); text-transform: uppercase; letter-spacing: 2px; flex-shrink: 0;
-}
-.convs {
-  flex: 1; overflow-y: auto; padding: 3px 8px; min-height: 0;
-  -webkit-overflow-scrolling: touch;
-}
+.sec-lbl { padding: 8px 14px 3px; font-size: var(--fs-2xs); color: var(--dim); text-transform: uppercase; letter-spacing: 2px; flex-shrink: 0; }
+.convs { flex: 1; overflow-y: auto; padding: 3px 8px; min-height: 0; -webkit-overflow-scrolling: touch; }
 .ci {
   padding: 8px 9px; border-radius: var(--r-s);
   cursor: pointer; display: flex; align-items: center; gap: 6px;
-  transition: background .1s;
-  min-height: 40px;
+  transition: background .1s; min-height: 40px;
   -webkit-tap-highlight-color: transparent;
 }
 .ci:hover  { background: var(--hover); }
 .ci.act    { background: rgba(0,229,255,.06); border-left: 2px solid var(--cyan); padding-left: 7px; }
 .ci-title  { font-size: var(--fs-sm); color: var(--text); flex: 1; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .ci-time   { font-size: var(--fs-2xs); color: var(--dim); flex-shrink: 0; }
-.ci-del    {
+.ci-del {
   font-size: var(--fs-sm); color: var(--dim); opacity: 0; padding: 4px 7px;
   cursor: pointer; background: none; border: none; border-radius: 3px;
   min-width: 28px; min-height: 28px; display: flex; align-items: center; justify-content: center;
 }
 .ci:hover .ci-del { opacity: 1; }
 .ci-del:hover     { color: var(--pink); background: rgba(255,45,107,.1); }
-.conv-empty {
-  padding: 20px 14px; text-align: center;
-  color: var(--dim); font-size: var(--fs-md); line-height: 1.7;
-}
+.conv-empty { padding: 20px 14px; text-align: center; color: var(--dim); font-size: var(--fs-md); line-height: 1.7; }
 
 .sb-footer {
   padding: 7px 12px; font-size: var(--fs-2xs); color: var(--dim);
   text-align: center; border-top: 1px solid var(--b); flex-shrink: 0; line-height: 1.9;
   padding-bottom: calc(7px + var(--safe-bottom));
 }
-
 .collapse-sb {
   position: absolute; right: -18px; top: 50%; transform: translateY(-50%);
   width: 18px; height: 40px;
-  background: var(--bg2); border: 1px solid var(--b);
-  border-left: none; border-radius: 0 6px 6px 0;
+  background: var(--bg2); border: 1px solid var(--b); border-left: none;
+  border-radius: 0 6px 6px 0;
   cursor: pointer; display: flex; align-items: center; justify-content: center;
   color: var(--dim); z-index: 10; transition: color .15s;
 }
@@ -313,10 +274,7 @@ body::before {
 /* ══════════════════════════════════════════════
    CHAT PANEL
 ══════════════════════════════════════════════ */
-#chat {
-  display: flex; flex-direction: column;
-  overflow: hidden; position: relative; min-height: 0; min-width: 0;
-}
+#chat { display: flex; flex-direction: column; overflow: hidden; position: relative; min-height: 0; min-width: 0; }
 
 .plug-banner {
   padding: 0 14px; flex-shrink: 0;
@@ -332,7 +290,7 @@ body::before {
 
 
 /* ══════════════════════════════════════════════
-   HEADER
+   HEADER — simplified (no ver-badge here, moved to sidebar)
 ══════════════════════════════════════════════ */
 .chat-hdr {
   padding: 0 12px 0 14px; border-bottom: 1px solid var(--b); background: var(--bg2);
@@ -341,47 +299,25 @@ body::before {
   padding-left: calc(14px + var(--safe-left));
   padding-right: calc(12px + var(--safe-right));
 }
-
-/* Hamburger — hidden on desktop */
 #menuBtn { display: none; }
-
 .chat-title-group {
   display: flex; flex-direction: column; justify-content: center;
   flex: 1 1 0; min-width: 0; overflow: hidden; gap: 2px;
 }
-
-.chat-title-row {
-  display: flex; align-items: center; gap: 6px; min-width: 0;
-}
+.chat-title-row { display: flex; align-items: center; gap: 6px; min-width: 0; }
 .chat-title {
   font-family: 'Orbitron', sans-serif; font-size: 12px; font-weight: 700;
   color: white; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
   flex-shrink: 1; min-width: 0; line-height: 1;
 }
-
-.ver-badge {
-  display: inline-flex; align-items: center;
-  padding: 0 6px; height: 16px; border-radius: 8px;
-  font-family: 'Orbitron', sans-serif; font-size: 7px; font-weight: 700;
-  border: 1px solid; flex-shrink: 0; white-space: nowrap; letter-spacing: .6px;
-  cursor: default; user-select: none; line-height: 1;
-}
-.ver-badge.alpha   { color: #ff4444; border-color: rgba(255,68,68,.35);   background: rgba(255,68,68,.08); }
-.ver-badge.beta    { color: var(--yellow); border-color: rgba(255,214,0,.35); background: rgba(255,214,0,.06); }
-.ver-badge.release { color: var(--green);  border-color: rgba(0,255,170,.35); background: rgba(0,255,170,.06); }
-
 .proj-name-pill {
-  display: none;
-  align-items: center; gap: 4px;
+  display: none; align-items: center; gap: 4px;
   font-size: var(--fs-2xs); color: rgba(255,170,50,.8);
   white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
   max-width: 200px; line-height: 1;
 }
 .proj-name-pill.visible { display: flex; }
-.proj-name-dot {
-  width: 4px; height: 4px; border-radius: 50%;
-  background: rgba(255,170,50,.7); flex-shrink: 0;
-}
+.proj-name-dot { width: 4px; height: 4px; border-radius: 50%; background: rgba(255,170,50,.7); flex-shrink: 0; }
 
 .status-badge {
   display: flex; align-items: center; gap: 4px; padding: 0 8px;
@@ -403,10 +339,8 @@ body::before {
 #msgs {
   flex: 1; overflow-y: auto; padding: 16px 16px 8px;
   display: flex; flex-direction: column; gap: 10px; min-height: 0;
-  -webkit-overflow-scrolling: touch;
-  overscroll-behavior: contain;
+  -webkit-overflow-scrolling: touch; overscroll-behavior: contain;
 }
-
 .welcome {
   display: flex; flex-direction: column; align-items: center; justify-content: center;
   flex: 1; text-align: center; gap: 12px; padding: 30px 16px; color: var(--dim);
@@ -417,10 +351,7 @@ body::before {
   -webkit-background-clip: text; -webkit-text-fill-color: transparent; background-clip: text;
 }
 .ws { font-size: var(--fs-md); line-height: 1.9; max-width: 340px; }
-.suggs {
-  display: grid; grid-template-columns: 1fr 1fr;
-  gap: 7px; max-width: 440px; margin-top: 4px; width: 100%;
-}
+.suggs { display: grid; grid-template-columns: 1fr 1fr; gap: 7px; max-width: 440px; margin-top: 4px; width: 100%; }
 .sugg {
   padding: 9px 11px; background: var(--card); border: 1px solid var(--b);
   border-radius: var(--r); cursor: pointer; transition: .18s; text-align: left;
@@ -438,10 +369,7 @@ body::before {
 .msg       { display: flex; gap: 9px; animation: mi .22s ease; }
 .msg.user  { flex-direction: row-reverse; }
 @keyframes mi { from{opacity:0;transform:translateY(5px)} to{opacity:1;transform:none} }
-.av {
-  width: 30px; height: 30px; border-radius: 50%;
-  flex-shrink: 0; overflow: hidden; background: var(--bg3);
-}
+.av { width: 30px; height: 30px; border-radius: 50%; flex-shrink: 0; overflow: hidden; background: var(--bg3); }
 .av img { width: 100%; height: 100%; object-fit: cover; }
 .mb-wrap    { max-width: 82%; display: flex; flex-direction: column; gap: 3px; min-width: 0; }
 .msg-sender { font-size: var(--fs-2xs); color: var(--dim); display: flex; align-items: center; gap: 5px; padding: 0 3px; }
@@ -453,10 +381,7 @@ body::before {
 }
 .msg.ai .bubble { background: var(--bg2); border: 1px solid var(--b); border-radius: 2px 10px 10px 10px; color: var(--text); }
 .msg-imgs { display: flex; flex-wrap: wrap; gap: 5px; margin-bottom: 7px; }
-.msg-img {
-  max-width: 160px; max-height: 130px; border-radius: 6px; object-fit: cover;
-  border: 1px solid var(--b); cursor: pointer; transition: .15s;
-}
+.msg-img { max-width: 160px; max-height: 130px; border-radius: 6px; object-fit: cover; border: 1px solid var(--b); cursor: pointer; transition: .15s; }
 .msg-img:hover { border-color: var(--cyan); transform: scale(1.02); }
 
 .code-block-wrap   { position: relative; margin: 8px 0; border-radius: 7px; overflow: hidden; border: 1px solid rgba(0,229,255,.1); }
@@ -518,20 +443,20 @@ body::before {
 
 /* ══════════════════════════════════════════════
    INPUT AREA
+   FIX: All action buttons in the input bar use
+   the SAME base .ib class, including the <label>
+   for the file input. We force it to display as
+   flex so it behaves identically to <button>.
 ══════════════════════════════════════════════ */
 .inp-area {
   padding: 10px 14px 14px;
   border-top: 1px solid var(--b);
   background: var(--bg2);
-  flex-shrink: 0;
-  position: relative;
-  z-index: 2;
-  /* Safe area for home indicator on iPhone */
+  flex-shrink: 0; position: relative; z-index: 2;
   padding-bottom: calc(14px + var(--safe-bottom));
   padding-left: calc(14px + var(--safe-left));
   padding-right: calc(14px + var(--safe-right));
 }
-
 .inp-box {
   background: var(--bg3);
   border: 1.5px solid rgba(0, 229, 255, 0.18);
@@ -541,47 +466,32 @@ body::before {
 }
 .inp-box.drag-over    { border-color: var(--cyan); box-shadow: 0 0 0 3px rgba(0,229,255,.08); }
 .inp-box:focus-within { border-color: rgba(0,229,255,.42); box-shadow: 0 0 0 3px rgba(0,229,255,.05); }
-
 #inp {
-  width: 100%;
-  background: transparent;
-  border: none;
-  outline: none;
+  width: 100%; background: transparent; border: none; outline: none;
   color: rgba(255,255,255,.92);
-  font-family: 'JetBrains Mono', monospace;
-  font-size: 14px;
-  padding: 14px 16px 6px;
-  resize: none;
-  min-height: 52px;
-  max-height: 180px;
-  line-height: 1.65;
-  display: block;
-  scrollbar-width: thin;
-  scrollbar-color: var(--b) transparent;
-  /* Prevent iOS zoom on focus — keep 16px as base for mobile */
+  font-family: 'JetBrains Mono', monospace; font-size: 14px;
+  padding: 14px 16px 6px; resize: none;
+  min-height: 52px; max-height: 180px; line-height: 1.65;
+  display: block; scrollbar-width: thin; scrollbar-color: var(--b) transparent;
 }
 #inp::placeholder { color: rgba(58,74,122,.75); font-size: 13px; }
 
 .inp-bar {
-  display: flex;
-  align-items: center;
-  padding: 6px 10px 10px;
-  gap: 6px;
+  display: flex; align-items: center;
+  padding: 6px 10px 10px; gap: 6px;
 }
-
 .inp-l {
-  display: flex;
-  align-items: center;
-  gap: 4px;
-  flex: 1;
-  min-width: 0;
-  overflow: hidden;
+  display: flex; align-items: center;
+  gap: 4px; flex: 1; min-width: 0; overflow: hidden;
 }
 
-/* Universal icon button — 44px touch target on mobile */
+/* ── Universal icon button — works for BOTH <button> and <label> ── */
+/* Key fix: box-sizing, vertical-align, and forced display:inline-flex
+   so <label htmlFor="fi"> renders identically to <button> in all browsers */
 .ib {
   width: 32px; height: 32px; min-width: 32px;
-  display: inline-flex; align-items: center; justify-content: center;
+  display: inline-flex !important;
+  align-items: center; justify-content: center;
   flex-shrink: 0; vertical-align: middle;
   border: none; border-radius: 8px;
   background: transparent; color: rgba(58,74,122,.9);
@@ -590,10 +500,17 @@ body::before {
   user-select: none; outline: none;
   -webkit-tap-highlight-color: transparent;
   position: relative;
+  /* Remove any label default styling */
+  font-size: 0;
+  text-align: center;
 }
 .ib:hover  { color: var(--text); background: rgba(0,229,255,.07); }
 .ib:active { background: rgba(0,229,255,.12); opacity: .75; }
-.ib svg { width: 16px; height: 16px; stroke: currentColor; fill: none; stroke-width: 1.6; flex-shrink: 0; display: block; pointer-events: none; }
+.ib svg {
+  width: 16px; height: 16px;
+  stroke: currentColor; fill: none; stroke-width: 1.6;
+  flex-shrink: 0; display: block; pointer-events: none;
+}
 
 /* File input — truly off-screen */
 #fi {
@@ -604,11 +521,10 @@ body::before {
 
 .inp-divider { width: 1px; height: 16px; background: rgba(0,229,255,.1); flex-shrink: 0; border-radius: 1px; margin: 0 2px; }
 
-/* Model selector pill */
+/* ── Model selector pill ── */
 .inp-model {
   display: flex; align-items: center; gap: 5px;
-  height: 28px; padding: 0 8px;
-  border-radius: 8px;
+  height: 28px; padding: 0 8px; border-radius: 8px;
   background: rgba(255,255,255,.03); border: 1px solid rgba(255,255,255,.06);
   cursor: pointer; transition: .14s;
   font-family: 'JetBrains Mono', monospace; font-size: 10px; color: var(--dim);
@@ -619,14 +535,16 @@ body::before {
 .inp-model img   { width: 13px; height: 13px; border-radius: 2px; object-fit: contain; flex-shrink: 0; }
 .inp-model-name  { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; flex: 1; font-size: 10px; min-width: 0; }
 .inp-model-badge {
-  font-size: 8px; font-weight: 700; flex-shrink: 0;
+  font-size: 7.5px; font-weight: 700; flex-shrink: 0;
   padding: 1px 4px; border-radius: 3px; border: 1px solid;
+  letter-spacing: .3px;
 }
 .inp-model-badge[data-tier="fast"]  { color: var(--cyan);   border-color: rgba(0,229,255,.3);   background: rgba(0,229,255,.07); }
 .inp-model-badge[data-tier="pro"]   { color: #cc55ff;       border-color: rgba(136,0,255,.35);  background: rgba(136,0,255,.07); }
 .inp-model-badge[data-tier="think"] { color: var(--yellow); border-color: rgba(255,214,0,.3);   background: rgba(255,214,0,.06); }
+.inp-model-badge[data-tier="free"]  { color: var(--green);  border-color: rgba(0,255,170,.3);   background: rgba(0,255,170,.06); }
 
-/* Send button */
+/* ── Send / Cancel buttons ── */
 .btn-send {
   width: 36px; height: 36px; border-radius: 50%; border: none;
   background: linear-gradient(135deg, var(--cyan), var(--purple));
@@ -638,7 +556,6 @@ body::before {
 .btn-send:hover  { opacity: .85; transform: scale(1.07); }
 .btn-send:active { transform: scale(.94); opacity: 1; }
 .btn-send svg { width: 15px; height: 15px; stroke: currentColor; fill: none; stroke-width: 2.2; }
-
 .btn-cancel {
   width: 32px; height: 32px; border-radius: 50%;
   border: 1px solid rgba(255,45,107,.3); background: rgba(255,45,107,.08);
@@ -652,39 +569,95 @@ body::before {
 
 
 /* ══════════════════════════════════════════════
-   DROPDOWNS
+   MODEL DROPDOWN — REDESIGNED
+   Cleaner group headers, bigger icons, proper
+   spacing, badge alignment, hover states
 ══════════════════════════════════════════════ */
 .model-dd {
-  position: fixed; background: var(--bg3); border: 1px solid var(--b); border-radius: var(--r);
-  z-index: 9000; display: none; box-shadow: 0 8px 32px rgba(0,0,0,.95);
-  max-height: min(380px, 60vh); overflow-y: auto; min-width: 265px;
-  -webkit-overflow-scrolling: touch;
+  position: fixed; background: var(--bg3);
+  border: 1px solid rgba(0,229,255,.18); border-radius: 12px;
+  z-index: 9000; display: none;
+  box-shadow: 0 20px 60px rgba(0,0,0,.95), 0 0 0 1px rgba(0,229,255,.04);
+  max-height: min(400px, 60vh); overflow-y: auto; min-width: 280px;
+  -webkit-overflow-scrolling: touch; padding: 6px;
 }
 .model-dd::-webkit-scrollbar { width: 3px; }
-.model-dd::-webkit-scrollbar-thumb { background: var(--b); }
+.model-dd::-webkit-scrollbar-thumb { background: var(--b); border-radius: 2px; }
 .model-dd.open { display: block; }
-.mg { padding: 6px 11px 3px; font-size: var(--fs-2xs); color: var(--dim); text-transform: uppercase; letter-spacing: 2px; border-top: 1px solid var(--b); }
-.mg:first-child { border-top: none; }
-.mo { padding: 10px 11px; display: flex; align-items: center; gap: 7px; cursor: pointer; transition: .1s; min-height: 44px; -webkit-tap-highlight-color: transparent; }
+
+/* Group header: "GOOGLE", "CHATGPT", "DEEPSEEK" */
+.mg {
+  padding: 8px 10px 4px; margin-top: 2px;
+  font-size: 7.5px; font-weight: 700; letter-spacing: 2px;
+  color: var(--dim); text-transform: uppercase;
+  display: flex; align-items: center; gap: 6px;
+}
+.mg::after {
+  content: ''; flex: 1; height: 1px; background: var(--b); border-radius: 1px;
+}
+.mg:first-child { margin-top: 0; padding-top: 4px; }
+
+/* Model option row */
+.mo {
+  padding: 8px 10px; display: flex; align-items: center; gap: 10px;
+  cursor: pointer; transition: background .1s; min-height: 48px;
+  border-radius: 8px; margin-bottom: 2px;
+  -webkit-tap-highlight-color: transparent;
+}
 .mo:hover { background: var(--hover); }
-.mo.act   { background: rgba(0,229,255,.06); }
-.mo-icon  { width: 20px; height: 20px; border-radius: 4px; overflow: hidden; flex-shrink: 0; display: flex; align-items: center; justify-content: center; }
-.mo-icon img { width: 100%; height: 100%; object-fit: contain; }
-.mo-n  { font-size: var(--fs-md); color: white; flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.mo-s  { font-size: var(--fs-2xs); color: var(--dim); }
-.mb-badge { font-size: var(--fs-2xs); padding: 1px 5px; border-radius: 3px; font-weight: 700; white-space: nowrap; }
-.mb-badge.f { background: rgba(0,255,170,.12); color: var(--green); }
-.mb-badge.s { background: rgba(0,229,255,.12); color: var(--cyan); }
-.mb-badge.p { background: rgba(136,0,255,.15); color: #cc55ff; }
+.mo.act   { background: rgba(0,229,255,.07); border: 1px solid rgba(0,229,255,.15); }
+.mo-icon  {
+  width: 28px; height: 28px; border-radius: 7px; overflow: hidden;
+  flex-shrink: 0; display: flex; align-items: center; justify-content: center;
+  background: rgba(0,229,255,.06); border: 1px solid var(--b);
+}
+.mo-icon img { width: 18px; height: 18px; object-fit: contain; }
+.mo-info { flex: 1; min-width: 0; }
+.mo-n  { font-size: 11px; color: white; font-weight: 500; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; line-height: 1.3; }
+.mo-s  { font-size: 9px; color: var(--dim); margin-top: 2px; line-height: 1; }
+.mo-right { display: flex; flex-direction: column; align-items: flex-end; gap: 3px; flex-shrink: 0; }
+.mo-badge {
+  font-size: 8px; padding: 2px 6px; border-radius: 4px; font-weight: 700;
+  border: 1px solid; white-space: nowrap; letter-spacing: .3px; line-height: 1.4;
+}
+.mo-badge.fast { background: rgba(0,229,255,.1);   color: var(--cyan);   border-color: rgba(0,229,255,.3);   }
+.mo-badge.best { background: rgba(136,0,255,.12);  color: #cc55ff;       border-color: rgba(136,0,255,.35);  }
+.mo-badge.free { background: rgba(0,255,170,.1);   color: var(--green);  border-color: rgba(0,255,170,.3);   }
+.mo-badge.lite { background: rgba(0,229,255,.07);  color: rgba(0,229,255,.7); border-color: rgba(0,229,255,.2); }
+.mo-cost { font-size: 8px; color: var(--dim); line-height: 1; }
+.mo-sel-dot {
+  width: 6px; height: 6px; border-radius: 50%;
+  background: var(--cyan); flex-shrink: 0; align-self: center;
+}
 
 
 /* ══════════════════════════════════════════════
    THINKING / STEPS
+   FIX: Always stays visible while S.gen is true.
+   Added min-height so it can't collapse to 0.
 ══════════════════════════════════════════════ */
-.steps-wrap { display: flex; gap: 9px; animation: mi .22s ease; }
-.steps-box  { background: var(--bg2); border: 1px solid var(--b); border-radius: 2px 10px 10px 10px; padding: 0; overflow: hidden; min-width: 280px; max-width: min(520px, 88vw); }
-.steps-hdr  { padding: 9px 13px 8px; display: flex; align-items: center; gap: 7px; border-bottom: 1px solid var(--b); flex-wrap: nowrap; }
-.steps-hdr-spinner { width: 11px; height: 11px; border: 1.5px solid rgba(0,229,255,.2); border-top-color: var(--cyan); border-radius: 50%; animation: spin .7s linear infinite; flex-shrink: 0; }
+.steps-wrap {
+  display: flex; gap: 9px; animation: mi .22s ease;
+  /* Ensure it's always on top of messages */
+  position: relative; z-index: 3;
+}
+.steps-box  {
+  background: var(--bg2); border: 1px solid var(--b);
+  border-radius: 2px 10px 10px 10px;
+  overflow: hidden; min-width: 280px; max-width: min(520px, 88vw);
+  /* Prevent collapsing */
+  min-height: 52px;
+}
+.steps-hdr  {
+  padding: 9px 13px 8px; display: flex; align-items: center; gap: 7px;
+  border-bottom: 1px solid var(--b); flex-wrap: nowrap;
+  background: rgba(0,229,255,.02);
+}
+.steps-hdr-spinner {
+  width: 11px; height: 11px;
+  border: 1.5px solid rgba(0,229,255,.2); border-top-color: var(--cyan);
+  border-radius: 50%; animation: spin .7s linear infinite; flex-shrink: 0;
+}
 .steps-hdr-txt   { font-family: 'Orbitron', sans-serif; font-size: var(--fs-2xs); color: var(--cyan); letter-spacing: .5px; flex: 1; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .steps-hdr-count { font-size: var(--fs-2xs); color: var(--dim); flex-shrink: 0; }
 .steps-list { padding: 4px 0; }
@@ -774,10 +747,8 @@ body::before {
 .ov {
   position: fixed; inset: 0; background: rgba(3,3,18,.93); z-index: 500;
   display: none; align-items: flex-start; justify-content: center;
-  /* NO backdrop-filter — causes blur issues on mobile */
   padding: 20px 16px; overflow-y: auto;
-  -webkit-overflow-scrolling: touch;
-  overscroll-behavior: contain;
+  -webkit-overflow-scrolling: touch; overscroll-behavior: contain;
   padding-top: calc(20px + var(--safe-top));
   padding-bottom: calc(20px + var(--safe-bottom));
 }
@@ -795,8 +766,7 @@ body::before {
   display: inline-flex; align-items: center; justify-content: center;
   height: var(--h-lg); padding: 0 16px; border-radius: var(--r);
   font-family: 'Orbitron', sans-serif; font-size: var(--fs-sm); font-weight: 700;
-  cursor: pointer; border: none; transition: .15s; white-space: nowrap;
-  min-height: 44px;
+  cursor: pointer; border: none; transition: .15s; white-space: nowrap; min-height: 44px;
   -webkit-tap-highlight-color: transparent;
 }
 .btn-modal.primary   { background: var(--cyan); color: #030312; }
@@ -842,13 +812,11 @@ body::before {
   font-size: var(--fs-md); outline: none; resize: vertical; min-height: 80px; margin-top: 6px;
   -webkit-appearance: none;
 }
-
 .install-step { display: flex; gap: 10px; padding: 9px 0; border-bottom: 1px solid var(--b); align-items: flex-start; }
 .install-step:last-child { border-bottom: none; }
 .install-num  { width: 22px; height: 22px; border-radius: 50%; background: linear-gradient(135deg, var(--cyan), var(--purple)); display: flex; align-items: center; justify-content: center; font-size: var(--fs-sm); font-weight: 700; color: white; flex-shrink: 0; margin-top: 1px; }
 .install-txt  { font-size: var(--fs-md); color: var(--text); line-height: 1.65; flex: 1; }
 .install-txt code { color: var(--cyan); background: rgba(0,229,255,.08); padding: 1px 4px; border-radius: 3px; font-size: var(--fs-sm); }
-
 .badge-owner { background: linear-gradient(135deg, rgba(255,214,0,.2), rgba(255,140,0,.2)); color: var(--yellow); border: 1px solid rgba(255,214,0,.3); padding: 2px 8px; border-radius: 10px; font-size: var(--fs-2xs); font-weight: 700; font-family: 'Orbitron', sans-serif; }
 .badge-admin { background: rgba(0,229,255,.1);  color: var(--cyan); border: 1px solid rgba(0,229,255,.3);  padding: 2px 8px; border-radius: 10px; font-size: var(--fs-2xs); font-weight: 700; }
 .badge-pro   { background: rgba(136,0,255,.12); color: #cc55ff;    border: 1px solid rgba(136,0,255,.3);  padding: 2px 8px; border-radius: 10px; font-size: var(--fs-2xs); font-weight: 700; }
@@ -856,7 +824,7 @@ body::before {
 
 
 /* ══════════════════════════════════════════════
-   RESPONSIVE — TABLET (900–1100px)
+   RESPONSIVE — TABLET
 ══════════════════════════════════════════════ */
 @media (max-width: 1100px) { :root { --sb-w: 230px; } }
 @media (max-width: 900px) {
@@ -866,93 +834,44 @@ body::before {
 
 /* ══════════════════════════════════════════════
    MOBILE (≤768px)
-   Key fixes:
-   - Sidebar slides in from left (hardware-accelerated)
-   - No blur/backdrop-filter anywhere
-   - Touch-friendly tap targets
-   - Safe area padding for notch/home indicator
 ══════════════════════════════════════════════ */
 @media (max-width: 768px) {
-  /* App shell — pure flex column, no grid */
   #app {
-    display: flex !important;
-    flex-direction: column !important;
-    height: 100vh !important;
-    height: 100dvh !important;
-    grid-template-columns: none !important;
-    overflow: hidden !important;
+    display: flex !important; flex-direction: column !important;
+    height: 100vh !important; height: 100dvh !important;
+    grid-template-columns: none !important; overflow: hidden !important;
   }
   #app.sb-hidden { grid-template-columns: none !important; }
-
-  /* Sidebar — off-screen left, slides in via transform (GPU-accelerated) */
   #sb {
-    position: fixed !important;
-    left: 0 !important;
-    top: 0 !important;
-    width: min(290px, 85vw) !important;
-    height: 100% !important;
-    height: 100dvh !important;
-    max-height: none !important;
-    z-index: 100 !important;
-    border-right: 1px solid var(--b) !important;
-    border-bottom: none !important;
-    overflow-y: auto !important;
-    box-shadow: 4px 0 30px rgba(0,0,0,.7) !important;
-    /* Use transform instead of left for smooth GPU animation */
+    position: fixed !important; left: 0 !important; top: 0 !important;
+    width: min(290px, 85vw) !important; height: 100% !important; height: 100dvh !important;
+    max-height: none !important; z-index: 100 !important;
+    border-right: 1px solid var(--b) !important; border-bottom: none !important;
+    overflow-y: auto !important; box-shadow: 4px 0 30px rgba(0,0,0,.7) !important;
     transform: translateX(-105%) !important;
     transition: transform .28s cubic-bezier(.4,0,.2,1) !important;
-    will-change: transform;
-    -webkit-overflow-scrolling: touch;
-    /* Top safe area for notch */
+    will-change: transform; -webkit-overflow-scrolling: touch;
     padding-top: var(--safe-top) !important;
   }
-  #sb.mobile-open {
-    transform: translateX(0) !important;
-  }
-
-  /* Show hamburger on mobile */
+  #sb.mobile-open { transform: translateX(0) !important; }
   #menuBtn { display: inline-flex !important; }
   .collapse-sb { display: none !important; }
-
-  /* Chat fills remaining space */
-  #chat {
-    flex: 1 !important;
-    min-height: 0 !important;
-    width: 100% !important;
-    overflow: hidden !important;
-  }
-
-  /* Header */
+  #chat { flex: 1 !important; min-height: 0 !important; width: 100% !important; overflow: hidden !important; }
   .chat-hdr {
-    height: 48px !important;
-    padding: 0 10px !important;
+    height: 48px !important; padding: 0 10px !important;
     padding-left: calc(10px + var(--safe-left)) !important;
     padding-right: calc(10px + var(--safe-right)) !important;
     gap: 6px !important;
   }
   .chat-title { font-size: 11px !important; }
   .proj-name-pill { max-width: 130px !important; }
-  .status-badge {
-    max-width: 90px !important;
-    font-size: 8px !important;
-    padding: 0 6px !important;
-    height: 22px !important;
-  }
-
-  /* Messages */
-  #msgs {
-    padding: 12px 10px 6px !important;
-    gap: 8px !important;
-  }
+  .status-badge { max-width: 90px !important; font-size: 8px !important; padding: 0 6px !important; height: 22px !important; }
+  #msgs { padding: 12px 10px 6px !important; gap: 8px !important; }
   .mb-wrap { max-width: 90% !important; }
   .bubble  { font-size: 13px !important; padding: 9px 11px !important; }
-
-  /* Welcome screen */
   .suggs { grid-template-columns: 1fr !important; }
   .wt { font-size: 20px !important; }
   .ws { font-size: var(--fs-md) !important; }
-
-  /* Input area */
   .inp-area {
     padding: 8px 10px 12px !important;
     padding-left: calc(10px + var(--safe-left)) !important;
@@ -961,46 +880,28 @@ body::before {
   }
   .inp-box { border-radius: 16px !important; }
   #inp {
-    font-size: 16px !important; /* Prevents iOS auto-zoom on focus */
+    font-size: 16px !important;
     padding: 13px 14px 5px !important;
-    min-height: 52px !important;
-    max-height: 140px !important;
+    min-height: 52px !important; max-height: 140px !important;
   }
   .inp-bar { padding: 4px 8px 8px !important; gap: 5px !important; }
-
-  /* Larger touch targets on mobile */
-  .ib {
-    width: 40px !important; height: 40px !important; min-width: 40px !important;
-  }
+  .ib { width: 40px !important; height: 40px !important; min-width: 40px !important; }
   .ib svg { width: 18px !important; height: 18px !important; }
   .btn-send { width: 42px !important; height: 42px !important; }
   .btn-send svg { width: 17px !important; height: 17px !important; }
   .btn-cancel { width: 38px !important; height: 38px !important; }
-
   .inp-model { max-width: 110px !important; }
-
-  /* Plug banner */
   .plug-banner {
-    font-size: 9px !important;
-    padding: 0 10px !important;
+    font-size: 9px !important; padding: 0 10px !important;
     padding-left: calc(10px + var(--safe-left)) !important;
-    gap: 5px !important;
-    height: 28px !important;
+    gap: 5px !important; height: 28px !important;
   }
-
-  /* Modal */
   .ov { padding: 12px 10px !important; padding-bottom: calc(12px + var(--safe-bottom)) !important; }
   .modal { padding: 16px !important; border-radius: 12px !important; }
   .modal-t { font-size: 12px !important; }
   .btn-modal { height: 44px !important; }
-
-  /* Steps */
   .steps-box { max-width: calc(100vw - 60px) !important; min-width: 240px !important; }
 }
-
-/* ══════════════════════════════════════════════
-   SMALL PHONES (≤480px)
-══════════════════════════════════════════════ */
 @media (max-width: 480px) {
   .inp-model { max-width: 95px !important; }
   .chat-title { font-size: 10px !important; }
@@ -1010,27 +911,15 @@ body::before {
   .mb-wrap { max-width: 93% !important; }
   .bubble { font-size: 12.5px !important; }
 }
-
-/* ══════════════════════════════════════════════
-   VERY SMALL (≤360px)
-══════════════════════════════════════════════ */
 @media (max-width: 360px) {
   .status-badge { display: none !important; }
   .proj-name-pill { display: none !important; }
-  .ver-badge { display: none !important; }
   .inp-model { max-width: 80px !important; }
 }
-
-/* ══════════════════════════════════════════════
-   LANDSCAPE PHONE
-══════════════════════════════════════════════ */
 @media (max-width: 768px) and (orientation: landscape) {
   .chat-hdr { height: 40px !important; }
   #inp { max-height: 90px !important; }
-  .inp-area {
-    padding-top: 6px !important;
-    padding-bottom: calc(6px + var(--safe-bottom)) !important;
-  }
+  .inp-area { padding-top: 6px !important; padding-bottom: calc(6px + var(--safe-bottom)) !important; }
   #msgs { padding: 8px 10px 4px !important; }
 }
 `
@@ -1039,12 +928,7 @@ body::before {
    QUEUE-BASED wCall
 ─────────────────────────────────────────────────────────────────────────────── */
 type AnyFn = (...args: unknown[]) => void
-
-interface PendingCall {
-  name: string
-  args: unknown[]
-}
-
+interface PendingCall { name: string; args: unknown[] }
 const _pendingCalls: PendingCall[] = []
 let   _chatsModuleLoaded = false
 
@@ -1103,7 +987,6 @@ const Icon: Record<string, React.ReactElement> = {
 export default function ChatsPage() {
   const scriptsLoadedRef = useRef(false)
 
-  /* ── Mobile sidebar toggle — pure DOM, uses transform ── */
   const handleMobileMenuToggle = () => {
     const sb      = document.getElementById('sb')
     const overlay = document.getElementById('sbOverlay')
@@ -1124,14 +1007,11 @@ export default function ChatsPage() {
 
   useEffect(() => {
     document.title = 'NEXUS AI - Roblox Dev Intelligence'
-
-    // Prevent body scroll but allow inner scroll
     document.documentElement.style.height   = '100%'
     document.documentElement.style.overflow = 'hidden'
     document.body.style.height              = '100%'
     document.body.style.overflow            = 'hidden'
 
-    // Prevent iOS rubber-band bounce on body
     const preventBodyScroll = (e: TouchEvent) => {
       if ((e.target as HTMLElement).closest('#msgs, #sb, .convs, .ov, .model-dd, .mention-dd')) return
       e.preventDefault()
@@ -1165,7 +1045,6 @@ export default function ChatsPage() {
     }
   }, [])
 
-  /* ── Handler helpers ── */
   const handleClick = (fn: string, ...args: unknown[]) =>
     (): void => wCall(fn, ...args)
 
@@ -1184,9 +1063,6 @@ export default function ChatsPage() {
   const handlePlayTestDurChange = (e: React.ChangeEvent<HTMLInputElement>): void  => wCall('setPlayTestDur', e.target.value)
   const handleLangChange        = (e: React.ChangeEvent<HTMLSelectElement>): void => wCall('changeLang', e.target.value)
 
-  /* ════════════════════════════════════════════════════════════════════════
-     RENDER
-  ════════════════════════════════════════════════════════════════════════ */
   return (
     <>
       <style dangerouslySetInnerHTML={{ __html: PAGE_CSS }} />
@@ -1200,7 +1076,7 @@ export default function ChatsPage() {
       <Script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/languages/lua.min.js"             strategy="beforeInteractive"/>
       <Script src="https://challenges.cloudflare.com/turnstile/v0/api.js?render=explicit"                       strategy="afterInteractive"/>
 
-      {/* ── PAGE LOADER ── */}
+      {/* PAGE LOADER */}
       <div id="pageLoader">
         <div className="pl-logo">
           <img src="/images/nexusai.png" alt="N" onError={handleLogoErr}/>
@@ -1210,10 +1086,10 @@ export default function ChatsPage() {
         <div className="pl-txt" id="plTxt">Initializing...</div>
       </div>
 
-      {/* ── MOBILE SIDEBAR OVERLAY — click to close ── */}
+      {/* MOBILE SIDEBAR OVERLAY */}
       <div id="sbOverlay" onClick={closeMobileSidebar}/>
 
-      {/* ── MENTION DROPDOWN ── */}
+      {/* MENTION DROPDOWN */}
       <div className="mention-dd" id="mentionDD">
         <div className="mention-hdr">
           <svg viewBox="0 0 24 24" width={10} height={10} stroke="currentColor" fill="none" strokeWidth={2}>
@@ -1224,22 +1100,24 @@ export default function ChatsPage() {
         <div id="mentionList"/>
       </div>
 
-      {/* ════════════════════════════════════════════════════════════════════
-          APP SHELL
-      ════════════════════════════════════════════════════════════════════ */}
+      {/* APP SHELL */}
       <div id="app" className="hidden">
 
         {/* ═══════════════════════════════
             SIDEBAR
         ═══════════════════════════════ */}
         <div id="sb">
-          {/* Logo */}
+          {/* Logo + Brand + BETA badge (all in sidebar header) */}
           <div className="sb-head">
             <div className="sb-logo">
               <img src="/images/nexusai.png" alt="N" onError={handleLogoErr}/>
             </div>
-            <div>
-              <div className="sb-logo-text">NEXUS AI</div>
+            <div className="sb-brand">
+              {/* NEXUS AI text + BETA badge inline */}
+              <div className="sb-logo-text">
+                NEXUS AI
+                <span className="sb-beta-badge" id="verBadge">BETA</span>
+              </div>
               <div className="sb-logo-sub">Roblox Dev</div>
             </div>
           </div>
@@ -1349,13 +1227,11 @@ export default function ChatsPage() {
             </a>
           </div>
 
-          {/* ── HEADER ── */}
+          {/* HEADER — chat title only (BETA badge is now in sidebar) */}
           <div className="chat-hdr">
             {/* Hamburger — mobile only */}
             <button
-              id="menuBtn"
-              type="button"
-              className="ib"
+              id="menuBtn" type="button" className="ib"
               onClick={handleMobileMenuToggle}
               aria-label="Open menu"
               style={{ flexShrink: 0 }}
@@ -1367,7 +1243,6 @@ export default function ChatsPage() {
             <div className="chat-title-group">
               <div className="chat-title-row">
                 <div className="chat-title" id="chatTitle">NEXUS AI</div>
-                <span className="ver-badge beta" id="verBadge">BETA</span>
               </div>
               {/* Project name — shown by JS */}
               <div className="proj-name-pill" id="projNamePill">
@@ -1388,7 +1263,7 @@ export default function ChatsPage() {
             </div>
           </div>
 
-          {/* ── CHAT CONTENT ── */}
+          {/* CHAT CONTENT */}
           <div
             id="chatTab"
             style={{ flex: 1, overflow: 'hidden', display: 'flex', flexDirection: 'column', minHeight: 0 }}
@@ -1407,7 +1282,7 @@ export default function ChatsPage() {
               </div>
             </div>
 
-            {/* ── INPUT AREA ── */}
+            {/* INPUT AREA */}
             <div className="inp-area">
               <div className="attach-row" id="attachRow"/>
 
@@ -1422,7 +1297,11 @@ export default function ChatsPage() {
                 {/* Bottom bar */}
                 <div className="inp-bar">
                   <div className="inp-l">
-                    {/* Attach file */}
+                    {/*
+                      FIX: Use <label> with className="ib" — contains the SVG icon directly.
+                      The .ib CSS forces display:inline-flex so it renders identically
+                      to the <button className="ib"> elements beside it.
+                    */}
                     <label
                       htmlFor="fi"
                       className="ib"
@@ -1480,7 +1359,7 @@ export default function ChatsPage() {
                     </div>
                   </div>
 
-                  {/* Right side: cancel / send */}
+                  {/* Right: cancel / send */}
                   <button
                     className="btn-cancel hidden" id="cancelBtn"
                     type="button"
@@ -1513,9 +1392,9 @@ export default function ChatsPage() {
       </div>
       {/* end #app */}
 
-      {/* ════════════════════════════════════════════════════════════════════
+      {/* ════════════════════════
           MODALS
-      ════════════════════════════════════════════════════════════════════ */}
+      ════════════════════════ */}
 
       {/* Avatar Modal */}
       <div className="ov" id="avatarModal">
@@ -1557,7 +1436,6 @@ export default function ChatsPage() {
         <div className="modal" style={{ width: 520 }}>
           <div className="modal-t">{Icon.settings}<span id="settingsTitle">Settings</span></div>
 
-          {/* Account */}
           <div className="settings-section">
             <div className="settings-title" id="settingsAccountTitle">Account</div>
             <div className="settings-row">
@@ -1578,7 +1456,6 @@ export default function ChatsPage() {
             </div>
           </div>
 
-          {/* Daily Credits */}
           <div className="settings-section">
             <div className="settings-title" id="dailyCreditsTitle">Daily Credits</div>
             <div className="settings-row"><span id="freePlanLabel">Free Plan</span><span style={{ color: 'var(--green)' }}>+2 CR / day</span></div>
@@ -1589,7 +1466,6 @@ export default function ChatsPage() {
             </div>
           </div>
 
-          {/* Auto Play Test */}
           <div className="settings-section">
             <div className="settings-title" id="playTestTitle">Auto Play Test</div>
             <div className="settings-row">
@@ -1609,7 +1485,6 @@ export default function ChatsPage() {
             </div>
           </div>
 
-          {/* Language */}
           <div className="settings-section">
             <div className="settings-title" id="langTitle">Language</div>
             <div className="settings-row">
@@ -1621,7 +1496,6 @@ export default function ChatsPage() {
             </div>
           </div>
 
-          {/* Report Issue */}
           <div className="settings-section">
             <div className="settings-title" id="reportTitle">Report an Issue</div>
             <textarea className="report-ta" id="reportTa" placeholder="Describe the problem..."/>
@@ -1635,7 +1509,6 @@ export default function ChatsPage() {
             </div>
           </div>
 
-          {/* Admin Panel (hidden by default) */}
           <div className="settings-section" id="adminSection" style={{ display: 'none' }}>
             <div className="settings-title">Admin Panel</div>
             <div style={{ marginTop: 6 }}>
@@ -1643,7 +1516,6 @@ export default function ChatsPage() {
             </div>
           </div>
 
-          {/* Redeem Code */}
           <div className="settings-section">
             <div className="settings-title" id="redeemTitle">Redeem Code</div>
             <div className="settings-row" style={{ flexDirection: 'column', alignItems: 'flex-start', gap: 6 }}>
@@ -1660,7 +1532,6 @@ export default function ChatsPage() {
             </div>
           </div>
 
-          {/* Download Plugin */}
           <div className="settings-section">
             <div className="settings-title" id="downloadTitle">Download Plugin</div>
             <div className="settings-row" style={{ flexDirection: 'column', gap: 5, alignItems: 'flex-start' }}>
@@ -1674,7 +1545,6 @@ export default function ChatsPage() {
             </div>
           </div>
 
-          {/* Sign Out */}
           <div className="settings-section">
             <div className="settings-title" id="accountTitle">Account</div>
             <div className="settings-row">

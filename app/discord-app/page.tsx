@@ -905,7 +905,7 @@ export default function DiscordManager() {
                     {statusChecking ? <LoadingSpinner size={12} /> : <RefreshIcon size={12} />}
                     {statusChecking ? 'Checking...' : 'Refresh Status'}
                   </button>
-                  <a href="/actions" className="btn btn-cyan btn-sm" style={{ flex: 1, textDecoration: 'none' }}>
+                  <a href="/admin-panel" className="btn btn-cyan btn-sm" style={{ flex: 1, textDecoration: 'none' }}>
                     <GridIcon size={12} /> Admin Panel
                   </a>
                 </div>
