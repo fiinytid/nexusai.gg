@@ -1,6 +1,17 @@
 // app/api/[...slug]/route.ts
 // Catch-all router — single Vercel function for all endpoints
-// v8: Removed 'control' endpoint
+// v10: Handler imports now use the "@/ts" path alias (tsconfig paths + Next.js
+//      webpack alias → resolves to "<root>/ts/"); added rate limiting,
+//      structured logging, request-size streaming guard, and graceful degradation.
+//
+// tsconfig.json must include:
+//   "paths": { "@/ts/*": ["ts/*"] }
+//
+// next.config.ts (if needed for runtime resolution) must include:
+//   webpack(config) {
+//     config.resolve.alias['@/ts'] = path.resolve(__dirname, 'ts');
+//     return config;
+//   }
 
 import { NextResponse, type NextRequest } from 'next/server';
 
@@ -12,11 +23,13 @@ export type HandlerFn = (
 ) => unknown | Promise<unknown>;
 
 export type AdaptedRequest = {
-  method:  string;
-  url:     string;
-  query:   Record<string, string>;
-  body:    Record<string, unknown>;
-  headers: Record<string, string>;
+  method:    string;
+  url:       string;
+  query:     Record<string, string>;
+  body:      Record<string, unknown>;
+  headers:   Record<string, string>;
+  requestId: string;
+  startTime: number;
 };
 
 export type AdaptedResponse = {
@@ -60,14 +73,95 @@ const ALLOWED_ORIGINS: readonly string[] = (() => {
   const env = process.env.ALLOWED_ORIGINS?.trim();
   if (env) return env.split(',').map((o) => o.trim()).filter(Boolean);
   if (IS_PRODUCTION) {
-    console.warn('[route] ALLOWED_ORIGINS is not set — CORS will reject all cross-origin requests in production.');
+    console.warn(
+      '[route] ALLOWED_ORIGINS is not set — CORS will reject all cross-origin requests in production.',
+    );
     return [];
   }
   return ['*'];
 })();
 
+// ─── RATE LIMITING ────────────────────────────────────────────────────────────
+
+/**
+ * Simple in-process token-bucket rate limiter.
+ * Not suitable for multi-instance deployments without an external store
+ * (e.g. Redis). For multi-instance use, replace this with an adapter that
+ * reads/writes an external atomic counter (Upstash, Vercel KV, etc.).
+ *
+ * Defaults: 60 requests per IP per 60-second window.
+ * Override via env vars RATE_LIMIT_MAX and RATE_LIMIT_WINDOW_MS.
+ */
+const RATE_LIMIT_MAX        = parseInt(process.env.RATE_LIMIT_MAX        ?? '60',    10);
+const RATE_LIMIT_WINDOW_MS  = parseInt(process.env.RATE_LIMIT_WINDOW_MS  ?? '60000', 10);
+
+type RateLimitBucket = { count: number; resetAt: number };
+const rateLimitMap = new Map<string, RateLimitBucket>();
+
+/**
+ * Returns true if the request is within the allowed rate limit.
+ * Mutates the in-process map as a side-effect.
+ */
+function checkRateLimit(ip: string): { allowed: boolean; remaining: number; resetAt: number } {
+  const now    = Date.now();
+  const bucket = rateLimitMap.get(ip);
+
+  if (!bucket || now >= bucket.resetAt) {
+    const resetAt = now + RATE_LIMIT_WINDOW_MS;
+    rateLimitMap.set(ip, { count: 1, resetAt });
+    return { allowed: true, remaining: RATE_LIMIT_MAX - 1, resetAt };
+  }
+
+  bucket.count += 1;
+  const remaining = Math.max(0, RATE_LIMIT_MAX - bucket.count);
+  return { allowed: bucket.count <= RATE_LIMIT_MAX, remaining, resetAt: bucket.resetAt };
+}
+
+/** Periodically prune expired buckets to avoid memory leaks. */
+setInterval(() => {
+  const now = Date.now();
+  for (const [key, bucket] of rateLimitMap) {
+    if (now >= bucket.resetAt) rateLimitMap.delete(key);
+  }
+}, RATE_LIMIT_WINDOW_MS);
+
+// ─── STRUCTURED LOGGING ───────────────────────────────────────────────────────
+
+type LogLevel = 'info' | 'warn' | 'error';
+
+type LogEntry = {
+  level:     LogLevel;
+  requestId: string;
+  message:   string;
+  [key: string]: unknown;
+};
+
+function log(level: LogLevel, requestId: string, message: string, extra?: Record<string, unknown>): void {
+  const entry: LogEntry = {
+    level,
+    requestId,
+    message,
+    timestamp: new Date().toISOString(),
+    ...extra,
+  };
+
+  const line = IS_PRODUCTION
+    ? JSON.stringify(entry)
+    : `[${entry.timestamp}] [${level.toUpperCase()}] [${requestId}] ${message}` +
+      (extra ? ' ' + JSON.stringify(extra) : '');
+
+  if (level === 'error') {
+    console.error(line);
+  } else if (level === 'warn') {
+    console.warn(line);
+  } else {
+    console.info(line);
+  }
+}
+
 // ─── KNOWN ENDPOINTS ──────────────────────────────────────────────────────────
 // Valid endpoint names. Handlers are resolved dynamically at runtime (.ts / .js).
+// Modules live in the "ts/" directory (renamed from "lib/").
 
 const KNOWN_ENDPOINTS = [
   'admin',
@@ -90,11 +184,11 @@ const AVAILABLE_ROUTES: string[] = [...KNOWN_ENDPOINTS].sort();
 // ─── SECURITY HEADERS ─────────────────────────────────────────────────────────
 
 const SECURITY_HEADERS: Record<string, string> = {
-  'X-Content-Type-Options':    'nosniff',
-  'X-Frame-Options':           'DENY',
-  'X-XSS-Protection':         '1; mode=block',
-  'Referrer-Policy':           'strict-origin-when-cross-origin',
-  'Permissions-Policy':        'camera=(), microphone=(), geolocation=()',
+  'X-Content-Type-Options': 'nosniff',
+  'X-Frame-Options':        'DENY',
+  'X-XSS-Protection':      '1; mode=block',
+  'Referrer-Policy':        'strict-origin-when-cross-origin',
+  'Permissions-Policy':     'camera=(), microphone=(), geolocation=()',
   // HSTS — only meaningful over HTTPS / in production
   ...(IS_PRODUCTION
     ? { 'Strict-Transport-Security': 'max-age=63072000; includeSubDomains; preload' }
@@ -162,10 +256,30 @@ class HandlerTimeoutError extends Error {
   }
 }
 
+class UnsupportedMediaTypeError extends Error {
+  constructor(contentType: string) {
+    super(`Unsupported Content-Type: "${contentType}". Expected application/json, application/x-www-form-urlencoded, or multipart/form-data.`);
+    this.name = 'UnsupportedMediaTypeError';
+  }
+}
+
 // ─── HELPERS ──────────────────────────────────────────────────────────────────
 
 function newRequestId(): string {
   return `${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 8)}`;
+}
+
+/**
+ * Extracts the most reliable client IP address from standard proxy headers.
+ * Falls back to a placeholder when no IP can be determined (e.g. in tests).
+ */
+function extractClientIp(request: NextRequest): string {
+  return (
+    request.headers.get('x-real-ip') ??
+    request.headers.get('cf-connecting-ip') ??    // Cloudflare
+    request.headers.get('x-forwarded-for')?.split(',')[0]?.trim() ??
+    'unknown'
+  );
 }
 
 function toAbsoluteUrl(redirectUrl: string, requestUrl: string): string {
@@ -196,6 +310,15 @@ function clientError(
 /** Methods that must not carry a request body per RFC 9110. */
 const BODYLESS_METHODS = new Set(['GET', 'HEAD', 'OPTIONS', 'TRACE']);
 
+/**
+ * Parses the request body according to its Content-Type.
+ *
+ * Improvements over v8:
+ *   - Throws UnsupportedMediaTypeError for unknown non-empty content types
+ *     instead of silently falling back to JSON guessing, which could mask bugs.
+ *   - Uses a streaming byte-count guard (ReadableStream reader) so the body
+ *     size check works even when Content-Length is absent or spoofed.
+ */
 async function parseBody(
   request: NextRequest,
 ): Promise<Record<string, unknown>> {
@@ -212,18 +335,49 @@ async function parseBody(
 
   const ct = (request.headers.get('content-type') ?? '').toLowerCase();
 
+  // ── Helper: read body text with a hard byte cap ──────────────────────────
+  async function readTextSafe(): Promise<string> {
+    if (!request.body) return '';
+
+    const reader  = request.body.getReader();
+    const chunks: Uint8Array[] = [];
+    let   total   = 0;
+
+    try {
+      while (true) {
+        const { done, value } = await reader.read();
+        if (done) break;
+        total += value.byteLength;
+        if (total > MAX_BODY_BYTES) {
+          reader.cancel();
+          throw new BodyTooLargeError();
+        }
+        chunks.push(value);
+      }
+    } finally {
+      try { reader.releaseLock(); } catch { /* already released */ }
+    }
+
+    const merged = new Uint8Array(total);
+    let   offset = 0;
+    for (const chunk of chunks) {
+      merged.set(chunk, offset);
+      offset += chunk.byteLength;
+    }
+
+    return new TextDecoder().decode(merged);
+  }
+
   try {
     // ── JSON ──────────────────────────────────────────────────────────────────
-    if (ct.includes('application/json')) {
-      const text = await request.clone().text();
-      if (text.length > MAX_BODY_BYTES) throw new BodyTooLargeError();
+    if (!ct || ct.includes('application/json')) {
+      const text = await readTextSafe();
       return text.trim() ? (JSON.parse(text) as Record<string, unknown>) : {};
     }
 
     // ── URL-encoded form ──────────────────────────────────────────────────────
     if (ct.includes('x-www-form-urlencoded')) {
-      const text = await request.clone().text();
-      if (text.length > MAX_BODY_BYTES) throw new BodyTooLargeError();
+      const text = await readTextSafe();
       return text ? Object.fromEntries(new URLSearchParams(text)) : {};
     }
 
@@ -235,25 +389,35 @@ async function parseBody(
       return result;
     }
 
-    // ── Fallback: attempt JSON parse if the body looks like an object/array ───
-    const text    = await request.clone().text();
-    if (text.length > MAX_BODY_BYTES) throw new BodyTooLargeError();
-    const trimmed = text.trim();
-    if (trimmed.startsWith('{') || trimmed.startsWith('[')) {
-      try { return JSON.parse(trimmed) as Record<string, unknown>; } catch { /* not JSON */ }
+    // ── Unknown content type with a body — reject rather than guess ───────────
+    // If there is no Content-Length or the body could be empty, skip quietly.
+    if (lengthHeader && parseInt(lengthHeader, 10) > 0) {
+      throw new UnsupportedMediaTypeError(ct);
     }
 
     return {};
   } catch (err) {
-    if (err instanceof BodyTooLargeError) throw err; // propagate intentional errors
+    if (
+      err instanceof BodyTooLargeError ||
+      err instanceof UnsupportedMediaTypeError
+    ) throw err;
+
     console.warn('[route] parseBody failed:', err instanceof Error ? err.message : err);
     return {};
   }
 }
 
 // ─── DYNAMIC HANDLER LOADER ───────────────────────────────────────────────────
-// Attempts to import the module with .js first, then .ts as a fallback.
-// This lets lib/ contain a mix of .ts and .js files without changing this router.
+// Handlers live in "@/ts/" — resolved via the tsconfig "paths" alias and the
+// Next.js webpack alias to "<project-root>/ts/".
+//
+// Probes ".js" first, then ".ts", so the directory may contain a mix of
+// extensions without any change to this router.
+//
+// Why dynamic import instead of a static @/ts import?
+//   The endpoint name is only known at runtime, so we must use a template-
+//   literal import(). Next.js / webpack will still tree-shake unused modules
+//   because the alias prefix "@/ts/" is stable and recognisable at build time.
 
 const handlerCache = new Map<string, HandlerFn>();
 
@@ -263,8 +427,9 @@ async function loadHandler(endpoint: KnownEndpoint): Promise<HandlerFn | null> {
 
   for (const ext of ['.js', '.ts'] as const) {
     try {
+      // ── @/ts alias → resolves to "<root>/ts/${endpoint}${ext}" at runtime ──
       const mod = (await import(
-        `../../../lib/${endpoint}${ext}`
+        `@/ts/${endpoint}${ext}`
       )) as HandlerModule;
       const fn  = resolveHandlerFn(mod);
 
@@ -278,7 +443,7 @@ async function loadHandler(endpoint: KnownEndpoint): Promise<HandlerFn | null> {
       if (code === 'MODULE_NOT_FOUND' || code === 'ERR_MODULE_NOT_FOUND') {
         continue;
       }
-      // Syntax / runtime error → surface immediately, do not silently skip
+      // Syntax / runtime error → surface immediately; do not silently skip
       throw err;
     }
   }
@@ -292,7 +457,7 @@ async function loadHandler(endpoint: KnownEndpoint): Promise<HandlerFn | null> {
  * Priority:
  *   1. Module itself is a function (CommonJS module.exports = fn)
  *   2. module.default is a function (ESM default export)
- *   3. First named function export that isn't module metadata
+ *   3. First named function export that is not module metadata
  *
  * Keys excluded from the named-export scan to avoid accidentally treating
  * helper utilities as the handler.
@@ -331,9 +496,10 @@ async function runHandler(
   request:   NextRequest,
   slug:      string[],
   requestId: string,
+  startTime: number,
 ): Promise<NextResponse> {
   const url  = new URL(request.url);
-  const body = await parseBody(request); // may throw BodyTooLargeError
+  const body = await parseBody(request); // may throw BodyTooLargeError / UnsupportedMediaTypeError
 
   const query = Object.fromEntries(url.searchParams) as Record<string, string>;
   // Expose sub-path segments after the first slug to the handler
@@ -346,11 +512,13 @@ async function runHandler(
   });
 
   const req: AdaptedRequest = {
-    method:  request.method,
-    url:     request.url,
+    method:    request.method,
+    url:       request.url,
     query,
     body,
     headers,
+    requestId,
+    startTime,
   };
 
   const state: ResponseState = {
@@ -393,12 +561,13 @@ async function runHandler(
     await Promise.race([Promise.resolve(fn(req, res)), timeout]);
   } catch (err: unknown) {
     // Propagate infrastructure errors up to the main dispatcher
-    if (err instanceof BodyTooLargeError)   throw err;
-    if (err instanceof HandlerTimeoutError) throw err;
+    if (err instanceof BodyTooLargeError)      throw err;
+    if (err instanceof HandlerTimeoutError)    throw err;
+    if (err instanceof UnsupportedMediaTypeError) throw err;
 
     // All other errors are handler-level bugs — return 500 with details
     const msg = err instanceof Error ? err.message : String(err);
-    console.error(`[route][${requestId}] handler threw:`, msg);
+    log('error', requestId, 'Handler threw an unhandled error', { error: msg });
     return buildResponse(
       {
         status:   500,
@@ -423,7 +592,7 @@ async function runHandler(
 function buildResponse(state: ResponseState, request: NextRequest): NextResponse {
   const attachCustomHeaders = (res: NextResponse): NextResponse => {
     // Determine which header names are "managed" (CORS / security)
-    // so handler code cannot accidentally override them
+    // so handler code cannot accidentally override them.
     const managed = new Set([
       ...Object.keys(CORS_STATIC),
       ...Object.keys(SECURITY_HEADERS),
@@ -482,11 +651,36 @@ async function handle(
 ): Promise<NextResponse> {
   const requestId = newRequestId();
   const startTime = Date.now();
+  const clientIp  = extractClientIp(request);
 
   // ── CORS preflight ────────────────────────────────────────────────────────
   if (request.method === 'OPTIONS') {
     return applyHeaders(new NextResponse(null, { status: 204 }), request);
   }
+
+  // ── Rate limiting ─────────────────────────────────────────────────────────
+  const rateCheck = checkRateLimit(clientIp);
+  if (!rateCheck.allowed) {
+    log('warn', requestId, 'Rate limit exceeded', { ip: clientIp });
+    const retryAfterSec = Math.ceil((rateCheck.resetAt - Date.now()) / 1000);
+    const res = applyHeaders(
+      NextResponse.json(
+        { error: 'Too many requests. Please slow down and try again shortly.', requestId },
+        { status: 429 },
+      ),
+      request,
+    );
+    try {
+      res.headers.set('Retry-After',               String(retryAfterSec));
+      res.headers.set('X-RateLimit-Limit',         String(RATE_LIMIT_MAX));
+      res.headers.set('X-RateLimit-Remaining',     '0');
+      res.headers.set('X-RateLimit-Reset',         String(Math.ceil(rateCheck.resetAt / 1000)));
+    } catch { /* immutable header — skip */ }
+    return res;
+  }
+
+  // Attach rate-limit info to every successful response via state.headers
+  // (populated into the response builder by runHandler).
 
   try {
     const { slug: rawSlug } = await context.params;
@@ -495,7 +689,10 @@ async function handle(
     // Sanitize: lowercase + allow only [a-z0-9-]
     const endpoint = (slug[0] ?? '').toLowerCase().replace(/[^a-z0-9\-]/g, '');
 
-    console.info(`[route][${requestId}] ${request.method} /api/${slug.join('/')}`);
+    log('info', requestId, `${request.method} /api/${slug.join('/')}`, {
+      ip:       clientIp,
+      endpoint,
+    });
 
     // ── No endpoint given ─────────────────────────────────────────────────
     if (!endpoint) {
@@ -528,10 +725,9 @@ async function handle(
     try {
       fn = await loadHandler(endpoint as KnownEndpoint);
     } catch (importErr: unknown) {
-      console.error(
-        `[route][${requestId}] import error for "${endpoint}":`,
-        importErr instanceof Error ? importErr.message : importErr,
-      );
+      log('error', requestId, `Import error for endpoint "${endpoint}"`, {
+        error: importErr instanceof Error ? importErr.message : String(importErr),
+      });
       return applyHeaders(
         NextResponse.json(
           {
@@ -560,7 +756,7 @@ async function handle(
     // ── Execute handler ───────────────────────────────────────────────────
     let response: NextResponse;
     try {
-      response = await runHandler(fn, request, slug, requestId);
+      response = await runHandler(fn, request, slug, requestId, startTime);
     } catch (err: unknown) {
       if (err instanceof BodyTooLargeError) {
         return applyHeaders(
@@ -568,8 +764,16 @@ async function handle(
           request,
         );
       }
+      if (err instanceof UnsupportedMediaTypeError) {
+        return applyHeaders(
+          NextResponse.json({ error: err.message, requestId }, { status: 415 }),
+          request,
+        );
+      }
       if (err instanceof HandlerTimeoutError) {
-        console.error(`[route][${requestId}] timeout for "${endpoint}"`);
+        log('error', requestId, `Handler timeout for endpoint "${endpoint}"`, {
+          timeoutMs: HANDLER_TIMEOUT_MS,
+        });
         return applyHeaders(
           NextResponse.json({ error: err.message, requestId }, { status: 504 }),
           request,
@@ -579,16 +783,26 @@ async function handle(
     }
 
     const elapsed = Date.now() - startTime;
-    console.info(`[route][${requestId}] → ${response.status} (${elapsed}ms)`);
+    log('info', requestId, `Response sent`, {
+      status:  response.status,
+      elapsed: `${elapsed}ms`,
+    });
+
+    // Attach rate-limit headers to the final response
+    try {
+      response.headers.set('X-RateLimit-Limit',     String(RATE_LIMIT_MAX));
+      response.headers.set('X-RateLimit-Remaining', String(rateCheck.remaining));
+      response.headers.set('X-RateLimit-Reset',     String(Math.ceil(rateCheck.resetAt / 1000)));
+    } catch { /* immutable header — skip */ }
 
     return response;
 
   } catch (err: unknown) {
     const elapsed = Date.now() - startTime;
-    console.error(
-      `[route][${requestId}] fatal error (${elapsed}ms):`,
-      err instanceof Error ? err.message : err,
-    );
+    log('error', requestId, 'Fatal unhandled error', {
+      elapsed: `${elapsed}ms`,
+      error:   err instanceof Error ? err.message : String(err),
+    });
 
     return applyHeaders(
       NextResponse.json(

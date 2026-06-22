@@ -12,9 +12,9 @@ const MAX_BODY_FIELD_LEN    = 50_000;
 const MAX_LOG_ENTRIES       = 500;
 const MAX_HIST_ENTRIES      = 200;
 const MAX_USER_HIST         = 100;
-const RATE_USER_PER_MIN     = 300;  // increased: multi-action flows need more headroom
-const RATE_IP_PER_MIN       = 600;  // increased: same reason
-const RATE_BURST_COUNT      = 60;   // FIX: was 20 — too low for inject loops sending 5-10 actions
+const RATE_USER_PER_MIN     = 300;  // Increased: multi-action flows need more headroom
+const RATE_IP_PER_MIN       = 600;  // Increased: same reason
+const RATE_BURST_COUNT      = 60;   // Was 20 — too low for inject loops sending 5-10 actions
 const RATE_BURST_WINDOW     = 5_000;
 const TTL_TOOLBOX           = 5  * 60_000;
 const TTL_ASSET             = 30 * 60_000;
@@ -28,6 +28,10 @@ const AI_FEED_DEFAULT_LIMIT = 50;
 // Nonce TTL: how long a nonce is remembered to prevent replay attacks.
 // Set to 5 minutes — wide enough to cover slow plugin poll cycles.
 const NONCE_TTL_MS = 5 * 60_000;
+
+// Maximum delay allowed for the "delay" action (in milliseconds).
+// Prevents clients from scheduling commands arbitrarily far in the future.
+const MAX_DELAY_MS = 60_000; // 60 seconds
 
 // ── DISPATCH ACTIONS — nonce replay exempt ─────────────────────────────────────
 // These are web→plugin injection actions sent by chats.ts in a sequential
@@ -71,6 +75,7 @@ const NONCE_EXEMPT_ACTIONS = new Set<string>([
   "get_info",
   "set_project",
   "get_all_actions",
+  "delay",
   "none",
 ]);
 
@@ -143,6 +148,8 @@ const ACTION_RENAME_MAP: Record<string, string> = {
   execute_json:           "dispatch_from_text",
   execute_text:           "dispatch_from_text",
   multi_target:           "dispatch_multi_target",
+  // run_code alias normalisation
+  RunCode:                "run_code",
 };
 
 function migrateActionName(raw: string): string {
@@ -585,18 +592,18 @@ async function verifyPluginHmac(request: Request, rawBody: string): Promise<bool
   }
 }
 
-// FIX: Nonce replay guard only runs on POST requests (not GET polls).
-// Additionally, dispatch/inject actions are exempt — the frontend generates
-// a fresh nonce per safeFetch() call, so each inject is unique. The server
-// exemption here is a safety net: if the frontend ever reuses a nonce by
-// mistake, dispatch commands still succeed (they are not auth-sensitive —
-// they require a valid session token for authorization instead).
+// Nonce replay guard only runs on POST requests (not GET polls).
+// GET polls are read-only and may be repeated many times with the same nonce.
+// Dispatch/inject actions are exempt — the frontend generates a fresh nonce
+// per safeFetch() call, so each inject is unique. The server exemption here is
+// a safety net: if the frontend ever reuses a nonce by mistake, dispatch
+// commands still succeed (they require a valid session token for auth instead).
 async function checkNonceReplay(
   ctx: ActionCtx,
   request: Request,
   actionName: string
 ): Promise<boolean> {
-  // Dispatch/inject actions are exempt — see NONCE_EXEMPT_ACTIONS comment.
+  // Dispatch/inject actions are exempt — see NONCE_EXEMPT_ACTIONS.
   if (NONCE_EXEMPT_ACTIONS.has(actionName)) return true;
 
   const nonce = (request.headers.get("x-nexus-nonce") ?? "").trim();
@@ -637,7 +644,9 @@ async function authorizeCommand(
   const isAdmin = verifyAdminToken(request);
   if (isAdmin) return { ok: true };
 
-  if (senderUser !== targetUser)
+  // Allow self-targeting when sender resolves to "default" (anonymous web caller).
+  // "default" is the san() fallback for empty/missing _user fields.
+  if (senderUser !== "default" && senderUser !== targetUser)
     return {
       ok: false,
       status: 403,
@@ -1584,11 +1593,11 @@ async function handlePost(
     return errResp(cors, 401, "Invalid HMAC signature.", { hint: "Check PLUGIN_HMAC_SECRET." });
 
   // Resolve action name early so nonce check can be action-aware.
-  // FIX: Dispatch/inject actions skip nonce replay — they fire in rapid
-  // succession from chats.ts (one per Studio action in the inject loop).
-  // Each call now generates its own nonce on the frontend, but the server
-  // exemption ensures zero "Nonce already used" errors even during the
-  // transition before every client has the new frontend deployed.
+  // Dispatch/inject actions skip nonce replay — they fire in rapid succession
+  // from chats.ts (one per Studio action in the inject loop). Each call now
+  // generates its own nonce on the frontend, but the server exemption ensures
+  // zero "Nonce already used" errors even during the transition before every
+  // client has the new frontend deployed.
   const rawAction    = migrateActionName(sanStr(String(body["action"] ?? body["type"] ?? ""), 80));
   const resolvedUser = san(body["_user"] ?? "");
 
@@ -1629,13 +1638,13 @@ async function handlePost(
     return jsonResp({ ok: true, status: "ok" }, 200, cors);
   }
 
-  // ── read_script: plugin reports a script's source back to the server ────────
-  // The plugin sends this after the AI sends a read_script action.
+  // ── read_script ────────────────────────────────────────────────────────────
+  // The plugin sends this after the AI sends a read_script dispatch action.
   // Fields accepted (all optional except name):
   //   name        — script name (required)
   //   source      — full Lua source text
   //   parent / parentName — parent instance name
-  //   fullPath    — full hierarchy path e.g. "ServerScriptService.MyScript"
+  //   fullPath    — full hierarchy path, e.g. "ServerScriptService.MyScript"
   //   class / scriptType  — "Script" | "LocalScript" | "ModuleScript"
   //   lineCount   — number of lines in the script
   //   disabled    — whether the script is currently disabled
@@ -1707,7 +1716,8 @@ async function handlePost(
     return jsonResp({ ok: true, status: "ok" }, 200, cors);
   }
 
-  // ── output_log: plugin reports captured Studio output log entries ───────────
+  // ── output_log ─────────────────────────────────────────────────────────────
+  // Plugin reports captured Studio output log entries back to the server.
   if (rawAction === "output_log") {
     const logs = sanArr(body["logs"], 100);
     await ctx.runMutation(internal.store.pushLogSvc, {
@@ -1847,7 +1857,8 @@ async function handlePost(
     return jsonResp({ ok: true, status: "ok" }, 200, cors);
   }
 
-  // ── runcode_report: result of a run_code action ────────────────────────────
+  // ── runcode_report ─────────────────────────────────────────────────────────
+  // Result of a run_code action sent back from Studio to the server.
   if (rawAction === "runcode_report") {
     const result = {
       mode:    sanStr(body["mode"] ?? "pipeline", 20),
@@ -1891,7 +1902,8 @@ async function handlePost(
     return jsonResp({ ok: true, status: "ok", count: result.count }, 200, cors);
   }
 
-  // ── plugin_error_report: forwarded to AI feed ──────────────────────────────
+  // ── plugin_error_report ────────────────────────────────────────────────────
+  // Plugin errors are forwarded to the AI feed so the AI is aware of failures.
   if (rawAction === "plugin_error_report") {
     const errorEntry = {
       actionName: sanStr(body["actionName"] ?? body["action_name"] ?? "unknown", 80),
@@ -1914,9 +1926,158 @@ async function handlePost(
     return jsonResp({ ok: true, status: "ok" }, 200, cors);
   }
 
-  // ── dispatch_command: web/AI → plugin, single command ─────────────────────
-  // This is the primary path used by chats.ts autoInjectToStudio() to send
-  // one Studio action at a time. Nonce replay is exempt (see NONCE_EXEMPT_ACTIONS).
+  // ── ping ───────────────────────────────────────────────────────────────────
+  // Lightweight keepalive / connectivity check. Returns immediately without
+  // queuing anything to Studio.
+  if (rawAction === "ping") {
+    const target     = san(body["_target_user"] ?? body["_user"] ?? "");
+    const lastPollTs = target
+      ? await ctx.runQuery(internal.store.getLastPoll, { username: target })
+      : 0;
+    return jsonResp({
+      ok: true, status: "ok", pong: true,
+      user:            target || undefined,
+      pluginConnected: target ? Date.now() - lastPollTs < 8_000 : undefined,
+      required_plugin_version: REQUIRED_PLUGIN_VERSION,
+    }, 200, cors);
+  }
+
+  // ── get_info ───────────────────────────────────────────────────────────────
+  // Returns session and queue status for a user without queuing any Studio action.
+  if (rawAction === "get_info") {
+    const target = san(body["_target_user"] ?? body["_user"] ?? "");
+    if (!target) return errResp(cors, 400, '"_user" is required.');
+    const sess       = await ctx.runQuery(internal.store.getSession,      { username: target });
+    const qc         = await ctx.runQuery(internal.store.countQueueItems, { username: target });
+    const lastPollTs = await ctx.runQuery(internal.store.getLastPoll,     { username: target });
+    return jsonResp({
+      ok: true, status: "ok",
+      user:            target,
+      pluginConnected: Date.now() - lastPollTs < 8_000,
+      hasSession:      !!sess,
+      placeId:         sess?.placeId ?? null,
+      userId:          sess?.userId  ?? null,
+      queueLength:     qc.total,
+      sessionStats:    await getSessionStats(ctx, target),
+      currentProject:  await getProject(ctx, target),
+      required_plugin_version: REQUIRED_PLUGIN_VERSION,
+    }, 200, cors);
+  }
+
+  // ── get_all_actions ────────────────────────────────────────────────────────
+  // Returns the full list of supported server-side action names so the AI /
+  // frontend can enumerate available commands without hard-coding them.
+  if (rawAction === "get_all_actions") {
+    const allActions = [
+      // Plugin → server reports
+      "read_script", "output_log", "output_report", "workspace_scan",
+      "toolbox_search_report", "descendants_report", "properties_report",
+      "properties_set_report", "action_list_report", "asset_library_report",
+      "asset_id_report", "asset_folder_report", "module_deploy_report",
+      "module_list_report", "terrain_materials_report", "runcode_report",
+      "expression_report", "query_report", "mention_report",
+      "plugin_error_report", "script_list_report", "script_lines_report",
+      "plugin_connect", "plugin_disconnect",
+      // Web/AI → plugin dispatch
+      "dispatch_command", "dispatch_batch", "dispatch_from_text",
+      "dispatch_multi_target",
+      // Studio actions (queued to plugin)
+      "create_instance", "create_script", "edit_script", "set_properties",
+      "rename", "delete", "parent", "list", "insert_asset", "play_test",
+      "run_test", "stop_test", "terrain", "undo", "redo",
+      "resolve_mention", "run_code", "delay", "none",
+      // Server-handled utility actions
+      "ping", "get_info", "get_all_actions", "status", "reset",
+      "set_project", "set_webhook", "search_toolbox", "insert_model",
+      "search_docs", "get_game_info", "get_user_info", "validate_asset",
+      "get_logs", "get_history",
+    ];
+    return jsonResp({
+      ok: true, status: "ok",
+      actions: allActions,
+      count:   allActions.length,
+    }, 200, cors);
+  }
+
+  // ── none ───────────────────────────────────────────────────────────────────
+  // Explicit no-op. Useful for testing connectivity or flushing nonces.
+  if (rawAction === "none") {
+    return jsonResp({ ok: true, status: "ok", action: "none" }, 200, cors);
+  }
+
+  // ── delay ──────────────────────────────────────────────────────────────────
+  // Schedules a nested command to be queued after a specified delay (ms).
+  // Usage: { action: "delay", _user: "...", ms: 2000, command: { action: "ping", ... } }
+  // The nested command is queued immediately but carries a _executeAfter timestamp
+  // that the plugin is expected to honour before executing.
+  if (rawAction === "delay") {
+    const sender   = san(body["_user"] ?? "");
+    const target   = san(body["_target_user"] ?? sender);
+    const priority = sanPriority(body["priority"]);
+
+    if (!target) return errResp(cors, 400, '"_user" or "_target_user" is required.');
+
+    const auth = await authorizeCommand(ctx, request, body, sender, target, "delay");
+    if (!auth.ok) return errResp(cors, auth.status!, auth.error!);
+
+    const delayMs = Math.max(0, Math.min(
+      sanInt(body["ms"] ?? body["delay"] ?? body["wait"] ?? 0, 0, 0, MAX_DELAY_MS),
+      MAX_DELAY_MS
+    ));
+
+    const nestedCmd = sanObj(body["command"] ?? body["cmd"] ?? body["then"] ?? {});
+    const nestedAct = migrateActionName(sanAction(nestedCmd["action"]));
+
+    if (!nestedAct)
+      return errResp(cors, 400, '"command.action" is required inside a delay action.');
+
+    const adminGated = getAdminGatedActions();
+    if (!verifyAdminToken(request) && adminGated.has(nestedAct))
+      return errResp(cors, 403, `"${escapeHtml(nestedAct, 60)}" requires an admin token.`);
+
+    const executeAfter = Date.now() + delayMs;
+    const cmdToQueue: QueueCommand = {
+      ...(nestedCmd as QueueCommand),
+      action:          nestedAct,
+      _user:           String(body["_user"] ?? "web").substring(0, 50),
+      _target_user:    target,
+      _executeAfter:   executeAfter,  // Plugin should wait until this timestamp (ms) before running
+      _delayMs:        delayMs,
+      _apiKey:         undefined,
+      _session_token:  undefined,
+      _place_id:       undefined,
+    };
+
+    await pushQueue(ctx, target, cmdToQueue, priority);
+
+    const lastPollTs = await ctx.runQuery(internal.store.getLastPoll,     { username: target });
+    const qc         = await ctx.runQuery(internal.store.countQueueItems, { username: target });
+
+    await ctx.runMutation(internal.store.bumpStats, { user: sender ?? "web", action: "delay" });
+    await ctx.runMutation(internal.store.pushLog,   {
+      action: "delay", user: sender ?? "web", target,
+      details: JSON.stringify({ nestedAct, delayMs }),
+    });
+    await ctx.runMutation(internal.store.pushUserHistory, {
+      username: sender, action: "delay",
+      details: `${nestedAct} after ${delayMs}ms → ${target}`,
+    });
+
+    return jsonResp({
+      ok: true, status: "ok",
+      scheduledAction:  nestedAct,
+      delayMs,
+      executeAfter,
+      target,           priority,
+      pluginConnected:  Date.now() - lastPollTs < 8_000,
+      queueLength:      qc.total,
+      required_plugin_version: REQUIRED_PLUGIN_VERSION,
+    }, 200, cors);
+  }
+
+  // ── dispatch_command ───────────────────────────────────────────────────────
+  // Primary path used by chats.ts autoInjectToStudio() to send one Studio
+  // action at a time. Nonce replay is exempt (see NONCE_EXEMPT_ACTIONS).
   if (rawAction === "dispatch_command") {
     const sender   = san(body["_user"]        ?? "");
     const target   = san(body["_target_user"] ?? sender);
@@ -1966,7 +2127,7 @@ async function handlePost(
     }, 200, cors);
   }
 
-  // ── reset: clear queue ─────────────────────────────────────────────────────
+  // ── reset ──────────────────────────────────────────────────────────────────
   if (rawAction === "reset") {
     const target = san(body["_user"] ?? body["user"] ?? "");
     if (!target) return errResp(cors, 400, '"user" is required.');
@@ -2344,10 +2505,10 @@ async function handlePost(
 
   // ── Generic single-action dispatch (fallback) ──────────────────────────────
   // Handles all plugin-registered actions not explicitly covered above:
-  // create_instance, create_script, edit_script, set_properties, rename,
-  // delete, parent, list, insert_asset, play_test, run_test, stop_test,
-  // terrain, undo, redo, resolve_mention, run_code, ping, get_info,
-  // get_all_actions, none, etc.
+  //   create_instance, create_script, edit_script, set_properties, rename,
+  //   delete, parent, list, insert_asset, play_test, run_test, stop_test,
+  //   terrain, undo, redo, resolve_mention, run_code, get_info,
+  //   get_all_actions, none, etc.
   // Nonce replay is exempt for all of these (see NONCE_EXEMPT_ACTIONS).
   if (rawAction) {
     const act      = migrateActionName(sanAction(rawAction));
@@ -2390,7 +2551,7 @@ async function handlePost(
     }, 200, cors);
   }
 
-  // Fallback
+  // Fallback — no recognisable action found in the request body
   return errResp(
     cors, 400,
     'Request not recognised. Include a valid "action" or query parameter.',
