@@ -54,6 +54,23 @@ const _csrfNonce: string = (function () {
   } catch { return Math.random().toString(36).slice(2) + Date.now().toString(36) }
 })()
 
+// FIX (nonce replay bug): _csrfNonce above is generated exactly ONCE per
+// page session and is fine for one-off requests, but the Convex backend's
+// checkNonceReplay() rejects any nonce it has already seen within a 5-
+// minute window — so reusing _csrfNonce across multiple action dispatches
+// in the same batch (e.g. autoInjectToStudio() sending 2+ actions back to
+// back) caused every action after the first to fail with "Nonce already
+// used (possible replay)". generateFreshNonce() mints a brand-new random
+// value on every call so each individual request to the Convex backend
+// gets its own unique nonce, while _csrfNonce itself remains untouched for
+// any caller that still wants the stable per-session value.
+function generateFreshNonce(): string {
+  try {
+    return Array.from(crypto.getRandomValues(new Uint8Array(20)))
+      .map((b) => b.toString(16).padStart(2, '0')).join('')
+  } catch { return Math.random().toString(36).slice(2) + Date.now().toString(36) + Math.random().toString(36).slice(2) }
+}
+
 let _adminToken = ''
 function generateAdminToken(): string {
   if (!SESSION) return ''
@@ -1331,12 +1348,15 @@ function _isNexusBackendUrl(url: string): boolean {
 
 async function fetchRetry(url: string, opts: RequestInit, tries = 3): Promise<Response | null> {
   const headers = opts.headers as Record<string, string>
-  if (headers && _isNexusBackendUrl(url)) {
-    headers['X-Nexus-Nonce'] = _csrfNonce
-    if (isAdmin() || isOwner()) headers['X-Admin-Token'] = _adminToken || generateAdminToken()
-  }
+  const isNexus = !!(headers && _isNexusBackendUrl(url))
+  if (headers && isNexus && (isAdmin() || isOwner())) headers['X-Admin-Token'] = _adminToken || generateAdminToken()
   for (let i = 0; i < tries; i++) {
     try {
+      // FIX: a fresh nonce per attempt (not just per call) — generating it
+      // once outside this loop meant a retried attempt reused the same
+      // nonce as the failed first attempt, which the backend's replay
+      // guard would itself reject as a duplicate.
+      if (headers && isNexus) headers['X-Nexus-Nonce'] = generateFreshNonce()
       const ctrl = new AbortController(); const tid = setTimeout(() => ctrl.abort(), 12000)
       const r = await fetch(url, { ...opts, signal: ctrl.signal }); clearTimeout(tid)
       if (r.ok) return r
@@ -1357,7 +1377,10 @@ async function safeFetch(bodyData: Record<string, unknown>, signal?: AbortSignal
     let bd = bodyData
     if (bd.command && typeof (bd.command as Record<string, unknown>).source === 'string' && ((bd.command as Record<string, unknown>).source as string).length > 80000)
       bd = { ...bd, command: { ...(bd.command as Record<string, unknown>), source: ((bd.command as Record<string, unknown>).source as string).slice(0, 80000) + '\n-- [TRUNCATED]' } }
-    const opts: RequestInit = { method: 'POST', headers: { 'Content-Type': 'application/json', 'X-Nexus-Nonce': _csrfNonce }, body: JSON.stringify(bd) }
+    // FIX: a fresh nonce per request — see generateFreshNonce() above for
+    // why reusing _csrfNonce here broke every action after the first one
+    // in a multi-action batch.
+    const opts: RequestInit = { method: 'POST', headers: { 'Content-Type': 'application/json', 'X-Nexus-Nonce': generateFreshNonce() }, body: JSON.stringify(bd) }
     if (signal && !signal.aborted) opts.signal = signal
     return await fetch(API_URL + '/', opts)
   } catch (e) { if (_isAbortError(e)) throw e; console.warn('[NEXUS inject] safeFetch error:', (e as Error).message); return null }
@@ -1384,11 +1407,48 @@ async function _injectCommand(cmdToSend: ActionCmd, user: string, signal?: Abort
   return { ok: false, error: rd.error ? rd.error.slice(0, 120) : ('HTTP ' + r.status) }
 }
 
-async function autoInjectToStudio(aiResponse: string, _userPrompt: string): Promise<string[] | null> {
-  if (!studioConnected) return null
-  const summary: string[] = [], user = (SESSION?.user.username ?? '').toLowerCase()
+// Fetches the most recent read_script report snapshot from the server.
+// FIX (root cause of "AI says check Explorer instead of showing source"):
+// dispatch_command (used by _injectCommand) only enqueues the action for
+// the Studio plugin to pick up on its next poll — it does NOT wait for the
+// plugin to actually execute it and return the script source synchronously.
+// The real result (source code) only shows up later, when the plugin
+// reports it back via the separate "read_script" report endpoint in
+// control.ts, which control.ts saves via saveData() under the "read_script"
+// key. Previously, read_script (along with list/get_output/resolve_mention)
+// was treated purely as an "info" step with no summary entry, so after a
+// short delay autoInjectToStudio() returned an empty summary — and send()
+// then fell back to the generic "Done. Check Explorer in Studio." message,
+// even though the actual script source was sitting right there on the
+// server the whole time. This fetches that snapshot directly.
+async function fetchReadScriptResult(scriptName: string): Promise<{ name: string; source: string; class: string; lineCount: number } | null> {
+  if (!SESSION) return null
+  try {
+    const ctrl = new AbortController(); const tid = setTimeout(() => ctrl.abort(), 7000)
+    const user = (SESSION.user.username || '').toLowerCase()
+    const r = await fetch(`${API_URL}/?get_script=1&user=${encodeURIComponent(user)}`, { signal: ctrl.signal })
+    clearTimeout(tid)
+    if (!r.ok) return null
+    const d = await r.json() as { name?: string; source?: string; class?: string; lineCount?: number }
+    if (!d?.name) return null
+    // Guard against showing a stale snapshot from a different, unrelated
+    // read_script call earlier in the session — only accept it if the name
+    // matches what we actually asked to read (when a name was specified).
+    if (scriptName && d.name.toLowerCase() !== scriptName.toLowerCase()) return null
+    return { name: d.name, source: d.source || '', class: d.class || 'Script', lineCount: d.lineCount || 0 }
+  } catch { return null }
+}
+
+interface InjectResult {
+  summary: string[] | null
+  readResults: { name: string; source: string; class: string; lineCount: number }[]
+}
+
+async function autoInjectToStudio(aiResponse: string, _userPrompt: string): Promise<InjectResult> {
+  if (!studioConnected) return { summary: null, readResults: [] }
+  const summary: string[] = [], readResults: { name: string; source: string; class: string; lineCount: number }[] = [], user = (SESSION?.user.username ?? '').toLowerCase()
   const cmds = parseAllCommands(aiResponse)
-  if (!cmds.length) return null
+  if (!cmds.length) return { summary: null, readResults: [] }
 
   const hasPlayTest = cmds.some((c) => c.action === 'play_test' || c.action === 'run_test')
   const hasStopTest = cmds.some((c) => c.action === 'stop_test')
@@ -1416,6 +1476,16 @@ async function autoInjectToStudio(aiResponse: string, _userPrompt: string): Prom
     updateStep(step.sid, 'running'); await _sleep(120)
 
     const cmd = step.cmd, a = cmd.action || ''
+    // Strictly sequential by construction: this is a plain for-loop with
+    // _injectCommand awaited on every iteration before moving to the next
+    // step — there is no Promise.all/concurrent dispatch here, so action N
+    // is never sent until action N-1's response has actually been
+    // received. The delays below are what happens AFTER that response
+    // comes back and BEFORE the next action is sent, since Studio itself
+    // needs a moment to actually finish applying the change (e.g. an
+    // instance to actually exist in the DataModel) — a fast "queued OK"
+    // response from the relay server doesn't mean Studio has finished
+    // processing it yet.
     const res = await _injectCommand(cmd, user, sig)
 
     if (res.ok) {
@@ -1423,14 +1493,47 @@ async function autoInjectToStudio(aiResponse: string, _userPrompt: string): Prom
         updateStep(step.sid, 'running', UI.testRunning); _playTestActive = true
       } else if (a === 'stop_test') {
         updateStep(step.sid, 'done'); _playTestActive = false
-      } else if (a === 'read_script' || a === 'list' || a === 'get_output' || a === 'resolve_mention') {
-        updateStep(step.sid, 'info'); await _sleep(300)
+      } else if (a === 'read_script') {
+        // FIX: actually retrieve and surface the script source instead of
+        // just marking this step "info" and moving on — see
+        // fetchReadScriptResult() above for why a generic "sent to
+        // Studio" message was showing instead of the real content.
+        // NOTE: the result is NOT pushed into `summary` — studioSummary
+        // entries render as flat, escaped, single-line list items (see
+        // appendMsg()'s renderSumItems()), which would mangle multi-line
+        // Lua source. Instead it's collected into readResults below and
+        // returned separately so send() can append it to the main
+        // message body, where the existing markdown/code-block pipeline
+        // renders it correctly.
+        updateStep(step.sid, 'info'); await _sleep(800)
+        const scriptName = String(cmd.name || cmd.target || '')
+        const readResult = await fetchReadScriptResult(scriptName)
+        if (readResult) {
+          updateStep(step.sid, 'done', `Read script: ${readResult.name}`)
+          readResults.push(readResult)
+        } else {
+          updateStep(step.sid, 'info', undefined, 'Source not available yet — check Explorer in Studio.')
+        }
+      } else if (a === 'list' || a === 'get_output' || a === 'resolve_mention') {
+        // FIX: read-type actions — was 300ms, now ~800ms. A read issued
+        // right after a create/edit in the same batch (e.g. create_script
+        // then immediately read_script to verify it) was frequently
+        // landing before Studio had actually finished writing the new
+        // instance into the DataModel, surfacing as a false "not found".
+        updateStep(step.sid, 'info'); await _sleep(800)
       } else {
         updateStep(step.sid, 'done')
         const lbl2 = makeStepLabel(cmd); if (lbl2) summary.push(lbl2)
+        // FIX: write/create-type actions — these mutate the DataModel and
+        // need real time to settle before whatever comes next (often a
+        // read, reparent, or another create that depends on this one)
+        // is safe to send. Was 750ms for create_instance/create_script/
+        // RunCode/run_code; bumped to 1200-1500ms per the reported
+        // "read right after create fails intermittently" symptom.
         let postDelay = 400
-        if (a === 'set_properties') postDelay = 900
-        else if (a === 'create_instance' || a === 'create_script' || a === 'RunCode' || a === 'run_code') postDelay = 750
+        if (a === 'create_script' || a === 'RunCode' || a === 'run_code') postDelay = 1500
+        else if (a === 'create_instance' || a === 'edit_script') postDelay = 1200
+        else if (a === 'set_properties') postDelay = 900
         else if (a === 'terrain' || a === 'insert_asset') postDelay = 600
         await _sleep(postDelay)
       }
@@ -1441,7 +1544,7 @@ async function autoInjectToStudio(aiResponse: string, _userPrompt: string): Prom
     doneCount++; if (cntEl) cntEl.textContent = '(' + doneCount + '/' + planSteps.length + ')'
   }
 
-  return summary.length > 0 ? summary : null
+  return { summary: summary.length > 0 ? summary : null, readResults }
 }
 
 // ── SYSTEM PROMPT ──────────────────────────────────────────────────────────────
@@ -1763,19 +1866,43 @@ async function send(): Promise<void> {
     if (_preCmds.length > 0) {
       const _totalActions = _preCmds.length
       if (showThinking) { clearSteps(); const _injectSummaryStep = addStep('Sending ' + _totalActions + ' action(s) to Studio...', 'running', 'One by one, please wait'); setStepTitle(UI.buildingInStudio); await _sleep(200); if (_injectSummaryStep) updateStep(_injectSummaryStep, 'done') }
-      studioSummary = await autoInjectToStudio(aiText, lastPrompt)
+      const injectResult = await autoInjectToStudio(aiText, lastPrompt)
+      studioSummary = injectResult.summary
       if (!S.gen || _localCancelSignal?.aborted) { _resetGenState(); const cancelMsg: ConvMsg = { role: 'ai', content: 'Process cancelled.', time: Date.now() }; cv.msgs.push(cancelMsg); appendMsg(cancelMsg); saveS(); return }
+
+      displayText = stripAllCode(aiText)
+      // FIX (root cause of the reported bug): previously, when the only
+      // action was read_script (or read_script alongside other actions
+      // that don't add a build-summary entry), studioSummary came back
+      // empty/null and the fallback text "Done. Check Explorer in
+      // Studio." was shown — even though the actual script source was
+      // already sitting on the server. Now any fetched read results are
+      // rendered as proper ```lua code blocks appended to the message
+      // body, where the existing markdown pipeline displays them
+      // correctly, regardless of whether any other build actions ran.
+      if (injectResult.readResults.length > 0) {
+        const readBlocks = injectResult.readResults.map((r) =>
+          `**${r.name}** (${r.class}, ${r.lineCount} line${r.lineCount === 1 ? '' : 's'}):\n\`\`\`lua\n${r.source}\n\`\`\``
+        ).join('\n\n')
+        displayText = displayText ? displayText + '\n\n' + readBlocks : readBlocks
+      }
+      if (!displayText || displayText.length < 20) {
+        displayText = studioSummary?.length
+          ? 'Successfully sent to Studio:\n' + studioSummary.map((s) => '• ' + s).join('\n')
+          : 'Done. Check Explorer in Studio.'
+      }
     } else {
-      // No actions detected — finalize + remove the card and append the
-      // message immediately afterward, with no awaited gap between them.
+      // Studio is connected but this reply legitimately has no actions to
+      // run (e.g. the AI is just answering a question) — display it as a
+      // normal message with no extra annotation. Finalize + remove the
+      // card and append the message immediately afterward, with no
+      // awaited gap between them (keeps the no-flicker behavior).
       if (showThinking) finalizeSteps()
-      displayText = cleanAIResponse(aiText) + '\n\n> ⚠️ No actions detected.'
+      displayText = cleanAIResponse(aiText)
       const aiMsg0: ConvMsg & { _rawContent: string } = { role: 'ai', content: displayText, time: Date.now(), _rawContent: aiText }
       removeStepsCard()
       cv.msgs.push(aiMsg0); appendMsg(aiMsg0); _resetGenState(); saveS(); return
     }
-    displayText = stripAllCode(aiText)
-    if (!displayText || displayText.length < 20) displayText = studioSummary?.length ? 'Successfully sent to Studio:\n' + studioSummary.map((s) => '• ' + s).join('\n') : 'Done. Check Explorer in Studio.'
     if (!_playTestActive) { if (showThinking) finalizeSteps() }
     else { document.getElementById('stepsCancel')?.remove() }
   } else {
