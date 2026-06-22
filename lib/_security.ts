@@ -21,7 +21,7 @@
 //   • Tidak ada perubahan behaviour — semua logic identik dengan v3
 
 import crypto from 'crypto';
-import type { AdaptedRequest, AdaptedResponse } from '../app/api/[...slug]/route.js';
+import type { AdaptedRequest, AdaptedResponse } from '../app/api/[...slug]/route';
 
 // ═══════════════════════════════════════════════════════════════════════════════
 // SECTION 1 — HTML / STRING UTILITIES

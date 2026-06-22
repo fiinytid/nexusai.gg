@@ -10,7 +10,7 @@
 //   • err.name TimeoutError/AbortError di-narrowing lewat type guard
 //   • Tidak ada perubahan behaviour — semua logic identik dengan v6
 
-import type { HandlerFn, AdaptedRequest, AdaptedResponse } from '../app/api/[...slug]/route.js';
+import type { HandlerFn, AdaptedRequest, AdaptedResponse } from '../app/api/[...slug]/route';
 import { checkRateLimit, setSecurityHeaders, } from './_security';
 
 // ─── TYPES ────────────────────────────────────────────────────────────────────

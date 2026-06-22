@@ -31,7 +31,7 @@
 
 import { readFileSync, writeFileSync, existsSync } from 'fs';
 import crypto from 'crypto';
-import type { HandlerFn, AdaptedRequest, AdaptedResponse } from '../app/api/[...slug]/route.js';
+import type { HandlerFn, AdaptedRequest, AdaptedResponse } from '../app/api/[...slug]/route';
 import { verifyAdminToken, sanitizeStr, checkRateLimit } from './_security';
 
 // ─── TYPES ────────────────────────────────────────────────────────────────────

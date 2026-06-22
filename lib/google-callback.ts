@@ -9,7 +9,7 @@
 //   • safeBase64Encode, fetchWithTimeout, getAllowedBase semua dianotasi penuh
 //   • Tidak ada perubahan behaviour — semua logic identik dengan v5
 
-import type { HandlerFn, AdaptedRequest, AdaptedResponse } from '../app/api/[...slug]/route.js';
+import type { HandlerFn, AdaptedRequest, AdaptedResponse } from '../app/api/[...slug]/route';
 
 // ─── TYPES ────────────────────────────────────────────────────────────────────
 

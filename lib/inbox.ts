@@ -8,7 +8,7 @@
 //   • Exports deleteUserInbox() — called by sync.ts on user deletion
 
 import type { SupabaseClient }                             from '@supabase/supabase-js';
-import type { HandlerFn, AdaptedRequest, AdaptedResponse } from '../app/api/[...slug]/route.js';
+import type { HandlerFn, AdaptedRequest, AdaptedResponse } from '../app/api/[...slug]/route';
 import { sanitizeStr, checkRateLimit }                    from './_security';
 
 // ═══════════════════════════════════════════════════════════════════════════

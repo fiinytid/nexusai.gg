@@ -8,7 +8,7 @@ import {
   checkRateLimit,
   setSecurityHeaders,
 } from './_security';
-import type { AdaptedRequest, AdaptedResponse } from '../app/api/[...slug]/route.js';
+import type { AdaptedRequest, AdaptedResponse } from '../app/api/[...slug]/route';
 
 // ─── TYPES ────────────────────────────────────────────────────────────────────
 

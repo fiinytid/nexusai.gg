@@ -7,7 +7,7 @@
 
 import crypto from 'crypto';
 import type { SupabaseClient } from '@supabase/supabase-js';
-import type { HandlerFn, AdaptedRequest, AdaptedResponse } from '../app/api/[...slug]/route.js';
+import type { HandlerFn, AdaptedRequest, AdaptedResponse } from '../app/api/[...slug]/route';
 import {
   sanitizeStr,
   escapeHtml,

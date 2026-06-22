@@ -10,7 +10,7 @@
 //   • Import checkRateLimit, setSecurityHeaders dari _security.ts
 //   • Tidak ada perubahan behaviour — logic identik dengan v3
 
-import type { HandlerFn, AdaptedRequest, AdaptedResponse } from '../app/api/[...slug]/route.js';
+import type { HandlerFn, AdaptedRequest, AdaptedResponse } from '../app/api/[...slug]/route';
 import { checkRateLimit, setSecurityHeaders } from './_security';
 
 // ─── TYPES ────────────────────────────────────────────────────────────────────
