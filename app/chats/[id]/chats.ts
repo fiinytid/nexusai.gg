@@ -287,6 +287,97 @@ function _injectUiFixStyles(): void {
   height: 1.5px; background: var(--pink); transform: rotate(-38deg);
   border-radius: 2px; opacity: .85; pointer-events: none;
 }
+
+/* ─── AI clarification question buttons ─── */
+.clarify-block {
+  margin-top: 10px; padding: 10px 12px; border-radius: 10px;
+  background: rgba(0,229,255,.05); border: 1px solid rgba(0,229,255,.18);
+}
+.clarify-block + .clarify-block { margin-top: 8px; }
+.clarify-question {
+  font-size: 12px; color: var(--text); font-weight: 600; margin-bottom: 8px; line-height: 1.5;
+}
+.clarify-options { display: flex; flex-wrap: wrap; gap: 7px; }
+.clarify-btn {
+  padding: 8px 14px; min-height: 36px;
+  border-radius: 8px; border: 1px solid rgba(0,229,255,.32);
+  background: rgba(0,229,255,.08); color: var(--cyan);
+  font-family: 'JetBrains Mono', monospace; font-size: 11.5px; font-weight: 600;
+  cursor: pointer; transition: background .14s, border-color .14s, transform .1s, opacity .14s;
+  -webkit-tap-highlight-color: transparent;
+}
+.clarify-btn:hover:not(:disabled) { background: rgba(0,229,255,.16); border-color: rgba(0,229,255,.55); transform: translateY(-1px); }
+.clarify-btn:active:not(:disabled) { transform: translateY(0) scale(.97); }
+.clarify-btn:disabled { opacity: .4; cursor: default; }
+.clarify-btn.chosen {
+  opacity: 1 !important; background: rgba(0,255,170,.14); border-color: rgba(0,255,170,.45); color: var(--green);
+}
+
+/* ─── Clarify "other" free-text answer row ─── */
+.clarify-other-row {
+  display: flex; align-items: center; gap: 6px; margin-top: 9px;
+  padding-top: 9px; border-top: 1px solid rgba(0,229,255,.12);
+}
+.clarify-other-row.chosen { opacity: .55; }
+.clarify-other-input {
+  flex: 1; min-width: 0; height: 34px; padding: 0 10px;
+  border-radius: 7px; border: 1px solid rgba(0,229,255,.18);
+  background: rgba(3,3,18,.5); color: var(--text);
+  font-family: 'JetBrains Mono', monospace; font-size: 11.5px;
+  outline: none; transition: border-color .14s, background .14s;
+}
+.clarify-other-input::placeholder { color: rgba(58,74,122,.85); }
+.clarify-other-input:focus { border-color: rgba(0,229,255,.5); background: rgba(3,3,18,.75); }
+.clarify-other-input:disabled { opacity: .5; cursor: default; }
+.clarify-other-btn {
+  flex-shrink: 0; height: 34px; padding: 0 13px; min-width: 56px;
+  border-radius: 7px; border: 1px solid rgba(0,229,255,.3);
+  background: rgba(0,229,255,.1); color: var(--cyan);
+  font-family: 'JetBrains Mono', monospace; font-size: 11px; font-weight: 700;
+  cursor: pointer; transition: background .14s, opacity .14s;
+  -webkit-tap-highlight-color: transparent;
+}
+.clarify-other-btn:hover:not(:disabled) { background: rgba(0,229,255,.2); }
+.clarify-other-btn:disabled { opacity: .35; cursor: default; }
+
+/* ══════════════════════════════════════════════════════════════
+   RESPONSIVE PASS — covers every element this injected
+   stylesheet (chats.ts) introduces beyond page.tsx's own CSS:
+   model dropdown, clarify buttons, disabled-attach indicator.
+   Breakpoints mirror page.tsx's own (768px tablet/mobile split,
+   480px small phones) so behavior stays consistent app-wide.
+══════════════════════════════════════════════════════════════ */
+@media (max-width: 768px) {
+  .model-dd { min-width: 0 !important; width: calc(100vw - 24px) !important; max-width: 360px !important; }
+  .model-dd .mo { min-height: 56px !important; padding: 10px 12px !important; }
+  .model-dd .mo-icon { width: 32px !important; height: 32px !important; }
+  .model-dd .mo-n { font-size: 12px !important; }
+  .model-dd .mo-s { font-size: 9.5px !important; }
+
+  .clarify-block { padding: 10px !important; }
+  .clarify-question { font-size: 12.5px !important; }
+  .clarify-options { gap: 6px !important; }
+  .clarify-btn {
+    flex: 1 1 auto !important; min-width: calc(50% - 6px) !important;
+    padding: 9px 10px !important; min-height: 40px !important; font-size: 11px !important;
+    text-align: center !important;
+  }
+  .clarify-other-row { margin-top: 10px !important; padding-top: 10px !important; }
+  .clarify-other-input { height: 38px !important; font-size: 16px !important; }
+  .clarify-other-btn { height: 38px !important; min-width: 52px !important; padding: 0 10px !important; }
+}
+@media (max-width: 480px) {
+  .model-dd { width: calc(100vw - 16px) !important; max-width: none !important; }
+  .clarify-btn { min-width: 100% !important; }
+  .clarify-question { font-size: 12px !important; }
+  .clarify-other-row { flex-wrap: wrap !important; }
+  .clarify-other-input { flex: 1 1 100% !important; }
+  .clarify-other-btn { flex: 1 1 100% !important; }
+}
+@media (max-width: 360px) {
+  .model-dd .mo-s { display: none !important; }
+  .clarify-block { padding: 8px !important; }
+}
 `
   document.head.appendChild(s)
 }
@@ -445,8 +536,8 @@ const UI = {
   loaderLoadData: 'Loading data...',
   loaderConnecting:'Checking Studio connection...',
   loaderReady:    'Ready!',
-  dailyReady:     'Daily reward available! Click Claim.',
-  dailyAlready:   'Already claimed today.',
+  dailyReady:     'Daily reward ready — claims automatically, or click now.',
+  dailyAlready:   'Already claimed — next one is auto-claimed when ready.',
   dailyNext:      'Next: ',
   retrying:       'Retrying...',
   injecting:      'Sending to Studio...',
@@ -476,8 +567,6 @@ const MODEL_LIST: ModelEntry[] = [
   { id: 'gemini-3.5-flash',     prov: 'gemini',     cost: 3,  label: 'Gemini 3.5 Flash',    icon: '/images/gemini.png',   badge: 'FAST', inputImages: 'enabled' },
   { id: 'gemini-3.1-flash-lite',prov: 'gemini',     cost: 2,  label: 'Gemini 3.1 Flash Lite',icon: '/images/gemini.png',  badge: 'FAST', inputImages: 'enabled' },
   { id: 'gemini-3.1-pro',       prov: 'gemini',     cost: 12, label: 'Gemini 3.1 Pro',       icon: '/images/gemini.png',  badge: 'BEST', inputImages: 'enabled' },
-  { grp: 'Nex Agi' },
-  { id: 'nex-agi/nex-n2-pro:free',     prov: 'openrouter',     cost: 1,  label: 'Nex N2 Pro',    icon: '/images/NexAGI.svg',   badge: 'BEST', inputImages: 'enabled' },
   { grp: 'ChatGPT' },
   { id: 'openai/gpt-oss-120b:free', prov: 'openrouter', cost: 0, label: 'ChatGPT 4o',       icon: '/images/chatgpt.png', badge: 'FREE', inputImages: 'disabled' },
   { grp: 'DeepSeek' },
@@ -599,14 +688,25 @@ const S: AppState = {
 // PART 3 — SAVE / LOAD / SYNC, DAILY REWARD, CREDITS, STUDIO POLL
 // ══════════════════════════════════════════════════════════════════════════════
 
+// FIX (Bug 1): previously this sliced mc.content down to 6000 chars with
+// "...slice(0, 6000) + '...'" — for long AI responses containing multiple
+// ```json action blocks (e.g. a full script + GUI + server logic in one
+// reply), that cut frequently landed in the *middle* of a JSON block,
+// corrupting it (e.g. `"action": "creat` cut off mid-word). Once that
+// corrupted content was persisted and later re-rendered or re-sent as
+// context, parseAllCommands() would fail to parse that block and silently
+// drop the action — this is what caused "short actions work, long ones
+// break". The `content` string itself is no longer truncated here.
+// _rawContent is still stripped before storage (it's only needed in
+// memory, for buildApiMsgs() to resend full untouched AI text as
+// conversation history) — that strip is safe because it removes the whole
+// field, not a partial slice of it, so nothing is left corrupted.
 function getStoreConvs(): Conv[] {
   return (S.allConvs || []).slice(-30).map((c) => ({
     ...c,
     msgs: (c.msgs || []).slice(-40).map((m) => {
       const mc = { ...m } as ConvMsg & { _rawContent?: string }
       delete mc._rawContent
-      if (typeof mc.content === 'string' && mc.content.length > 6000)
-        mc.content = mc.content.slice(0, 6000) + '...'
       return mc
     }),
   }))
@@ -643,15 +743,13 @@ async function syncToServer(): Promise<void> {
   _syncInProgress = true
   const ctrl = new AbortController(); const timeoutId = setTimeout(() => ctrl.abort(), 12000)
   try {
+    // FIX (Bug 2): same class of bug as getStoreConvs() — truncating
+    // mc.content to 3000 chars mid-string could (and frequently did, for
+    // long multi-action replies) cut a ```json action block in half before
+    // it was even sent to the server, corrupting the stored history.
     const convsTrimmed = getStoreConvs().slice(-15).map((c) => ({
       ...c,
-      msgs: (c.msgs || []).slice(-20).map((m) => {
-        const mc = { ...m } as ConvMsg & { _rawContent?: string }
-        delete mc._rawContent
-        if (typeof mc.content === 'string' && mc.content.length > 3000)
-          mc.content = mc.content.slice(0, 3000) + '\u2026'
-        return mc
-      }),
+      msgs: (c.msgs || []).slice(-20),
     }))
     const payload = {
       user: (SESSION.user.username || '').toLowerCase(),
@@ -693,6 +791,18 @@ function startAutoSync(): void {
     if (document.hidden) return
     if (!_syncInProgress && !_syncDebounceTimer) syncToServer()
   }, 180000) // every 3 min
+}
+
+let _dailyClaimTimer: ReturnType<typeof setInterval> | null = null
+function startDailyClaimWatcher(): void {
+  if (_dailyClaimTimer) clearInterval(_dailyClaimTimer)
+  // Checked far more often than the 24h window itself so that an app left
+  // open across midnight still claims close to on-time rather than only
+  // catching up the next time the tab is focused/reloaded.
+  _dailyClaimTimer = setInterval(() => {
+    if (document.hidden) return
+    autoClaimDaily()
+  }, 600000) // every 10 min
 }
 
 async function loadS(): Promise<void> {
@@ -778,25 +888,82 @@ async function loadInboxCount(): Promise<void> {
 }
 
 // ── DAILY REWARD ──────────────────────────────────────────────────────────────
+// Auto-claims in the background — no click required. Each full 24h period
+// since the last claim is worth one day's reward, accumulated for up to 7
+// missed days at once (so leaving the app closed for a week doesn't lose
+// anything, but going longer than that caps the catch-up rather than
+// growing unbounded). The cycle resets from the moment of this claim, so
+// if the person comes back after 10 days they get the 7-day cap, then the
+// next cycle starts counting fresh from today.
+const DAILY_MS = 24 * 3600_000
+const MAX_DAILY_CATCHUP_DAYS = 7
+
+// Computes how many whole daily periods have elapsed since last claim,
+// capped at MAX_DAILY_CATCHUP_DAYS. Returns 0 if less than one full day
+// has passed yet (nothing to claim).
+function _daysSinceLastClaim(): number {
+  if (!S.lastClaim) return 1 // never claimed before — first claim is always 1 day's worth
+  const elapsedMs = Date.now() - new Date(S.lastClaim).getTime()
+  const fullDays = Math.floor(elapsedMs / DAILY_MS)
+  return Math.min(fullDays, MAX_DAILY_CATCHUP_DAYS)
+}
+
+function _perDayReward(): number {
+  return S.plan === 'pro' ? 25 : 2
+}
+
+// Silently runs at app init (and can be re-checked any time, e.g. on
+// visibility change) — claims whatever is owed without any UI prompt.
+// Safe to call often: it's a no-op whenever _daysSinceLastClaim() is 0.
+function autoClaimDaily(): void {
+  if (isOwner() || isAdmin()) return
+  const days = _daysSinceLastClaim()
+  if (days <= 0) { checkDailyOnLoad(); return }
+  const reward = days * _perDayReward()
+  S.credits += reward
+  S.lastClaim = new Date().toISOString()
+  updateCreds(); saveS(); _debouncedSync()
+  toast(
+    days > 1
+      ? `+${reward} CR — caught up on ${days} missed daily reward(s)!`
+      : `+${reward} CR daily reward claimed automatically!`,
+    'var(--green)', 3600
+  )
+  checkDailyOnLoad()
+}
+
+// Reflects current claim status in the Settings panel. Since claiming is
+// now automatic, the button mostly serves as a visible confirmation /
+// manual nudge for the rare case the background claim hasn't run yet in
+// this session (e.g. right after opening Settings before the next
+// scheduled check) — clicking it runs the exact same logic as the
+// automatic path rather than a separate "manual only" reward.
 function checkDailyOnLoad(): void {
   if (isOwner() || isAdmin()) return
   const ce = document.getElementById('lastClaimInfo'), cb = document.getElementById('claimDailyBtn') as HTMLButtonElement | null
-  if (!S.lastClaim) { if (ce) ce.textContent = UI.dailyReady; if (cb) cb.disabled = false; return }
-  const diff = (Date.now() - new Date(S.lastClaim).getTime()) / 3600000
-  if (diff >= 24) { if (ce) ce.textContent = UI.dailyReady; if (cb) cb.disabled = false }
-  else { const hrs = Math.ceil(24 - diff); if (ce) ce.textContent = UI.dailyNext + hrs + 'h'; if (cb) cb.disabled = true }
+  const days = _daysSinceLastClaim()
+  if (days > 0) {
+    if (ce) ce.textContent = UI.dailyReady
+    if (cb) cb.disabled = false
+  } else {
+    const elapsedMs = S.lastClaim ? Date.now() - new Date(S.lastClaim).getTime() : 0
+    const hrs = Math.max(0, Math.ceil((DAILY_MS - elapsedMs) / 3600_000))
+    if (ce) ce.textContent = UI.dailyNext + hrs + 'h (auto-claims when ready)'
+    if (cb) cb.disabled = true
+  }
 }
 function checkDailyCredits(): void { checkDailyOnLoad() }
 
 function claimDaily(): void {
   if (isOwner() || isAdmin()) return
-  if (S.lastClaim && (Date.now() - new Date(S.lastClaim).getTime()) / 3600000 < 24) { toast(UI.dailyAlready, 'var(--yellow)'); return }
-  const n = S.plan === 'pro' ? 25 : 2
-  S.credits += n; S.lastClaim = new Date().toISOString()
+  const days = _daysSinceLastClaim()
+  if (days <= 0) { toast(UI.dailyAlready, 'var(--yellow)'); return }
+  const reward = days * _perDayReward()
+  S.credits += reward; S.lastClaim = new Date().toISOString()
   updateCreds(); saveS(); _debouncedSync()
   const b = document.getElementById('claimDailyBtn') as HTMLButtonElement | null; if (b) b.disabled = true
-  const e = document.getElementById('lastClaimInfo'); if (e) e.textContent = '+' + n + ' CR!'
-  toast('+' + n + ' CR claimed!', 'var(--green)'); setTimeout(checkDailyCredits, 500)
+  const e = document.getElementById('lastClaimInfo'); if (e) e.textContent = '+' + reward + ' CR!'
+  toast('+' + reward + ' CR claimed!', 'var(--green)'); setTimeout(checkDailyCredits, 500)
 }
 
 // ── PLAY TEST ─────────────────────────────────────────────────────────────────
@@ -1071,6 +1238,56 @@ function parseAllCommands(text: string): ActionCmd[] {
   return cmds
 }
 
+// ── AI CLARIFICATION QUESTIONS ───────────────────────────────────────────────
+// Lets the AI ask the person to pick from a short list of options instead
+// of guessing or writing a paragraph of "did you mean A or B?" — mirrors
+// the button-choice pattern used elsewhere in this app's own UI. The AI
+// emits a fenced ```clarify block containing either a single question:
+//   {"question": "...", "options": ["A", "B", "C"]}
+// or several in one block:
+//   {"questions": [{"question": "...", "options": [...]}, ...]}
+// `chats.ts` renders these as clickable buttons; clicking one sends that
+// option's text as the next user message automatically, the same way
+// suggestion chips already work.
+interface ClarifyQuestion { question: string; options: string[] }
+
+function _normalizeClarifyQuestion(obj: unknown): ClarifyQuestion | null {
+  if (!obj || typeof obj !== 'object') return null
+  const o = obj as Record<string, unknown>
+  const question = typeof o.question === 'string' ? o.question.trim() : ''
+  if (!question) return null
+  const rawOptions = Array.isArray(o.options) ? o.options : []
+  const options = rawOptions
+    .map((x) => (typeof x === 'string' ? x.trim() : String(x ?? '').trim()))
+    .filter((x) => x.length > 0)
+    .slice(0, 6) // sane upper bound — this is a button row, not a menu
+  if (options.length < 2) return null // need at least 2 choices for buttons to make sense
+  return { question, options }
+}
+
+// Parses every ```clarify fenced block in the AI's reply. Tolerant of the
+// same kind of minor JSON sloppiness _tryParseJson() already handles for
+// action blocks (unquoted keys, trailing commas, single quotes, etc).
+function parseClarifyBlocks(text: string): ClarifyQuestion[] {
+  const out: ClarifyQuestion[] = []
+  const re = /```(?:clarify|Clarify|CLARIFY)\s*\n?([\s\S]*?)```/g
+  let m: RegExpExecArray | null
+  while ((m = re.exec(text)) !== null) {
+    const raw = m[1].trim()
+    if (!raw || raw.length < 5 || raw.length > 8000) continue
+    const parsed = _tryParseJson(raw)
+    if (!parsed) continue
+    const p = parsed as Record<string, unknown>
+    if (Array.isArray(p.questions)) {
+      p.questions.forEach((q) => { const norm = _normalizeClarifyQuestion(q); if (norm) out.push(norm) })
+    } else {
+      const norm = _normalizeClarifyQuestion(parsed)
+      if (norm) out.push(norm)
+    }
+  }
+  return out.slice(0, 3) // cap how many clarification prompts render per message
+}
+
 function makeStepLabel(cmd: ActionCmd): string | null {
   const a = cmd.action || ''
   const nm = String(cmd.name || cmd.target || '')
@@ -1310,12 +1527,89 @@ function _truncateMsgsForApi(msgs: { role: string; content: string | unknown[] }
   return result
 }
 
+// ── RAW LUA INPUT HANDLING ───────────────────────────────────────────────────
+// Detects when the person pasted a raw Lua/Luau script directly into the
+// chat box (no ```lua fence) so we can:
+//   1. Make it render properly (syntax-highlighted code block) instead of
+//      as a wall of plain text in the bubble.
+//   2. Keep it from silently inflating every future request's cost — long
+//      pasted scripts that stay inline as plain message text get resent in
+//      full every time buildApiMsgs() replays the last 28 messages as
+//      context, even on turns that have nothing to do with that script.
+//      Converting it into a file attachment fixes this for free: this
+//      codebase's buildApiMsgs() already only includes attachments on the
+//      *current* outgoing message (see the `lastM.content = ca` line in
+//      send()), never on replayed history, so a script attached this way
+//      is sent once and never dragged along again afterward.
+const LUA_PATTERN_RE = /\b(local\s+\w+\s*=|function\s+\w*\s*\(|game:GetService\(|:Connect\(|:WaitForChild\(|workspace\.|script\.Parent|end\s*$)/m
+const LUA_KEYWORD_RE = /\b(local|function|elseif|then|end|repeat|until|nil)\b/g
+
+// Heuristic only — good enough to catch "someone pasted real code" without
+// false-positives on ordinary English sentences that happen to contain a
+// word like "function" or "local" once or twice.
+function looksLikeRawLua(txt: string): boolean {
+  if (!txt || txt.length < 20) return false
+  if (/```/.test(txt)) return false // already fenced, nothing to do
+  const keywordHits = (txt.match(LUA_KEYWORD_RE) || []).length
+  const hasStructuralPattern = LUA_PATTERN_RE.test(txt)
+  // Require both a structural Lua pattern AND a reasonable density of Lua
+  // keywords — avoids matching short natural-language requests that merely
+  // mention "make a local script" without containing actual code.
+  return hasStructuralPattern && keywordHits >= 3
+}
+
+// Below this size, wrapping it as ```lua...``` inline is harmless — it's
+// small enough that resending it a few more times as the conversation
+// continues costs nothing meaningful in tokens/credits.
+const RAW_LUA_INLINE_WRAP_THRESHOLD = 150
+
+function countLines(s: string): number {
+  return s.split('\n').length
+}
+
+// Returns the (possibly modified) message text and an optional extra file
+// attachment, applying the rule above: short raw Lua just gets fenced
+// inline, long raw Lua gets pulled out into a .lua file attachment so it
+// isn't dragged into every subsequent request's context.
+function processRawLuaInput(txt: string, existingAttachmentCount: number): { text: string; extraAttachment: AttachItem | null } {
+  if (!looksLikeRawLua(txt)) return { text: txt, extraAttachment: null }
+
+  if (txt.length <= RAW_LUA_INLINE_WRAP_THRESHOLD) {
+    return { text: '```lua\n' + txt + '\n```', extraAttachment: null }
+  }
+
+  // Long raw script: pull it out into an attachment instead of inlining it.
+  // If the person also typed an instruction either before/after the code
+  // (rare for a pure paste, but possible), we have no reliable way to
+  // separate "instruction" from "code" in a single blob, so the whole
+  // pasted text becomes the attachment and the visible message becomes a
+  // short marker — the AI still receives the full script via the
+  // attachment on this turn, just not the wall of text in the bubble.
+  const lines = countLines(txt)
+  const fileName = `pasted_script_${Date.now().toString(36)}.lua`
+  const extraAttachment: AttachItem = { type: 'file', name: fileName, text: txt }
+  const marker = existingAttachmentCount > 0
+    ? `[Pasted Lua script attached: ${fileName}, ${lines} lines]`
+    : `[Pasted Lua script attached: ${fileName}, ${lines} lines] Please review/use this script.`
+  return { text: marker, extraAttachment }
+}
+
 async function send(): Promise<void> {
   if (S.gen) return
   const inp = document.getElementById('inp') as HTMLTextAreaElement | null
-  const txt = inp?.value.trim() ?? ''; const attachments = S.attachments.slice()
+  let txt = inp?.value.trim() ?? ''; const attachments = S.attachments.slice()
   if (!txt && !attachments.length) return
   if (!checkClientRateLimit('send', 20)) return
+
+  // Detect a raw (unfenced) Lua/Luau paste and either wrap it inline
+  // (short) or pull it into a one-off file attachment (long) — see
+  // processRawLuaInput() above for why this keeps long pastes from
+  // inflating the cost of every future turn in the conversation.
+  if (txt) {
+    const { text: processedTxt, extraAttachment } = processRawLuaInput(txt, attachments.length)
+    txt = processedTxt
+    if (extraAttachment) attachments.push(extraAttachment)
+  }
 
   // Defense-in-depth: handleFile/paste already prevent queuing images for
   // a model that doesn't support them, but if the user queued images then
@@ -1414,7 +1708,21 @@ async function send(): Promise<void> {
   const lastM: ApiMsg = { role: 'user', content: txt }
   if (attachments.length) {
     const ca: unknown[] = [{ type: 'text', text: txt }]
-    attachments.forEach((a) => { if (a.type === 'image') ca.push({ type: 'image', source: { type: 'base64', media_type: a.mime, data: a.data } }) })
+    attachments.forEach((a) => {
+      if (a.type === 'image') {
+        ca.push({ type: 'image', source: { type: 'base64', media_type: a.mime, data: a.data } })
+      } else if (a.type === 'file' && a.text) {
+        // FIX: file attachments (manual .lua/.txt uploads, and the new
+        // auto-extracted long Lua pastes from processRawLuaInput()) were
+        // previously rendered in the UI but never actually included in
+        // the outgoing API payload — only images were appended above.
+        // The AI was receiving an attach row it could see in chat history
+        // but never the actual file content. Each file's text is appended
+        // as its own clearly-labeled text block so the model can tell
+        // multiple attached files apart.
+        ca.push({ type: 'text', text: `--- Attached file: ${a.name} ---\n${a.text}` })
+      }
+    })
     lastM.content = ca
   }
   apiMsgs.push(lastM); apiMsgs = _truncateMsgsForApi(apiMsgs, 55000)
@@ -1646,6 +1954,74 @@ function _injectSuggChipStyles(): void {
   document.head.appendChild(s)
 }
 
+// Renders one block of buttons per clarification question the AI asked.
+// Clicking a button immediately sends that option's text as if the
+// person had typed and submitted it — same one-click "answer and go"
+// pattern as suggestion chips, but visually distinguished (question
+// label + button group) so it reads as "the AI is waiting on you" rather
+// than "here's an idea you could try". A free-text "other" field sits
+// below the buttons for whenever none of the offered options match what
+// the person actually wants — they can type their own answer and submit
+// it the same way, without being boxed into the AI's suggested choices.
+function renderClarifyButtons(bubble: HTMLElement, questions: ClarifyQuestion[]): void {
+  questions.forEach((q) => {
+    const block = document.createElement('div'); block.className = 'clarify-block'
+    const qEl = document.createElement('div'); qEl.className = 'clarify-question'; qEl.textContent = q.question
+    block.appendChild(qEl)
+    const row = document.createElement('div'); row.className = 'clarify-options'
+
+    // Disables every button + the "other" field/submit for this question
+    // once any one path has been used to answer, so clicking a button
+    // and then also submitting free text (or vice versa) can't both fire.
+    const lockQuestion = () => {
+      row.querySelectorAll('.clarify-btn').forEach((b) => { (b as HTMLButtonElement).disabled = true })
+      const oi = otherInput as HTMLInputElement | null; if (oi) oi.disabled = true
+      const ob = otherBtn as HTMLButtonElement | null; if (ob) ob.disabled = true
+    }
+
+    q.options.forEach((opt) => {
+      const btn = document.createElement('button')
+      btn.className = 'clarify-btn'; btn.type = 'button'; btn.textContent = opt
+      btn.onclick = () => {
+        if (S.gen) return
+        lockQuestion(); btn.classList.add('chosen')
+        const inp = document.getElementById('inp') as HTMLTextAreaElement | null
+        if (inp) { inp.value = opt; inp.style.height = 'auto'; inp.style.height = Math.min(inp.scrollHeight, 130) + 'px' }
+        setTimeout(() => send(), 80)
+      }
+      row.appendChild(btn)
+    })
+    block.appendChild(row)
+
+    // ── Free-text "other" answer ──────────────────────────────────────
+    const otherRow = document.createElement('div'); otherRow.className = 'clarify-other-row'
+    const otherInput = document.createElement('input')
+    otherInput.type = 'text'; otherInput.className = 'clarify-other-input'
+    otherInput.placeholder = "Not listed? Type your own answer..."
+    otherInput.maxLength = 300
+    const otherBtn = document.createElement('button')
+    otherBtn.type = 'button'; otherBtn.className = 'clarify-other-btn'; otherBtn.textContent = 'Send'
+    otherBtn.disabled = true
+
+    const submitOther = () => {
+      if (S.gen) return
+      const val = otherInput.value.trim(); if (!val) return
+      lockQuestion(); otherRow.classList.add('chosen')
+      const inp = document.getElementById('inp') as HTMLTextAreaElement | null
+      if (inp) { inp.value = val; inp.style.height = 'auto'; inp.style.height = Math.min(inp.scrollHeight, 130) + 'px' }
+      setTimeout(() => send(), 80)
+    }
+    otherInput.addEventListener('input', () => { otherBtn.disabled = !otherInput.value.trim() })
+    otherInput.addEventListener('keydown', (e) => { if (e.key === 'Enter') { e.preventDefault(); submitOther() } })
+    otherBtn.onclick = submitOther
+
+    otherRow.appendChild(otherInput); otherRow.appendChild(otherBtn)
+    block.appendChild(otherRow)
+
+    bubble.appendChild(block)
+  })
+}
+
 function _processSuggestionChips(bubble: HTMLElement): void {
   if (!bubble) return; const uls = bubble.querySelectorAll('ul'); if (!uls.length) return
   uls.forEach((ul) => {
@@ -1719,7 +2095,7 @@ function appendMsg(m: ConvMsg, skipScroll?: boolean): void {
   const codeRe = /```(\w*)\n?([\s\S]*?)```/g; const codeBlocks: { lang: string; code: string }[] = []
   let processed = content.replace(codeRe, (match, lang, code) => {
     const l = (lang || '').toLowerCase()
-    if (l === 'json' || (m as ConvMsg & { studioSummary?: string[] }).studioSummary) return ''
+    if (l === 'json' || l === 'clarify' || (m as ConvMsg & { studioSummary?: string[] }).studioSummary) return ''
     const i = codeBlocks.length; codeBlocks.push({ lang: lang || '', code: code.trim() }); return '%%CB_' + i + '%%'
   })
   processed.split(/(%%CB_\d+%%)/).forEach((part) => {
@@ -1755,6 +2131,10 @@ function appendMsg(m: ConvMsg, skipScroll?: boolean): void {
     }
   }
   mbWrap.appendChild(bubble); if (!isUser) _processSuggestionChips(bubble)
+  if (!isUser) {
+    const clarifyQs = parseClarifyBlocks(content)
+    if (clarifyQs.length) renderClarifyButtons(bubble, clarifyQs)
+  }
   if (!isUser) {
     const acts = document.createElement('div'); acts.className = 'msg-acts'
     acts.innerHTML = `<button class="mab" onclick="window.copyMsgText(this)"><svg viewBox="0 0 24 24"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 01-2-2V4a2 2 0 012-2h9a2 2 0 012 2v1"/></svg></button><button class="mab" onclick="window.retryMsg(this)"><svg viewBox="0 0 24 24"><polyline points="1 4 1 10 7 10"/><path d="M3.51 15a9 9 0 102.13-9.36L1 10"/></svg></button><button class="mab ${(m as ConvMsg & { _liked?: boolean })._liked ? 'liked' : ''}" onclick="window.likeMsg(this,true)"><svg viewBox="0 0 24 24"><path d="M14 9V5a3 3 0 00-3-3l-4 9v11h11.28a2 2 0 002-1.7l1.38-9a2 2 0 00-2-2.3zM7 22H4a2 2 0 01-2-2v-7a2 2 0 012-2h3"/></svg></button><button class="mab ${(m as ConvMsg & { _disliked?: boolean })._disliked ? 'disliked' : ''}" onclick="window.likeMsg(this,false)"><svg viewBox="0 0 24 24"><path d="M10 15v4a3 3 0 003 3l4-9V2H5.72a2 2 0 00-2 1.7l-1.38 9a2 2 0 002 2.3zm7-13h2.67A2.31 2.31 0 0122 4v7a2.31 2.31 0 01-2.33 2H17"/></svg></button><button class="mab" onclick="window.openShareModal()"><svg viewBox="0 0 24 24"><circle cx="18" cy="5" r="3"/><circle cx="6" cy="12" r="3"/><circle cx="18" cy="19" r="3"/><line x1="8.59" y1="13.51" x2="15.42" y2="17.49"/><line x1="15.41" y1="6.51" x2="8.59" y2="10.49"/></svg></button>`
@@ -2094,12 +2474,12 @@ async function initApp(): Promise<void> {
   updateRoleDisplay(); updateCreds(); updatePlayTestUI(); updateLoader(58, UI.loaderLoadData)
   await loadKeys(); await loadAdminIds(); await loadInboxCount()
   updateLoader(72, UI.loaderConnecting); applyLang(); updateModelUI()
-  updateLoader(84, UI.loaderConnecting); startStudioPoll(); startAutoSync()
+  updateLoader(84, UI.loaderConnecting); startStudioPoll(); startAutoSync(); startDailyClaimWatcher()
   updateLoader(93, UI.loaderConnecting); renderConvs()
   if (S.curConv && S.convs.some((x) => x.id === S.curConv)) { loadConv(S.curConv) }
   else if (S.convs.length > 0) { const latest = S.convs.reduce((a, b) => (b.time || 0) > (a.time || 0) ? b : a); S.curConv = latest.id; loadConv(S.curConv) }
   else { newChat() }
-  checkDailyCredits(); checkDailyOnLoad(); updateLoader(100, UI.loaderReady); setTimeout(hideLoader, 500)
+  autoClaimDaily(); updateLoader(100, UI.loaderReady); setTimeout(hideLoader, 500)
   const urlp = new URLSearchParams(window.location.search)
   if (urlp.get('settings') === 'true') setTimeout(() => openSettings(), 800)
   setTimeout(() => { if (!_syncInProgress) syncToServer() }, 2000)
@@ -2169,6 +2549,7 @@ if (_inpPasteEl) {
 document.addEventListener('visibilitychange', () => {
   if (!document.hidden && SESSION) {
     if (!_syncInProgress && !_syncDebounceTimer) syncToServer()
+    autoClaimDaily()
   }
 })
 

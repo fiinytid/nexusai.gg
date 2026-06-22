@@ -4,15 +4,17 @@ import React, { useEffect, useRef } from 'react'
 import Script from 'next/script'
 
 /* ─────────────────────────────────────────────────────────────────────────────
-   CSS — NEXUS AI · v12
+   CSS — NEXUS AI · v13
    Fixes in this version:
-   1. BETA badge moved to sidebar header (next to "NEXUS AI" brand text)
+   1. BETA badge in sidebar header (next to "NEXUS AI" brand text)
    2. Attach <label> & buttons all use same base style — no more misalignment
    3. Model dropdown fully redesigned: better spacing, badges, group headers
    4. Thinking/steps card — z-index & timing fix so it never disappears early
-   5. All text English
+   5. All text English — Language picker removed (English only, no toggle)
    6. Safe area insets for notch devices
    7. No backdrop-filter/blur (mobile GPU fix)
+   8. Full responsive pass: phone, small phone, tablet, landscape — every
+      interactive control kept at a real, comfortable tap target size
 ─────────────────────────────────────────────────────────────────────────────── */
 const PAGE_CSS = `
 /* ══════════════════════════════════════════════
@@ -823,17 +825,40 @@ body::before {
 .share-modal-ta { width: 100%; background: var(--bg3); border: 1px solid var(--b); border-radius: 6px; padding: 8px 10px; color: var(--text); font-family: 'JetBrains Mono', monospace; font-size: var(--fs-sm); outline: none; resize: none; height: 200px; margin-top: 8px; }
 
 
-/* ══════════════════════════════════════════════
-   RESPONSIVE — TABLET
-══════════════════════════════════════════════ */
+/* ══════════════════════════════════════════════════════════════
+   RESPONSIVE — full pass
+   Breakpoints: ≤1100px (narrow desktop/small laptop),
+   ≤1024px and 769–1024px (tablet landscape/portrait),
+   ≤768px (phone / tablet-portrait threshold — sidebar becomes
+   an overlay drawer here), ≤480px (small phone), ≤360px
+   (very small phone), plus a landscape-phone override.
+   Every interactive control is kept at >=40px tap target on
+   touch breakpoints (44px for primary actions).
+══════════════════════════════════════════════════════════════ */
+
+/* ── Narrow desktop / small laptop ── */
 @media (max-width: 1100px) { :root { --sb-w: 230px; } }
-@media (max-width: 900px) {
-  :root { --sb-w: 210px; }
-  .inp-model { max-width: 140px; }
+
+/* ── Tablet landscape (e.g. iPad landscape ~1024-1100px and below) ── */
+@media (max-width: 1024px) {
+  :root { --sb-w: 220px; }
+  .inp-model { max-width: 150px; }
+  .mb-wrap { max-width: 86%; }
+}
+
+/* ── Tablet portrait / small laptop window (769–1024px) ──
+   Sidebar stays docked (not yet an overlay) but is narrower and
+   chat content gets a touch more breathing room than desktop. */
+@media (max-width: 900px) and (min-width: 769px) {
+  :root { --sb-w: 200px; }
+  .inp-model { max-width: 130px; }
+  .sb-nav-btn { font-size: var(--fs-sm); }
+  .bubble { font-size: 12.8px; }
+  #msgs { padding: 14px 14px 8px; }
 }
 
 /* ══════════════════════════════════════════════
-   MOBILE (≤768px)
+   MOBILE (≤768px) — sidebar becomes an overlay drawer
 ══════════════════════════════════════════════ */
 @media (max-width: 768px) {
   #app {
@@ -857,6 +882,17 @@ body::before {
   #menuBtn { display: inline-flex !important; }
   .collapse-sb { display: none !important; }
   #chat { flex: 1 !important; min-height: 0 !important; width: 100% !important; overflow: hidden !important; }
+
+  /* Sidebar internals — bigger tap targets now that it's a touch drawer */
+  .sb-head { height: 56px !important; }
+  .sb-user { height: 56px !important; }
+  .sb-av { width: 40px !important; height: 40px !important; }
+  .sb-gear { width: 40px !important; height: 40px !important; }
+  .creds { height: 56px !important; }
+  .sb-nav-btn { height: 44px !important; }
+  .ci { min-height: 44px !important; padding: 9px 10px !important; }
+  .ci-del { min-width: 32px !important; min-height: 32px !important; opacity: 1 !important; }
+
   .chat-hdr {
     height: 48px !important; padding: 0 10px !important;
     padding-left: calc(10px + var(--safe-left)) !important;
@@ -872,6 +908,8 @@ body::before {
   .suggs { grid-template-columns: 1fr !important; }
   .wt { font-size: 20px !important; }
   .ws { font-size: var(--fs-md) !important; }
+  .av { width: 28px !important; height: 28px !important; }
+
   .inp-area {
     padding: 8px 10px 12px !important;
     padding-left: calc(10px + var(--safe-left)) !important;
@@ -890,18 +928,31 @@ body::before {
   .btn-send { width: 42px !important; height: 42px !important; }
   .btn-send svg { width: 17px !important; height: 17px !important; }
   .btn-cancel { width: 38px !important; height: 38px !important; }
-  .inp-model { max-width: 110px !important; }
+  .inp-model { max-width: 110px !important; height: 30px !important; }
   .plug-banner {
     font-size: 9px !important; padding: 0 10px !important;
     padding-left: calc(10px + var(--safe-left)) !important;
     gap: 5px !important; height: 28px !important;
   }
   .ov { padding: 12px 10px !important; padding-bottom: calc(12px + var(--safe-bottom)) !important; }
-  .modal { padding: 16px !important; border-radius: 12px !important; }
+  .modal { padding: 16px !important; border-radius: 12px !important; max-height: calc(100dvh - 24px - var(--safe-top) - var(--safe-bottom)) !important; overflow-y: auto !important; }
   .modal-t { font-size: 12px !important; }
   .btn-modal { height: 44px !important; }
   .steps-box { max-width: calc(100vw - 60px) !important; min-width: 240px !important; }
+
+  /* Settings: stack label/control vertically when the row's too tight */
+  .settings-row { gap: 6px !important; }
+  .settings-btn { height: 40px !important; }
+  .settings-select { height: 40px !important; font-size: 13px !important; }
+  .toggle-sw { width: 48px !important; height: 27px !important; }
+  .toggle-sw::after { width: 21px !important; height: 21px !important; }
+  .toggle-sw.on::after { left: 24px !important; }
+
+  /* Mention dropdown — full-width-ish on phone for easier tapping */
+  .mention-dd { min-width: 0 !important; width: calc(100vw - 20px) !important; max-width: 360px !important; }
+  .mention-item { min-height: 48px !important; }
 }
+
 @media (max-width: 480px) {
   .inp-model { max-width: 95px !important; }
   .chat-title { font-size: 10px !important; }
@@ -910,17 +961,47 @@ body::before {
   .modal { padding: 14px !important; }
   .mb-wrap { max-width: 93% !important; }
   .bubble { font-size: 12.5px !important; }
+  .sugg { padding: 8px 10px !important; }
+  .sb-footer { font-size: 7.5px !important; }
+  .settings-row { flex-direction: column !important; align-items: flex-start !important; }
+  .settings-row > span:first-child,
+  .settings-row > div:first-child { width: 100% !important; }
+  .modal-footer { flex-direction: column !important; align-items: stretch !important; }
+  .modal-footer .btn-modal { width: 100% !important; }
 }
+
 @media (max-width: 360px) {
   .status-badge { display: none !important; }
   .proj-name-pill { display: none !important; }
   .inp-model { max-width: 80px !important; }
+  .sb-logo-text { font-size: 11px !important; }
+  .cred-v { font-size: 18px !important; }
 }
-@media (max-width: 768px) and (orientation: landscape) {
+
+/* ── Landscape phone: shorter viewport, tighten vertical paddings ── */
+@media (max-width: 900px) and (orientation: landscape) and (max-height: 500px) {
   .chat-hdr { height: 40px !important; }
-  #inp { max-height: 90px !important; }
+  #inp { max-height: 90px !important; min-height: 42px !important; }
   .inp-area { padding-top: 6px !important; padding-bottom: calc(6px + var(--safe-bottom)) !important; }
   #msgs { padding: 8px 10px 4px !important; }
+  .welcome { padding: 14px 16px !important; gap: 8px !important; }
+  .wt { font-size: 17px !important; }
+  .ws { line-height: 1.5 !important; }
+  .suggs { grid-template-columns: 1fr 1fr !important; }
+  .ov { padding-top: calc(8px + var(--safe-top)) !important; padding-bottom: calc(8px + var(--safe-bottom)) !important; }
+  .modal { max-height: calc(100dvh - 16px - var(--safe-top) - var(--safe-bottom)) !important; }
+}
+
+/* ── Coarse-pointer safety net: anywhere a touch input is detected,
+   guarantee no interactive control collapses below a comfortable
+   tap size, even on breakpoints not explicitly covered above
+   (e.g. an unusual tablet width). ── */
+@media (pointer: coarse) {
+  .ib, .btn-cancel { min-width: 38px; min-height: 38px; }
+  .btn-send { min-width: 40px; min-height: 40px; }
+  .sb-gear, .sb-av { min-width: 36px; min-height: 36px; }
+  .ci-del { min-width: 30px; min-height: 30px; }
+  .settings-btn, .btn-modal { min-height: 40px; }
 }
 `
 
@@ -1061,7 +1142,6 @@ export default function ChatsPage() {
   }
   const handleFileChange        = (e: React.ChangeEvent<HTMLInputElement>): void  => wCall('handleFile', e)
   const handlePlayTestDurChange = (e: React.ChangeEvent<HTMLInputElement>): void  => wCall('setPlayTestDur', e.target.value)
-  const handleLangChange        = (e: React.ChangeEvent<HTMLSelectElement>): void => wCall('changeLang', e.target.value)
 
   return (
     <>
@@ -1482,17 +1562,6 @@ export default function ChatsPage() {
                 style={{ width: 70 }} min={5} max={120} defaultValue={15}
                 onChange={handlePlayTestDurChange}
               />
-            </div>
-          </div>
-
-          <div className="settings-section">
-            <div className="settings-title" id="langTitle">Language</div>
-            <div className="settings-row">
-              <span id="langLabel">Interface &amp; AI Language</span>
-              <select className="settings-select" id="langSelector" onChange={handleLangChange} defaultValue="en">
-                <option value="id">Bahasa Indonesia</option>
-                <option value="en">English</option>
-              </select>
             </div>
           </div>
 
