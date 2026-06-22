@@ -581,13 +581,12 @@ const UI = {
 // one of these models while images are queued up.
 const MODEL_LIST: ModelEntry[] = [
   { grp: 'Google' },
-  { id: 'gemini-3.5-flash',     prov: 'gemini',     cost: 3,  label: 'Gemini 3.5 Flash',    icon: '/images/gemini.png',   badge: 'FAST', inputImages: 'enabled' },
-  { id: 'gemini-3.1-flash-lite',prov: 'gemini',     cost: 2,  label: 'Gemini 3.1 Flash Lite',icon: '/images/gemini.png',  badge: 'FAST', inputImages: 'enabled' },
-  { id: 'gemini-3.1-pro',       prov: 'gemini',     cost: 12, label: 'Gemini 3.1 Pro',       icon: '/images/gemini.png',  badge: 'BEST', inputImages: 'enabled' },
+  { id: 'gemini-3-flash-preview',       prov: 'gemini',     cost: 2, label: 'Gemini 3 Flash',       icon: '/images/gemini.png',  badge: 'BEST', inputImages: 'enabled' },
+  { id: 'gemini-3.5-flash',     prov: 'gemini',     cost: 5,  label: 'Gemini 3.5 Flash',    icon: '/images/gemini.png',   badge: 'FAST', inputImages: 'enabled' },
   { grp: 'ChatGPT' },
   { id: 'openai/gpt-oss-120b:free', prov: 'openrouter', cost: 0, label: 'ChatGPT 4o',       icon: '/images/chatgpt.png', badge: 'FREE', inputImages: 'disabled' },
   { grp: 'DeepSeek' },
-  { id: 'deepseek/deepseek-v4-flash', prov: 'openrouter', cost: 15, label: 'DeepSeek V4',   icon: '/images/deepseek.svg', badge: 'BEST', inputImages: 'disabled' },
+  { id: 'deepseek/deepseek-v4-flash', prov: 'openrouter', cost: 3, label: 'DeepSeek V4',   icon: '/images/deepseek.svg', badge: 'FAST', inputImages: 'disabled' },
 ]
 
 function getFreeModel(): ModelEntry {
@@ -595,7 +594,7 @@ function getFreeModel(): ModelEntry {
   const free = real.find((m) => (m.cost ?? 999) === 0)
   if (free) return free
   return real.reduce((a, b) => (a.cost ?? 999) <= (b.cost ?? 999) ? a : b,
-    { id: 'gemini-3.5-flash', prov: 'gemini', cost: 3, label: 'Gemini 3.5 Flash' })
+    { id: 'gemini-3-flash-preview', prov: 'gemini', cost: 3, label: 'Gemini 3 Flash' })
 }
 
 function _resolveModel(modelObj: unknown): ModelEntry {
