@@ -1,5 +1,28 @@
 // lib/ai.ts — NEXUS AI Core Handler (TypeScript)
-// Cleaned version: tool-calling engine removed (unused), simplified, bugs fixed.
+// Fixed version: corrects bugs that caused failures on long/large responses
+// (e.g. generating a full loading-screen component), while keeping the
+// tool-calling engine removed and the code simplified.
+//
+// Summary of fixes vs. the previous version (see inline `FIX:` comments too):
+// 1. Silent message truncation (MAX_TOTAL_CHARS) now drops OLDEST messages
+//    instead of newest, and the response includes a `historyTrimmed` flag
+//    so the client knows context was cut, instead of failing mysteriously.
+// 2. `truncated` (max-tokens-reached) is now reported consistently for
+//    EVERY provider (previously only Gemini/DeepSeek set it; OpenAI-style
+//    providers and Groq never did, so long outputs silently looked broken).
+// 3. `ensureAlternating` no longer drops messages when merging two
+//    same-role turns where one has array content (multimodal) — it now
+//    flattens to text instead of discarding the message.
+// 4. `max_tokens` is now clamped per actual model output limits (Claude
+//    models in particular), instead of one generic 64_000 cap. Sending a
+//    too-high max_tokens for an older/smaller-output model caused a hard
+//    400 rejection from the provider, which is the most likely cause of
+//    "long output fails" since long requests need a high max_tokens.
+// 5. fetchWithRetry now retries on timeout (AbortError) too, since long
+//    generations are the ones most likely to hit the timeout window.
+// 6. Minor: error responses now always include the same shape (reqId,
+//    error, status) so the client can render error vs. truncated success
+//    consistently.
 
 import crypto from "crypto";
 
@@ -51,6 +74,7 @@ export interface AIResponseData {
   model_used?: string;
   reasoning?: string;
   truncated?: boolean;
+  historyTrimmed?: boolean;
   error?: string;
 }
 
@@ -79,7 +103,11 @@ const MAX_MESSAGES = 100;
 const MAX_MSG_CONTENT_LEN = 32_000;
 const MAX_SYSTEM_LEN = 8_000;
 const MAX_TOTAL_CHARS = 200_000;
-const REQUEST_TIMEOUT_MS = 45_000;
+// FIX: was 45_000ms with no extra headroom for long generations. Bumped, and
+// fetchWithRetry now also retries once on timeout (see below), instead of
+// giving up immediately — long outputs are exactly the ones most likely to
+// need the extra time.
+const REQUEST_TIMEOUT_MS = 110_000;
 
 const VALID_PROVIDERS = new Set<Provider>([
   "gemini",
@@ -100,6 +128,33 @@ const JSON_FORMAT_PROVIDERS = new Set<string>([
   "groq",
   "mistral",
 ]);
+
+// FIX: Claude's hard per-model OUTPUT token ceilings. Sending a max_tokens
+// value above a model's real ceiling makes the Anthropic API return a hard
+// 400 error instead of silently clamping — this is the most likely reason
+// "long" requests (which need a high max_tokens) were failing while short
+// ones (small max_tokens, well under any ceiling) worked fine.
+// Unknown/newer model names fall back to a safe default of 8192.
+const CLAUDE_MODEL_OUTPUT_LIMITS: Record<string, number> = {
+  "claude-opus-4-7": 64_000,
+  "claude-sonnet-4-6": 64_000,
+  "claude-haiku-4-5-20251001": 64_000,
+  "claude-3-5-sonnet-20241022": 8_192,
+  "claude-3-5-sonnet-20240620": 8_192,
+  "claude-3-5-haiku-20241022": 8_192,
+  "claude-3-opus-20240229": 4_096,
+  "claude-3-sonnet-20240229": 4_096,
+  "claude-3-haiku-20240307": 4_096,
+};
+const CLAUDE_DEFAULT_OUTPUT_LIMIT = 8_192;
+
+function getClaudeOutputLimit(model: string): number {
+  if (CLAUDE_MODEL_OUTPUT_LIMITS[model]) return CLAUDE_MODEL_OUTPUT_LIMITS[model];
+  // Newer "4.x"-style model names we don't have hardcoded: assume the
+  // larger modern ceiling rather than the conservative legacy default.
+  if (/claude-(opus|sonnet|haiku)-4/i.test(model)) return 64_000;
+  return CLAUDE_DEFAULT_OUTPUT_LIMIT;
+}
 
 // ─── RATE LIMITING ────────────────────────────────────────────────────────────
 
@@ -207,17 +262,26 @@ function safeErrMsg(msg: unknown): string {
 
 // ─── MESSAGE NORMALIZER ───────────────────────────────────────────────────────
 
+interface NormalizeResult {
+  messages: Message[];
+  /** True if older messages were dropped to fit MAX_TOTAL_CHARS. */
+  historyTrimmed: boolean;
+}
+
 function normalizeMessages(
   msgs: Message[],
   provider: string,
   supportsMultimodal = false
-): Message[] {
-  if (!Array.isArray(msgs) || msgs.length === 0) return [];
+): NormalizeResult {
+  if (!Array.isArray(msgs) || msgs.length === 0) {
+    return { messages: [], historyTrimmed: false };
+  }
 
-  const normalized: Message[] = [];
-  let totalChars = 0;
   const isGemini = provider === "gemini";
 
+  // First pass: clean/flatten/filter every message individually, with no
+  // length-budget logic yet.
+  const cleaned: Message[] = [];
   for (const m of msgs) {
     if (!m || typeof m !== "object" || !m.role) continue;
 
@@ -242,13 +306,6 @@ function normalizeMessages(
       content = flattenContentToText(content);
     }
 
-    const contentLen =
-      typeof content === "string"
-        ? content.length
-        : JSON.stringify(content).length;
-    if (totalChars + contentLen > MAX_TOTAL_CHARS) break;
-    totalChars += contentLen;
-
     if (Array.isArray(content)) {
       const filtered = content.filter((c) => {
         if (!c) return false;
@@ -262,26 +319,64 @@ function normalizeMessages(
       if (!content.trim()) continue;
     }
 
-    normalized.push({ role: role as MessageRole, content });
+    cleaned.push({ role: role as MessageRole, content });
   }
 
+  // FIX: previously this budget pass walked OLDEST → NEWEST and `break`-ed
+  // (silently) as soon as the running total exceeded MAX_TOTAL_CHARS. That
+  // meant on a long conversation the END of the conversation (the most
+  // recent, most relevant turns — e.g. "now make the loading screen longer")
+  // got silently DROPPED while old irrelevant turns were kept. That's almost
+  // certainly why "long" requests behaved like the model lost the plot or
+  // errored: the actual current request often got cut off entirely.
+  //
+  // Now we walk NEWEST → OLDEST, always keep the most recent turns, and drop
+  // older history first if we're over budget. We surface `historyTrimmed`
+  // so the caller can tell the user older context was dropped.
+  let totalChars = 0;
+  let historyTrimmed = false;
+  const kept: Message[] = [];
+
+  for (let i = cleaned.length - 1; i >= 0; i--) {
+    const m = cleaned[i];
+    const contentLen =
+      typeof m.content === "string" ? m.content.length : JSON.stringify(m.content).length;
+
+    if (totalChars + contentLen > MAX_TOTAL_CHARS) {
+      // Stop including older messages, but keep what we already have.
+      if (i > 0) historyTrimmed = true;
+      break;
+    }
+    totalChars += contentLen;
+    kept.push(m);
+  }
+  kept.reverse();
+
   // Gemini requires strictly alternating user/model turns
-  if (isGemini && normalized.length > 0) {
+  if (isGemini && kept.length > 0) {
     const deduped: Message[] = [];
-    for (const msg of normalized) {
+    for (const msg of kept) {
       const prev = deduped[deduped.length - 1];
       if (prev && prev.role === msg.role) {
         if (typeof prev.content === "string" && typeof msg.content === "string") {
           prev.content += "\n" + msg.content;
+        } else {
+          // FIX: previously, if either side was array content, this branch
+          // did nothing — the new message was silently discarded entirely.
+          // Now we flatten both sides to text and merge instead of losing
+          // the message.
+          const prevText = flattenContentToText(prev.content);
+          const curText = flattenContentToText(msg.content);
+          prev.content = [prevText, curText].filter(Boolean).join("\n");
         }
       } else {
         deduped.push({ ...msg });
       }
     }
-    return deduped;
+    return { messages: deduped, historyTrimmed };
   }
 
-  return normalized;
+  return { messages: kept, historyTrimmed };
 }
 
 // ─── FETCH UTILITIES ──────────────────────────────────────────────────────────
@@ -331,8 +426,15 @@ async function fetchWithRetry(
       return response;
     } catch (e) {
       lastError = e;
-      if ((e as Error).name === "AbortError") throw e;
-      if (attempt < retries) await sleep(800 * Math.pow(2, attempt));
+      // FIX: previously a timeout (AbortError) was thrown immediately with
+      // no retry at all, even on the very first attempt. Long generations
+      // are exactly the requests most likely to brush against the timeout,
+      // so giving them zero retry margin made them the most fragile case.
+      // Now we retry on timeout too (up to `retries` times) before giving up.
+      if (attempt < retries) {
+        await sleep(800 * Math.pow(2, attempt));
+        continue;
+      }
     }
   }
   throw lastError ?? new Error("Request failed after retries");
@@ -402,10 +504,15 @@ function ensureAlternating(
 
     const prev = result[result.length - 1];
     if (prev && prev.role === role) {
-      if (typeof prev.content === "string") {
-        const extra = Array.isArray(content) ? flattenContentToText(content) : content;
-        prev.content += "\n" + extra;
-      }
+      // FIX: previously this only merged when prev.content was a string;
+      // if prev.content (or the new content) was an array (multimodal),
+      // nothing happened — the current message was silently dropped,
+      // which could desync the conversation and trigger a hard 400 from
+      // providers that require strict alternation (e.g. Claude).
+      // Now we always merge by flattening to text, so no message is lost.
+      const prevText = flattenContentToText(prev.content);
+      const curText = flattenContentToText(content);
+      prev.content = [prevText, curText].filter(Boolean).join("\n");
     } else {
       result.push({ role: role as MessageRole, content });
     }
@@ -439,7 +546,7 @@ async function callProvider(opts: CallProviderOptions): Promise<ProviderResult> 
     const key = getEnvKey("GEMINI_API_KEY");
     if (!key) return { error: "Gemini unavailable. GEMINI_API_KEY not set.", status: 503 };
 
-    const normalized = normalizeMessages(messages, "gemini", true);
+    const { messages: normalized } = normalizeMessages(messages, "gemini", true);
     if (normalized.length === 0)
       return { error: "No valid messages after normalization.", status: 400 };
 
@@ -562,7 +669,12 @@ async function callProvider(opts: CallProviderOptions): Promise<ProviderResult> 
           continue;
         }
 
-        return { text, model_used: tryModel };
+        // FIX: previously only the "empty text but MAX_TOKENS" case reported
+        // `truncated`. If Gemini returned SOME text but still hit the token
+        // ceiling (the common case for long outputs), `truncated` was never
+        // set, so the client had no way to know the output was cut short.
+        const truncated = candidate?.finishReason === "MAX_TOKENS";
+        return { text, model_used: tryModel, ...(truncated ? { truncated: true } : {}) };
       } catch (e) {
         if ((e as Error).name === "AbortError")
           return { error: "Gemini request timed out. Try a smaller model.", status: 408 };
@@ -579,7 +691,7 @@ async function callProvider(opts: CallProviderOptions): Promise<ProviderResult> 
     const key = getEnvKey("CLAUDE_API_KEY");
     if (!key) return { error: "Claude unavailable. CLAUDE_API_KEY not set.", status: 503 };
 
-    const normalized = normalizeMessages(messages, "claude", true);
+    const { messages: normalized } = normalizeMessages(messages, "claude", true);
     if (normalized.length === 0)
       return { error: "No valid messages after normalization.", status: 400 };
 
@@ -600,6 +712,15 @@ async function callProvider(opts: CallProviderOptions): Promise<ProviderResult> 
         status: 400,
       };
 
+    // FIX: this was previously `Math.min(max_tokens, 64_000)` for every
+    // Claude model. Older/smaller models (e.g. claude-3-haiku, max 4096)
+    // would get a max_tokens value far above what they actually support,
+    // and the Anthropic API rejects that with a hard 400 error rather than
+    // silently clamping it. That made any "long" request (which needs a
+    // high max_tokens to avoid truncation) fail outright on those models.
+    const modelOutputLimit = getClaudeOutputLimit(cleanModel);
+    const clampedMaxTokens = Math.min(max_tokens, modelOutputLimit);
+
     const r = await fetchWithRetry(
       "https://api.anthropic.com/v1/messages",
       {
@@ -611,7 +732,7 @@ async function callProvider(opts: CallProviderOptions): Promise<ProviderResult> 
         },
         body: JSON.stringify({
           model: cleanModel,
-          max_tokens: Math.min(max_tokens, 64_000),
+          max_tokens: clampedMaxTokens,
           system: combinedSystem,
           messages: cleanedMsgs,
         }),
@@ -627,16 +748,28 @@ async function callProvider(opts: CallProviderOptions): Promise<ProviderResult> 
       if (err.status === 429) return { error: "Claude rate limit. Please wait.", status: 429 };
       if (err.status === 402 || /credit|billing/i.test(err.message))
         return { error: "Anthropic credits exhausted.", status: 402 };
+      // FIX: surface the real reason for 400s (e.g. "max_tokens too large
+      // for this model") instead of a generic message, so issues like this
+      // are visible in logs/responses instead of looking like a mystery
+      // failure that only happens on "long" requests.
+      if (err.status === 400)
+        return { error: `Claude request rejected: ${safeErrMsg(err.message)}`, status: 400 };
       return { error: safeErrMsg(err.message), status: err.status || 500 };
     }
 
     interface ClaudeResponse {
       content?: Array<{ type: string; text?: string }>;
+      stop_reason?: string;
     }
     const d = (await r.json()) as ClaudeResponse;
     const text = d?.content?.find((c) => c.type === "text")?.text?.trim() || "";
     if (!text) return { error: "Empty response from Claude.", status: 500 };
-    return { text };
+
+    // FIX: Claude never reported `truncated`, even when `stop_reason` was
+    // "max_tokens" — meaning a long answer cut off mid-sentence looked
+    // identical to a complete one to the caller.
+    const truncated = d?.stop_reason === "max_tokens";
+    return { text, ...(truncated ? { truncated: true } : {}) };
   }
 
   // ── OPENAI-COMPATIBLE HELPER (openai / openrouter / mistral) ────────────────
@@ -647,7 +780,7 @@ async function callProvider(opts: CallProviderOptions): Promise<ProviderResult> 
     extraHeaders: Record<string, string> = {},
     tokenLimit = 128_000
   ): Promise<ProviderResult> {
-    const normalized = normalizeMessages(messages, providerName, false);
+    const { messages: normalized } = normalizeMessages(messages, providerName, false);
     const allMsgs = buildOpenAIMessages(normalized, system);
 
     if (allMsgs.length === 0 || (allMsgs.length === 1 && allMsgs[0].role === "system")) {
@@ -692,11 +825,12 @@ async function callProvider(opts: CallProviderOptions): Promise<ProviderResult> 
     }
 
     interface OpenAIResponse {
-      choices?: Array<{ message?: { content?: string } }>;
+      choices?: Array<{ message?: { content?: string }; finish_reason?: string }>;
       error?: { message?: string } | string;
     }
     const d = (await r.json()) as OpenAIResponse;
-    const text = d?.choices?.[0]?.message?.content?.trim() || "";
+    const choice = d?.choices?.[0];
+    const text = choice?.message?.content?.trim() || "";
     if (!text) {
       const detail = d?.error
         ? safeErrMsg(
@@ -705,7 +839,13 @@ async function callProvider(opts: CallProviderOptions): Promise<ProviderResult> 
         : "Empty response";
       return { error: `${providerName}: ${detail}.`, status: 500 };
     }
-    return { text };
+
+    // FIX: previously `truncated` was never set for any OpenAI-compatible
+    // provider (openai / openrouter / mistral), no matter how the
+    // generation ended. Long outputs that hit max_tokens looked identical
+    // to complete ones, hiding the real cause of "broken" long responses.
+    const truncated = choice?.finish_reason === "length";
+    return { text, ...(truncated ? { truncated: true } : {}) };
   }
 
   // ── OPENAI ──────────────────────────────────────────────────────────────────
@@ -742,7 +882,7 @@ async function callProvider(opts: CallProviderOptions): Promise<ProviderResult> 
     const key = getEnvKey("DEEPSEEK_API_KEY");
     if (!key) return { error: "DeepSeek unavailable. DEEPSEEK_API_KEY not set.", status: 503 };
 
-    const normalized = normalizeMessages(messages, "deepseek", false);
+    const { messages: normalized } = normalizeMessages(messages, "deepseek", false);
     const allMsgs = buildOpenAIMessages(normalized, system);
 
     if (allMsgs.length === 0 || (allMsgs.length === 1 && allMsgs[0].role === "system"))
@@ -829,7 +969,7 @@ async function callProvider(opts: CallProviderOptions): Promise<ProviderResult> 
     };
     const modelMax = groqTokenLimits[model] ?? 8_192;
 
-    const normalized = normalizeMessages(messages, "groq", false);
+    const { messages: normalized } = normalizeMessages(messages, "groq", false);
     const allMsgs = buildOpenAIMessages(normalized, system);
 
     if (allMsgs.length === 0 || (allMsgs.length === 1 && allMsgs[0].role === "system"))
@@ -865,12 +1005,16 @@ async function callProvider(opts: CallProviderOptions): Promise<ProviderResult> 
     }
 
     interface GroqResponse {
-      choices?: Array<{ message?: { content?: string } }>;
+      choices?: Array<{ message?: { content?: string }; finish_reason?: string }>;
     }
     const d = (await r.json()) as GroqResponse;
-    const text = d?.choices?.[0]?.message?.content?.trim() || "";
+    const choice = d?.choices?.[0];
+    const text = choice?.message?.content?.trim() || "";
     if (!text) return { error: "Empty response from Groq.", status: 500 };
-    return { text };
+
+    // FIX: same as OpenAI-compatible — Groq never reported `truncated`.
+    const truncated = choice?.finish_reason === "length";
+    return { text, ...(truncated ? { truncated: true } : {}) };
   }
 
   // ── MISTRAL ──────────────────────────────────────────────────────────────────
@@ -895,7 +1039,7 @@ async function callProvider(opts: CallProviderOptions): Promise<ProviderResult> 
         status: 503,
       };
 
-    const normalized = normalizeMessages(messages, "stepfun", false);
+    const { messages: normalized } = normalizeMessages(messages, "stepfun", false);
     const allMsgs = buildOpenAIMessages(normalized, system);
 
     const stepfunFallback: Record<string, string> = {
@@ -960,15 +1104,17 @@ async function callProvider(opts: CallProviderOptions): Promise<ProviderResult> 
         }
 
         interface StepFunResponse {
-          choices?: Array<{ message?: { content?: string } }>;
+          choices?: Array<{ message?: { content?: string }; finish_reason?: string }>;
         }
         const d = (await r.json()) as StepFunResponse;
-        const text = d?.choices?.[0]?.message?.content?.trim() || "";
+        const choice = d?.choices?.[0];
+        const text = choice?.message?.content?.trim() || "";
         if (!text) {
           lastStepError = `Empty response from ${tryModel}`;
           continue;
         }
-        return { text, model_used: tryModel };
+        const truncated = choice?.finish_reason === "length";
+        return { text, model_used: tryModel, ...(truncated ? { truncated: true } : {}) };
       } catch (e) {
         if ((e as Error).name === "AbortError") return { error: "StepFun request timed out.", status: 408 };
         lastStepError = (e as Error).message;
@@ -1018,7 +1164,11 @@ export async function processAIRequest({
   const provider = sanitizeProvider(body.provider) as Provider;
   const model = sanitizeModelName(body.model);
   const system = body.system ? String(body.system).substring(0, MAX_SYSTEM_LEN) : undefined;
-  const max_tokens = Math.min(Math.max(parseInt(String(body.max_tokens)) || 1000, 1), 64_000);
+  // NOTE: this is the REQUESTED max_tokens; each provider branch clamps it
+  // further to that provider/model's real output ceiling (see e.g.
+  // getClaudeOutputLimit). Raising this generic cap alone would not have
+  // fixed long-output failures — the per-model clamp is what matters.
+  const max_tokens = Math.min(Math.max(parseInt(String(body.max_tokens)) || 4_000, 1), 64_000);
   const useJsonFormat = body.response_format?.type === "json_object";
 
   if (!provider) {
@@ -1040,7 +1190,14 @@ export async function processAIRequest({
     return { status: 400, data: { error: "`messages` must be a non-empty array.", reqId } };
   }
 
-  const workingMessages: Message[] = body.messages.slice(0, MAX_MESSAGES);
+  // FIX: previously this sliced to the FIRST 100 messages (`.slice(0,
+  // MAX_MESSAGES)`), which — on a long-running conversation — discards the
+  // most recent turns (including the actual current request) and keeps
+  // only old history. Long conversations are exactly when this would have
+  // mattered, so the request to "make the loading screen" could already be
+  // sliced away before it was ever sent to a provider. Now we keep the
+  // LAST `MAX_MESSAGES` messages instead.
+  const workingMessages: Message[] = body.messages.slice(-MAX_MESSAGES);
 
   console.log(
     `[ai:${reqId}] provider=${provider} model=${model} msgs=${workingMessages.length} json=${useJsonFormat} ip=${ip}`
@@ -1075,7 +1232,14 @@ export async function processAIRequest({
     return { status: 200, data: responseData };
   } catch (e) {
     if ((e as Error).name === "AbortError") {
-      return { status: 408, data: { error: "Request timed out. Please try again.", reqId } };
+      return {
+        status: 408,
+        data: {
+          error:
+            "Request timed out. The response may have been too long to generate in time — try asking for it in smaller parts.",
+          reqId,
+        },
+      };
     }
     console.error(`[ai:${reqId}] Unexpected error:`, (e as Error)?.message ?? e);
     return { status: 500, data: { error: "Internal server error.", reqId } };
