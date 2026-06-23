@@ -581,12 +581,13 @@ const UI = {
 // one of these models while images are queued up.
 const MODEL_LIST: ModelEntry[] = [
   { grp: 'Google' },
-  { id: 'gemini-3-flash-preview',       prov: 'gemini',     cost: 2, label: 'Gemini 3 Flash',       icon: '/images/gemini.png',  badge: 'BEST', inputImages: 'enabled' },
-  { id: 'gemini-3.5-flash',     prov: 'gemini',     cost: 5,  label: 'Gemini 3.5 Flash',    icon: '/images/gemini.png',   badge: 'FAST', inputImages: 'enabled' },
+  { id: 'gemini-3.5-flash',     prov: 'gemini',     cost: 3,  label: 'Gemini 3.5 Flash',    icon: '/images/gemini.png',   badge: 'FAST', inputImages: 'enabled' },
+  { id: 'gemini-3.1-flash-lite',prov: 'gemini',     cost: 2,  label: 'Gemini 3.1 Flash Lite',icon: '/images/gemini.png',  badge: 'FAST', inputImages: 'enabled' },
+  { id: 'gemini-3.1-pro',       prov: 'gemini',     cost: 12, label: 'Gemini 3.1 Pro',       icon: '/images/gemini.png',  badge: 'BEST', inputImages: 'enabled' },
   { grp: 'ChatGPT' },
   { id: 'openai/gpt-oss-120b:free', prov: 'openrouter', cost: 0, label: 'ChatGPT 4o',       icon: '/images/chatgpt.png', badge: 'FREE', inputImages: 'disabled' },
   { grp: 'DeepSeek' },
-  { id: 'deepseek/deepseek-v4-flash', prov: 'openrouter', cost: 3, label: 'DeepSeek V4',   icon: '/images/deepseek.svg', badge: 'FAST', inputImages: 'disabled' },
+  { id: 'deepseek/deepseek-v4-flash', prov: 'openrouter', cost: 15, label: 'DeepSeek V4',   icon: '/images/deepseek.svg', badge: 'BEST', inputImages: 'disabled' },
 ]
 
 function getFreeModel(): ModelEntry {
@@ -594,7 +595,7 @@ function getFreeModel(): ModelEntry {
   const free = real.find((m) => (m.cost ?? 999) === 0)
   if (free) return free
   return real.reduce((a, b) => (a.cost ?? 999) <= (b.cost ?? 999) ? a : b,
-    { id: 'gemini-3-flash-preview', prov: 'gemini', cost: 3, label: 'Gemini 3 Flash' })
+    { id: 'gemini-3.5-flash', prov: 'gemini', cost: 3, label: 'Gemini 3.5 Flash' })
 }
 
 function _resolveModel(modelObj: unknown): ModelEntry {
@@ -1420,22 +1421,42 @@ async function _injectCommand(cmdToSend: ActionCmd, user: string, signal?: Abort
 // then fell back to the generic "Done. Check Explorer in Studio." message,
 // even though the actual script source was sitting right there on the
 // server the whole time. This fetches that snapshot directly.
-async function fetchReadScriptResult(scriptName: string): Promise<{ name: string; source: string; class: string; lineCount: number } | null> {
+// FIX (root cause of "read_script works but source is empty"): this used
+// to be a single fetch taken ~800ms after the action was dispatched. But
+// dispatch only enqueues the action — the Studio plugin picks it up on its
+// own poll cycle (every ~3s per the plugin's Activity Log), executes it,
+// and only THEN reports the result back to the server via a separate
+// request. 800ms is nowhere near enough time for that full round trip, so
+// the fetch was almost always landing before the real report arrived and
+// reading back the server's empty placeholder ({name:"", source:"", ...})
+// instead. This now polls the snapshot endpoint repeatedly (every 700ms,
+// up to ~6s total) until a report matching the requested script name
+// actually shows up, or the deadline passes.
+async function fetchReadScriptResult(scriptName: string, maxWaitMs = 6000): Promise<{ name: string; source: string; class: string; lineCount: number } | null> {
   if (!SESSION) return null
-  try {
-    const ctrl = new AbortController(); const tid = setTimeout(() => ctrl.abort(), 7000)
-    const user = (SESSION.user.username || '').toLowerCase()
-    const r = await fetch(`${API_URL}/?get_script=1&user=${encodeURIComponent(user)}`, { signal: ctrl.signal })
-    clearTimeout(tid)
-    if (!r.ok) return null
-    const d = await r.json() as { name?: string; source?: string; class?: string; lineCount?: number }
-    if (!d?.name) return null
-    // Guard against showing a stale snapshot from a different, unrelated
-    // read_script call earlier in the session — only accept it if the name
-    // matches what we actually asked to read (when a name was specified).
-    if (scriptName && d.name.toLowerCase() !== scriptName.toLowerCase()) return null
-    return { name: d.name, source: d.source || '', class: d.class || 'Script', lineCount: d.lineCount || 0 }
-  } catch { return null }
+  const user = (SESSION.user.username || '').toLowerCase()
+  const deadline = Date.now() + maxWaitMs
+  let attempt = 0
+  while (Date.now() < deadline) {
+    attempt++
+    try {
+      const ctrl = new AbortController(); const tid = setTimeout(() => ctrl.abort(), 5000)
+      const r = await fetch(`${API_URL}/?get_script=1&user=${encodeURIComponent(user)}`, { signal: ctrl.signal })
+      clearTimeout(tid)
+      if (r.ok) {
+        const d = await r.json() as { name?: string; source?: string; class?: string; lineCount?: number; ts?: number }
+        // A real report has a non-empty name (the empty-default placeholder
+        // from the server always has name === ""). Also guard against a
+        // stale snapshot from a different, unrelated earlier read_script
+        // call by requiring the name to match what we actually asked for.
+        if (d?.name && (!scriptName || d.name.toLowerCase() === scriptName.toLowerCase())) {
+          return { name: d.name, source: d.source || '', class: d.class || 'Script', lineCount: d.lineCount || 0 }
+        }
+      }
+    } catch { /* network hiccup — fall through and retry until deadline */ }
+    await _sleep(700)
+  }
+  return null
 }
 
 interface InjectResult {
@@ -1504,7 +1525,7 @@ async function autoInjectToStudio(aiResponse: string, _userPrompt: string): Prom
         // returned separately so send() can append it to the main
         // message body, where the existing markdown/code-block pipeline
         // renders it correctly.
-        updateStep(step.sid, 'info'); await _sleep(800)
+        updateStep(step.sid, 'info', undefined, 'Waiting for Studio to report the script...')
         const scriptName = String(cmd.name || cmd.target || '')
         const readResult = await fetchReadScriptResult(scriptName)
         if (readResult) {
@@ -1696,7 +1717,7 @@ function processRawLuaInput(txt: string, existingAttachmentCount: number): { tex
   return { text: marker, extraAttachment }
 }
 
-async function send(): Promise<void> {
+async function _sendInner(): Promise<void> {
   if (S.gen) return
   const inp = document.getElementById('inp') as HTMLTextAreaElement | null
   let txt = inp?.value.trim() ?? ''; const attachments = S.attachments.slice()
@@ -1918,6 +1939,41 @@ async function send(): Promise<void> {
   // was still visibly progressing.
   removeStepsCard()
   cv.msgs.push(aiMsg); appendMsg(aiMsg); _resetGenState(); saveS()
+}
+
+// FIX (root cause of "thinking disappears / no response at all"): the
+// entire body above had no top-level error handling. If literally
+// anything unexpected threw — a network failure that slipped past
+// callAiApi()'s own retry logic, a null conversation reference after a
+// race with newChat()/loadConv(), an exception inside buildSysPrompt(),
+// etc. — the exception became an unhandled promise rejection: S.gen
+// stayed stuck at true forever (so "if (S.gen) return" silently blocked
+// every future send attempt), any thinking card already on screen was
+// never removed, and the person was left looking at a chat that simply
+// stopped responding with no visible error at all. This wrapper guarantees
+// that no matter what fails inside _sendInner(), the UI always recovers:
+// generation state is reset, the steps card is cleaned up, and a visible
+// error message is appended to the conversation so the person knows what
+// happened and can retry.
+async function send(): Promise<void> {
+  try {
+    await _sendInner()
+  } catch (e) {
+    console.error('[NEXUS] send() failed unexpectedly:', e)
+    removeStepsCard()
+    _resetGenState()
+    const cv = S.convs.find((x) => x.id === S.curConv)
+    if (cv) {
+      const errMsg: ConvMsg = {
+        role: 'ai',
+        content: '**' + UI.errorPrefix + '**\n\nSomething went wrong while processing that message. Please try again.\n\n_' + String((e as Error)?.message || e || 'Unknown error').slice(0, 200) + '_',
+        time: Date.now(),
+      }
+      cv.msgs.push(errMsg); appendMsg(errMsg); saveS()
+    } else {
+      toast('Something went wrong. Please try again.', 'var(--pink)', 4000)
+    }
+  }
 }
 
 // ══════════════════════════════════════════════════════════════════════════════
