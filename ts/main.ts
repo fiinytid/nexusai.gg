@@ -1,4 +1,4 @@
-// lib/main.ts — NEXUS AI Config Provider (SECURE v4 — TypeScript)
+// ts/main.ts — NEXUS AI Config Provider (SECURE v4 — TypeScript)
 //
 // SECURITY: Returns ONLY OAuth client IDs and feature flags — NEVER raw API keys.
 // All AI calls go through /api/ai server-side proxy.

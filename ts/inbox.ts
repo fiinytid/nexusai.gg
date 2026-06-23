@@ -1,4 +1,4 @@
-// lib/inbox.ts — NEXUS AI Inbox System (Supabase v4 — TypeScript)
+// ts/inbox.ts — NEXUS AI Inbox System (Supabase v4 — TypeScript)
 //
 // Changes v4:
 //   • Storage migrated from /tmp file to Supabase (nexus_inbox table)

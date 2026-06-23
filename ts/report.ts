@@ -1,4 +1,4 @@
-// lib/report.ts — NEXUS AI Report System (TypeScript v3 — Gmail-safe)
+// ts/report.ts — NEXUS AI Report System (TypeScript v3 — Gmail-safe)
 //
 // Changes v3 (fixes "email never arrives" + "blank email in Gmail"):
 //   • Removed ALL unicode emoji from email subjects and HTML bodies.

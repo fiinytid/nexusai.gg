@@ -1,4 +1,4 @@
-// lib/sync.ts — NEXUS AI User Data Sync (TypeScript)
+// ts/sync.ts — NEXUS AI User Data Sync (TypeScript)
 //
 // Changes in this version (requested fix):
 //   • REMOVED destructive trimming of conversation content/code on save.

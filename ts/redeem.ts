@@ -1,4 +1,4 @@
-// lib/redeem.ts — NEXUS AI Redeem Code System (TypeScript v3)
+// ts/redeem.ts — NEXUS AI Redeem Code System (TypeScript v3)
 //
 // Changes v3:
 //   • All comments and messages fully in English

@@ -1,4 +1,4 @@
-// lib/admin.ts — NEXUS AI Admin Management (SECURE v6 — TypeScript)
+// ts/admin.ts — NEXUS AI Admin Management (SECURE v6 — TypeScript)
 // CHANGES v6:
 //   - Removed ADMIN_TOKEN requirement — POST endpoints are open to authenticated callers
 //   - All comments, messages, and strings translated to English

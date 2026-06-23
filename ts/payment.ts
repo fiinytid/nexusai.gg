@@ -1,4 +1,4 @@
-// lib/payment.ts — NEXUS AI Payment System (SECURE v7 — TypeScript)
+// ts/payment.ts — NEXUS AI Payment System (SECURE v7 — TypeScript)
 //
 // Changes v7 (Gmail mobile fix):
 //   • Email template rebuilt to be fully fluid/responsive on Gmail Android app

@@ -1,4 +1,4 @@
-// lib/auth.ts — NEXUS AI Roblox OAuth Callback (FIXED v7 — TypeScript)
+// ts/auth.ts — NEXUS AI Roblox OAuth Callback (FIXED v7 — TypeScript)
 //
 // Changes v7 (JS → TS):
 //   • Full TypeScript strict types — no implicit 'any'

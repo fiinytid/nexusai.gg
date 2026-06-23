@@ -1,4 +1,4 @@
-// lib/google-callback.ts — NEXUS AI Google OAuth Callback (FIXED v6 — TypeScript)
+// ts/google-callback.ts — NEXUS AI Google OAuth Callback (FIXED v6 — TypeScript)
 //
 // Changes v6 (JS → TS):
 //   • Full TypeScript strict types — no implicit 'any'

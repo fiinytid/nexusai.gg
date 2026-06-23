@@ -1,4 +1,4 @@
-// api/discord.ts — NEXUS AI Discord Bot Handler (Secure v4 TypeScript)
+// ts/discord.ts — NEXUS AI Discord Bot Handler (Secure v4 TypeScript)
 
 import crypto from 'crypto';
 import {

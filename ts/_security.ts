@@ -1,4 +1,4 @@
-// lib/_security.ts — NEXUS AI Shared Security Utilities v4 (TypeScript)
+// ts/_security.ts — NEXUS AI Shared Security Utilities v4 (TypeScript)
 //
 // Import:
 //   import {

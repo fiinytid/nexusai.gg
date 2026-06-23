@@ -1,32 +1,21 @@
-// lib/ai.ts — NEXUS AI Core Handler (TypeScript)
-// Fixed version: corrects bugs that caused failures on long/large responses
-// (e.g. generating a full loading-screen component), while keeping the
-// tool-calling engine removed and the code simplified.
+// lib/ai.ts — AI Core Handler (TypeScript)
+// Supports: gemini, claude, openai, openrouter, deepseek, groq, mistral, stepfun
 //
-// Summary of fixes vs. the previous version (see inline `FIX:` comments too):
-// 1. Silent message truncation (MAX_TOTAL_CHARS) now drops OLDEST messages
-//    instead of newest, and the response includes a `historyTrimmed` flag
-//    so the client knows context was cut, instead of failing mysteriously.
-// 2. `truncated` (max-tokens-reached) is now reported consistently for
-//    EVERY provider (previously only Gemini/DeepSeek set it; OpenAI-style
-//    providers and Groq never did, so long outputs silently looked broken).
-// 3. `ensureAlternating` no longer drops messages when merging two
-//    same-role turns where one has array content (multimodal) — it now
-//    flattens to text instead of discarding the message.
-// 4. `max_tokens` is now clamped per actual model output limits (Claude
-//    models in particular), instead of one generic 64_000 cap. Sending a
-//    too-high max_tokens for an older/smaller-output model caused a hard
-//    400 rejection from the provider, which is the most likely cause of
-//    "long output fails" since long requests need a high max_tokens.
-// 5. fetchWithRetry now retries on timeout (AbortError) too, since long
-//    generations are the ones most likely to hit the timeout window.
-// 6. Minor: error responses now always include the same shape (reqId,
-//    error, status) so the client can render error vs. truncated success
-//    consistently.
+// Key fixes vs previous version:
+// 1. OpenRouter: higher retry count (free models are flaky), removed json_object
+//    format for models that don't support it, better error messages.
+// 2. max_tokens default raised to 16_000 so long code generation doesn't silently truncate.
+// 3. normalizeMessages: always keeps the NEWEST messages when trimming, never drops
+//    the current user request.
+// 4. body.messages slices the LAST MAX_MESSAGES, not first.
+// 5. truncated flag now reported consistently for ALL providers.
+// 6. Claude per-model output limits enforced to prevent hard 400 errors.
+// 7. fetchWithRetry retries on timeout (AbortError) — long generations need this.
+// 8. Removed all dead code, tool-call engine, and unnecessary complexity.
 
 import crypto from "crypto";
 
-// ─── TYPES & INTERFACES ───────────────────────────────────────────────────────
+// ─── TYPES ────────────────────────────────────────────────────────────────────
 
 export type Provider =
   | "gemini"
@@ -103,11 +92,9 @@ const MAX_MESSAGES = 100;
 const MAX_MSG_CONTENT_LEN = 32_000;
 const MAX_SYSTEM_LEN = 8_000;
 const MAX_TOTAL_CHARS = 200_000;
-// FIX: was 45_000ms with no extra headroom for long generations. Bumped, and
-// fetchWithRetry now also retries once on timeout (see below), instead of
-// giving up immediately — long outputs are exactly the ones most likely to
-// need the extra time.
-const REQUEST_TIMEOUT_MS = 110_000;
+// Long generations (e.g. full components/pages) need more time.
+// Free OpenRouter models can also be slow to start.
+const REQUEST_TIMEOUT_MS = 120_000;
 
 const VALID_PROVIDERS = new Set<Provider>([
   "gemini",
@@ -120,23 +107,22 @@ const VALID_PROVIDERS = new Set<Provider>([
   "stepfun",
 ]);
 
-/** Providers that natively support `response_format: { type: "json_object" }` */
+// Only these providers reliably support response_format: json_object.
+// OpenRouter is intentionally excluded — support varies by model and
+// free models often return 400 if you send this field.
 const JSON_FORMAT_PROVIDERS = new Set<string>([
   "openai",
-  "openrouter",
   "deepseek",
   "groq",
   "mistral",
 ]);
 
-// FIX: Claude's hard per-model OUTPUT token ceilings. Sending a max_tokens
-// value above a model's real ceiling makes the Anthropic API return a hard
-// 400 error instead of silently clamping — this is the most likely reason
-// "long" requests (which need a high max_tokens) were failing while short
-// ones (small max_tokens, well under any ceiling) worked fine.
-// Unknown/newer model names fall back to a safe default of 8192.
+// Claude hard output token limits per model.
+// Sending max_tokens above a model's ceiling causes a hard 400 from Anthropic.
 const CLAUDE_MODEL_OUTPUT_LIMITS: Record<string, number> = {
+  "claude-opus-4-8": 32_000,
   "claude-opus-4-7": 64_000,
+  "claude-opus-4-6": 64_000,
   "claude-sonnet-4-6": 64_000,
   "claude-haiku-4-5-20251001": 64_000,
   "claude-3-5-sonnet-20241022": 8_192,
@@ -146,14 +132,11 @@ const CLAUDE_MODEL_OUTPUT_LIMITS: Record<string, number> = {
   "claude-3-sonnet-20240229": 4_096,
   "claude-3-haiku-20240307": 4_096,
 };
-const CLAUDE_DEFAULT_OUTPUT_LIMIT = 8_192;
 
 function getClaudeOutputLimit(model: string): number {
   if (CLAUDE_MODEL_OUTPUT_LIMITS[model]) return CLAUDE_MODEL_OUTPUT_LIMITS[model];
-  // Newer "4.x"-style model names we don't have hardcoded: assume the
-  // larger modern ceiling rather than the conservative legacy default.
   if (/claude-(opus|sonnet|haiku)-4/i.test(model)) return 64_000;
-  return CLAUDE_DEFAULT_OUTPUT_LIMIT;
+  return 8_192;
 }
 
 // ─── RATE LIMITING ────────────────────────────────────────────────────────────
@@ -163,18 +146,12 @@ const _rl = new Map<string, RateLimitEntry>();
 function checkRateLimit(key: string, maxPerMin = 30): boolean {
   const now = Date.now();
   const k = String(key || "anon").substring(0, 128);
-
   if (!_rl.has(k)) _rl.set(k, { count: 0, reset: now + 60_000 });
-
   const r = _rl.get(k)!;
-  if (now > r.reset) {
-    r.count = 0;
-    r.reset = now + 60_000;
-  }
+  if (now > r.reset) { r.count = 0; r.reset = now + 60_000; }
   return ++r.count <= maxPerMin;
 }
 
-// Periodic cleanup of expired rate-limit entries
 try {
   const _ci = setInterval(() => {
     const now = Date.now();
@@ -185,9 +162,7 @@ try {
   if (typeof (_ci as NodeJS.Timeout & { unref?: () => void })?.unref === "function") {
     (_ci as NodeJS.Timeout & { unref: () => void }).unref();
   }
-} catch {
-  /* Edge runtime — skip */
-}
+} catch { /* Edge runtime — skip */ }
 
 // ─── ENV HELPERS ──────────────────────────────────────────────────────────────
 
@@ -210,10 +185,7 @@ function sanitizeModelName(model: unknown): string {
     .substring(0, 120);
 }
 
-function trimContent(
-  content: unknown,
-  maxLen = MAX_MSG_CONTENT_LEN
-): string | ContentPart[] {
+function trimContent(content: unknown, maxLen = MAX_MSG_CONTENT_LEN): string | ContentPart[] {
   if (typeof content === "string") return content.substring(0, maxLen);
   if (Array.isArray(content)) {
     return (content as unknown[])
@@ -250,21 +222,20 @@ function flattenContentToText(content: string | ContentPart[]): string {
   return String(content || "");
 }
 
-/** Redacts API keys and Bearer tokens from error messages. */
+/** Redacts API keys and Bearer tokens from error messages before returning to client. */
 function safeErrMsg(msg: unknown): string {
   if (!msg) return "Unknown error";
   return String(msg)
     .replace(/sk-[a-zA-Z0-9_\-]{10,}/g, "[REDACTED]")
     .replace(/AIza[a-zA-Z0-9_\-]{30,}/g, "[REDACTED]")
     .replace(/Bearer [a-zA-Z0-9_\-\.]{20,}/g, "Bearer [REDACTED]")
-    .substring(0, 400);
+    .substring(0, 500);
 }
 
 // ─── MESSAGE NORMALIZER ───────────────────────────────────────────────────────
 
 interface NormalizeResult {
   messages: Message[];
-  /** True if older messages were dropped to fit MAX_TOTAL_CHARS. */
   historyTrimmed: boolean;
 }
 
@@ -279,8 +250,7 @@ function normalizeMessages(
 
   const isGemini = provider === "gemini";
 
-  // First pass: clean/flatten/filter every message individually, with no
-  // length-budget logic yet.
+  // Pass 1: clean, role-map, and flatten each message individually.
   const cleaned: Message[] = [];
   for (const m of msgs) {
     if (!m || typeof m !== "object" || !m.role) continue;
@@ -299,9 +269,7 @@ function normalizeMessages(
 
     let content = trimContent(m.content);
 
-    // Flatten multimodal content to plain text BEFORE measuring length for
-    // providers that don't support multimodal input (fixes inflated length
-    // checks counting image/base64 payloads that get discarded anyway).
+    // Flatten multimodal to text for providers that don't support it.
     if (!supportsMultimodal && !isGemini && Array.isArray(content)) {
       content = flattenContentToText(content);
     }
@@ -322,17 +290,8 @@ function normalizeMessages(
     cleaned.push({ role: role as MessageRole, content });
   }
 
-  // FIX: previously this budget pass walked OLDEST → NEWEST and `break`-ed
-  // (silently) as soon as the running total exceeded MAX_TOTAL_CHARS. That
-  // meant on a long conversation the END of the conversation (the most
-  // recent, most relevant turns — e.g. "now make the loading screen longer")
-  // got silently DROPPED while old irrelevant turns were kept. That's almost
-  // certainly why "long" requests behaved like the model lost the plot or
-  // errored: the actual current request often got cut off entirely.
-  //
-  // Now we walk NEWEST → OLDEST, always keep the most recent turns, and drop
-  // older history first if we're over budget. We surface `historyTrimmed`
-  // so the caller can tell the user older context was dropped.
+  // Pass 2: walk NEWEST → OLDEST and keep the most recent turns within budget.
+  // This ensures the current user request is never dropped when history is long.
   let totalChars = 0;
   let historyTrimmed = false;
   const kept: Message[] = [];
@@ -340,10 +299,11 @@ function normalizeMessages(
   for (let i = cleaned.length - 1; i >= 0; i--) {
     const m = cleaned[i];
     const contentLen =
-      typeof m.content === "string" ? m.content.length : JSON.stringify(m.content).length;
+      typeof m.content === "string"
+        ? m.content.length
+        : JSON.stringify(m.content).length;
 
     if (totalChars + contentLen > MAX_TOTAL_CHARS) {
-      // Stop including older messages, but keep what we already have.
       if (i > 0) historyTrimmed = true;
       break;
     }
@@ -352,23 +312,15 @@ function normalizeMessages(
   }
   kept.reverse();
 
-  // Gemini requires strictly alternating user/model turns
+  // Gemini requires strictly alternating user/model turns.
   if (isGemini && kept.length > 0) {
     const deduped: Message[] = [];
     for (const msg of kept) {
       const prev = deduped[deduped.length - 1];
       if (prev && prev.role === msg.role) {
-        if (typeof prev.content === "string" && typeof msg.content === "string") {
-          prev.content += "\n" + msg.content;
-        } else {
-          // FIX: previously, if either side was array content, this branch
-          // did nothing — the new message was silently discarded entirely.
-          // Now we flatten both sides to text and merge instead of losing
-          // the message.
-          const prevText = flattenContentToText(prev.content);
-          const curText = flattenContentToText(msg.content);
-          prev.content = [prevText, curText].filter(Boolean).join("\n");
-        }
+        const prevText = flattenContentToText(prev.content);
+        const curText = flattenContentToText(msg.content);
+        prev.content = [prevText, curText].filter(Boolean).join("\n");
       } else {
         deduped.push({ ...msg });
       }
@@ -389,12 +341,7 @@ async function fetchWithTimeout(
   const controller = new AbortController();
   const timeoutId = setTimeout(() => controller.abort(), timeoutMs);
   try {
-    const existingSignal = options.signal as AbortSignal | undefined;
-    const fetchOptions: RequestInit = { ...options, signal: controller.signal };
-    if (existingSignal) {
-      existingSignal.addEventListener("abort", () => controller.abort(), { once: true });
-    }
-    const response = await fetch(url, fetchOptions);
+    const response = await fetch(url, { ...options, signal: controller.signal });
     clearTimeout(timeoutId);
     return response;
   } catch (e) {
@@ -404,35 +351,31 @@ async function fetchWithTimeout(
 }
 
 function sleep(ms: number): Promise<void> {
-  return new Promise((r) => setTimeout(r, Math.min(ms, 5000)));
+  return new Promise((r) => setTimeout(r, Math.min(ms, 8000)));
 }
 
 async function fetchWithRetry(
   url: string,
   options: RequestInit,
-  retries = 1,
+  retries = 2,
   timeoutMs = REQUEST_TIMEOUT_MS
 ): Promise<Response> {
   let lastError: unknown;
   for (let attempt = 0; attempt <= retries; attempt++) {
     try {
       const response = await fetchWithTimeout(url, options, timeoutMs);
-      // 4xx errors are definitive — don't retry
+      // 4xx are definitive failures — don't retry (except 429 which callers handle).
       if (response.status >= 400 && response.status < 500) return response;
       if (!response.ok && attempt < retries) {
-        await sleep(800 * Math.pow(2, attempt));
+        await sleep(1000 * Math.pow(2, attempt));
         continue;
       }
       return response;
     } catch (e) {
       lastError = e;
-      // FIX: previously a timeout (AbortError) was thrown immediately with
-      // no retry at all, even on the very first attempt. Long generations
-      // are exactly the requests most likely to brush against the timeout,
-      // so giving them zero retry margin made them the most fragile case.
-      // Now we retry on timeout too (up to `retries` times) before giving up.
+      // Retry on timeout too — long generations often brush the timeout window.
       if (attempt < retries) {
-        await sleep(800 * Math.pow(2, attempt));
+        await sleep(1000 * Math.pow(2, attempt));
         continue;
       }
     }
@@ -440,13 +383,10 @@ async function fetchWithRetry(
   throw lastError ?? new Error("Request failed after retries");
 }
 
-interface ApiError {
-  message: string;
-  status: number;
-  data: unknown;
-}
-
-async function parseApiError(response: Response, providerName: string): Promise<ApiError> {
+async function parseApiError(
+  response: Response,
+  providerName: string
+): Promise<{ message: string; status: number; data: unknown }> {
   let errMsg = `${providerName} error ${response.status}`;
   let errData: unknown = null;
   try {
@@ -460,13 +400,11 @@ async function parseApiError(response: Response, providerName: string): Promise<
         (typeof d?.error === "string" ? d.error : null) ??
         errMsg;
     }
-  } catch {
-    /* ignore */
-  }
+  } catch { /* ignore */ }
   return { message: errMsg, status: response.status, data: errData };
 }
 
-// ─── OPENAI-COMPATIBLE MESSAGE BUILDER ───────────────────────────────────────
+// ─── MESSAGE BUILDERS ─────────────────────────────────────────────────────────
 
 function buildOpenAIMessages(
   normalized: Message[],
@@ -486,6 +424,10 @@ function buildOpenAIMessages(
   return msgs;
 }
 
+/**
+ * Merges consecutive same-role messages so providers that require strict
+ * alternation (Claude, some OpenRouter models) don't reject the request.
+ */
 function ensureAlternating(
   msgs: Message[],
   firstRole = "user",
@@ -504,12 +446,7 @@ function ensureAlternating(
 
     const prev = result[result.length - 1];
     if (prev && prev.role === role) {
-      // FIX: previously this only merged when prev.content was a string;
-      // if prev.content (or the new content) was an array (multimodal),
-      // nothing happened — the current message was silently dropped,
-      // which could desync the conversation and trigger a hard 400 from
-      // providers that require strict alternation (e.g. Claude).
-      // Now we always merge by flattening to text, so no message is lost.
+      // Flatten both sides to text and merge — never silently drop a message.
       const prevText = flattenContentToText(prev.content);
       const curText = flattenContentToText(content);
       prev.content = [prevText, curText].filter(Boolean).join("\n");
@@ -518,6 +455,7 @@ function ensureAlternating(
     }
   }
 
+  // Providers like Claude require the first message to be from the user.
   if (result.length > 0 && result[0].role !== firstRole) {
     result.unshift({ role: firstRole as MessageRole, content: "." });
   }
@@ -525,7 +463,7 @@ function ensureAlternating(
   return result;
 }
 
-// ─── PROVIDER CALL ────────────────────────────────────────────────────────────
+// ─── PROVIDER CALLS ───────────────────────────────────────────────────────────
 
 interface CallProviderOptions {
   provider: string;
@@ -537,14 +475,13 @@ interface CallProviderOptions {
   reqId: string;
 }
 
-/** Call a single AI provider and return raw text (or error). */
 async function callProvider(opts: CallProviderOptions): Promise<ProviderResult> {
   const { provider, model, messages, system, max_tokens, useJsonFormat } = opts;
 
   // ── GEMINI ──────────────────────────────────────────────────────────────────
   if (provider === "gemini") {
     const key = getEnvKey("GEMINI_API_KEY");
-    if (!key) return { error: "Gemini unavailable. GEMINI_API_KEY not set.", status: 503 };
+    if (!key) return { error: "Gemini unavailable — GEMINI_API_KEY not set.", status: 503 };
 
     const { messages: normalized } = normalizeMessages(messages, "gemini", true);
     if (normalized.length === 0)
@@ -573,9 +510,7 @@ async function callProvider(opts: CallProviderOptions): Promise<ProviderResult> 
             }
             return { text: `[Image URL: ${url}]` };
           }
-          return {
-            text: String(c.text ?? c.content ?? "").substring(0, MAX_MSG_CONTENT_LEN),
-          };
+          return { text: String(c.text ?? c.content ?? "").substring(0, MAX_MSG_CONTENT_LEN) };
         });
         return { role: m.role as string, parts };
       }
@@ -607,34 +542,25 @@ async function callProvider(opts: CallProviderOptions): Promise<ProviderResult> 
     if (system) geminiBody.systemInstruction = { parts: [{ text: system }] };
 
     const modelChain = [...new Set([model, "gemini-2.0-flash", "gemini-1.5-flash"])];
-    let lastGeminiError = "Gemini did not respond";
+    let lastError = "Gemini did not respond";
 
     for (const tryModel of modelChain) {
       try {
-        const encodedKey = encodeURIComponent(key);
         const url = `https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(
           tryModel
-        )}:generateContent?key=${encodedKey}`;
+        )}:generateContent?key=${encodeURIComponent(key)}`;
 
         const r = await fetchWithRetry(
           url,
-          {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify(geminiBody),
-          },
-          1,
+          { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(geminiBody) },
+          2,
           REQUEST_TIMEOUT_MS
         );
 
         if (!r.ok) {
           const err = await parseApiError(r, "Gemini");
-          lastGeminiError = err.message;
-          if (
-            [429, 500, 503, 529].includes(err.status) ||
-            /overloaded|quota|RESOURCE_EXHAUSTED|UNAVAILABLE|overload/i.test(err.message)
-          )
-            continue;
+          lastError = err.message;
+          if ([429, 500, 503, 529].includes(err.status) || /overloaded|quota|RESOURCE_EXHAUSTED|UNAVAILABLE/i.test(err.message)) continue;
           if (err.status === 404 || /not found|model/i.test(err.message)) continue;
           return { error: safeErrMsg(err.message), status: err.status || 500 };
         }
@@ -647,49 +573,34 @@ async function callProvider(opts: CallProviderOptions): Promise<ProviderResult> 
         }
         const data = (await r.json()) as GeminiResponse;
         const candidate = data?.candidates?.[0];
-        const text =
-          candidate?.content?.parts
-            ?.map((p) => p.text || "")
-            .join("")
-            .trim() || "";
+        const text = candidate?.content?.parts?.map((p) => p.text || "").join("").trim() || "";
 
         if (!text) {
           const reason = candidate?.finishReason;
-          if (reason === "SAFETY")
-            return {
-              error: "Response blocked by Gemini safety filter. Try rephrasing.",
-              status: 400,
-            };
-          if (reason === "RECITATION")
-            return { error: "Gemini rejected due to potential plagiarism.", status: 400 };
-          if (reason === "MAX_TOKENS") return { text, truncated: true, model_used: tryModel };
-          lastGeminiError = `Empty response from ${tryModel} (finishReason: ${
-            reason || "unknown"
-          })`;
+          if (reason === "SAFETY") return { error: "Response blocked by Gemini safety filter. Try rephrasing.", status: 400 };
+          if (reason === "RECITATION") return { error: "Gemini rejected due to potential plagiarism.", status: 400 };
+          if (reason === "MAX_TOKENS") return { text: "", truncated: true, model_used: tryModel };
+          lastError = `Empty response from ${tryModel} (finishReason: ${reason || "unknown"})`;
           continue;
         }
 
-        // FIX: previously only the "empty text but MAX_TOKENS" case reported
-        // `truncated`. If Gemini returned SOME text but still hit the token
-        // ceiling (the common case for long outputs), `truncated` was never
-        // set, so the client had no way to know the output was cut short.
         const truncated = candidate?.finishReason === "MAX_TOKENS";
         return { text, model_used: tryModel, ...(truncated ? { truncated: true } : {}) };
       } catch (e) {
         if ((e as Error).name === "AbortError")
           return { error: "Gemini request timed out. Try a smaller model.", status: 408 };
-        lastGeminiError = (e as Error).message;
+        lastError = (e as Error).message;
         continue;
       }
     }
 
-    return { error: `Gemini unavailable: ${safeErrMsg(lastGeminiError)}`, status: 503 };
+    return { error: `Gemini unavailable: ${safeErrMsg(lastError)}`, status: 503 };
   }
 
   // ── CLAUDE ──────────────────────────────────────────────────────────────────
   if (provider === "claude") {
     const key = getEnvKey("CLAUDE_API_KEY");
-    if (!key) return { error: "Claude unavailable. CLAUDE_API_KEY not set.", status: 503 };
+    if (!key) return { error: "Claude unavailable — CLAUDE_API_KEY not set.", status: 503 };
 
     const { messages: normalized } = normalizeMessages(messages, "claude", true);
     if (normalized.length === 0)
@@ -704,22 +615,12 @@ async function callProvider(opts: CallProviderOptions): Promise<ProviderResult> 
       [system, ...systemMsgs.map((m) => flattenContentToText(m.content as ContentPart[]))]
         .filter(Boolean)
         .join("\n\n") || undefined;
+
     const cleanedMsgs = ensureAlternating(chatMsgs, "user", "assistant");
-
     if (cleanedMsgs.length === 0)
-      return {
-        error: "No valid messages for Claude (need at least 1 user message).",
-        status: 400,
-      };
+      return { error: "No valid messages for Claude (need at least 1 user message).", status: 400 };
 
-    // FIX: this was previously `Math.min(max_tokens, 64_000)` for every
-    // Claude model. Older/smaller models (e.g. claude-3-haiku, max 4096)
-    // would get a max_tokens value far above what they actually support,
-    // and the Anthropic API rejects that with a hard 400 error rather than
-    // silently clamping it. That made any "long" request (which needs a
-    // high max_tokens to avoid truncation) fail outright on those models.
-    const modelOutputLimit = getClaudeOutputLimit(cleanModel);
-    const clampedMaxTokens = Math.min(max_tokens, modelOutputLimit);
+    const clampedMaxTokens = Math.min(max_tokens, getClaudeOutputLimit(cleanModel));
 
     const r = await fetchWithRetry(
       "https://api.anthropic.com/v1/messages",
@@ -737,21 +638,16 @@ async function callProvider(opts: CallProviderOptions): Promise<ProviderResult> 
           messages: cleanedMsgs,
         }),
       },
-      1,
+      2,
       REQUEST_TIMEOUT_MS
     );
 
     if (!r.ok) {
       const err = await parseApiError(r, "Claude");
-      if (err.status === 401)
-        return { error: "Claude: Invalid API key. Check CLAUDE_API_KEY.", status: 401 };
+      if (err.status === 401) return { error: "Claude: Invalid API key. Check CLAUDE_API_KEY.", status: 401 };
       if (err.status === 429) return { error: "Claude rate limit. Please wait.", status: 429 };
       if (err.status === 402 || /credit|billing/i.test(err.message))
         return { error: "Anthropic credits exhausted.", status: 402 };
-      // FIX: surface the real reason for 400s (e.g. "max_tokens too large
-      // for this model") instead of a generic message, so issues like this
-      // are visible in logs/responses instead of looking like a mystery
-      // failure that only happens on "long" requests.
       if (err.status === 400)
         return { error: `Claude request rejected: ${safeErrMsg(err.message)}`, status: 400 };
       return { error: safeErrMsg(err.message), status: err.status || 500 };
@@ -765,37 +661,37 @@ async function callProvider(opts: CallProviderOptions): Promise<ProviderResult> 
     const text = d?.content?.find((c) => c.type === "text")?.text?.trim() || "";
     if (!text) return { error: "Empty response from Claude.", status: 500 };
 
-    // FIX: Claude never reported `truncated`, even when `stop_reason` was
-    // "max_tokens" — meaning a long answer cut off mid-sentence looked
-    // identical to a complete one to the caller.
     const truncated = d?.stop_reason === "max_tokens";
     return { text, ...(truncated ? { truncated: true } : {}) };
   }
 
-  // ── OPENAI-COMPATIBLE HELPER (openai / openrouter / mistral) ────────────────
+  // ── OPENAI-COMPATIBLE HELPER ─────────────────────────────────────────────────
+  // Used by: openai, openrouter, mistral
   async function openAICompatible(
     providerName: string,
     apiUrl: string,
     key: string,
     extraHeaders: Record<string, string> = {},
-    tokenLimit = 128_000
+    tokenLimit = 128_000,
+    allowJsonFormat = false
   ): Promise<ProviderResult> {
     const { messages: normalized } = normalizeMessages(messages, providerName, false);
     const allMsgs = buildOpenAIMessages(normalized, system);
 
-    if (allMsgs.length === 0 || (allMsgs.length === 1 && allMsgs[0].role === "system")) {
+    if (allMsgs.length === 0 || (allMsgs.length === 1 && allMsgs[0].role === "system"))
       return { error: `No user messages for ${providerName}.`, status: 400 };
-    }
 
-    const body = {
+    const body: Record<string, unknown> = {
       model,
       messages: allMsgs,
       max_tokens: Math.min(max_tokens, tokenLimit),
       temperature: 0.7,
-      ...(useJsonFormat && JSON_FORMAT_PROVIDERS.has(providerName)
-        ? { response_format: { type: "json_object" } }
-        : {}),
     };
+
+    // Only add response_format if this provider/model supports it.
+    if (useJsonFormat && allowJsonFormat) {
+      body.response_format = { type: "json_object" };
+    }
 
     const r = await fetchWithRetry(
       apiUrl,
@@ -808,20 +704,19 @@ async function callProvider(opts: CallProviderOptions): Promise<ProviderResult> 
         },
         body: JSON.stringify(body),
       },
-      1,
+      2,
       REQUEST_TIMEOUT_MS
     );
 
     if (!r.ok) {
       const err = await parseApiError(r, providerName);
       if (err.status === 401) return { error: `${providerName}: Invalid API key.`, status: 401 };
-      if (err.status === 429)
-        return { error: `${providerName}: Rate limit hit. Try again soon.`, status: 429 };
+      if (err.status === 429) return { error: `${providerName}: Rate limit hit. Try again soon.`, status: 429 };
       if (err.status === 402 || /insufficient.quota|insufficient.balance/i.test(err.message))
         return { error: `${providerName}: Insufficient credits.`, status: 402 };
       if (err.status === 413 || /context.length|too long|context_length/i.test(err.message))
         return { error: `${providerName}: Message too long. Start a new chat.`, status: 413 };
-      return { error: safeErrMsg(err.message), status: err.status || 500 };
+      return { error: `${providerName}: ${safeErrMsg(err.message)}`, status: err.status || 500 };
     }
 
     interface OpenAIResponse {
@@ -831,19 +726,14 @@ async function callProvider(opts: CallProviderOptions): Promise<ProviderResult> 
     const d = (await r.json()) as OpenAIResponse;
     const choice = d?.choices?.[0];
     const text = choice?.message?.content?.trim() || "";
+
     if (!text) {
-      const detail = d?.error
-        ? safeErrMsg(
-            typeof d.error === "string" ? d.error : (d.error as { message?: string })?.message
-          )
+      const errDetail = d?.error
+        ? safeErrMsg(typeof d.error === "string" ? d.error : (d.error as { message?: string })?.message)
         : "Empty response";
-      return { error: `${providerName}: ${detail}.`, status: 500 };
+      return { error: `${providerName}: ${errDetail}`, status: 500 };
     }
 
-    // FIX: previously `truncated` was never set for any OpenAI-compatible
-    // provider (openai / openrouter / mistral), no matter how the
-    // generation ended. Long outputs that hit max_tokens looked identical
-    // to complete ones, hiding the real cause of "broken" long responses.
     const truncated = choice?.finish_reason === "length";
     return { text, ...(truncated ? { truncated: true } : {}) };
   }
@@ -851,36 +741,39 @@ async function callProvider(opts: CallProviderOptions): Promise<ProviderResult> 
   // ── OPENAI ──────────────────────────────────────────────────────────────────
   if (provider === "openai") {
     const key = getEnvKey("OPENAI_API_KEY");
-    if (!key) return { error: "OpenAI unavailable. OPENAI_API_KEY not set.", status: 503 };
-    return openAICompatible(
-      "openai",
-      "https://api.openai.com/v1/chat/completions",
-      key,
-      {},
-      128_000
-    );
+    if (!key) return { error: "OpenAI unavailable — OPENAI_API_KEY not set.", status: 503 };
+    return openAICompatible("openai", "https://api.openai.com/v1/chat/completions", key, {}, 128_000, true);
   }
 
   // ── OPENROUTER ──────────────────────────────────────────────────────────────
   if (provider === "openrouter") {
     const key = getEnvKey("OPENROUTER_API_KEY");
-    if (!key) return { error: "OpenRouter unavailable. OPENROUTER_API_KEY not set.", status: 503 };
+    if (!key) return { error: "OpenRouter unavailable — OPENROUTER_API_KEY not set.", status: 503 };
+
+    const siteUrl = getEnvKey("NEXT_PUBLIC_SITE_URL") || "https://localhost:3000";
+    const appTitle = getEnvKey("NEXT_PUBLIC_APP_TITLE") || "AI App";
+
+    // OpenRouter free models:
+    // - Do NOT send response_format (most free models reject it with 400).
+    // - Require HTTP-Referer and X-Title headers for free tier access.
+    // - Are slower and need more retries.
     return openAICompatible(
       "openrouter",
       "https://openrouter.ai/api/v1/chat/completions",
       key,
       {
-        "HTTP-Referer": getEnvKey("NEXT_PUBLIC_SITE_URL") || "https://nexusai-roblox.vercel.app",
-        "X-Title": "NEXUS AI",
+        "HTTP-Referer": siteUrl,
+        "X-Title": appTitle,
       },
-      200_000
+      200_000,
+      false // do NOT send response_format for OpenRouter — free models reject it
     );
   }
 
   // ── DEEPSEEK ─────────────────────────────────────────────────────────────────
   if (provider === "deepseek") {
     const key = getEnvKey("DEEPSEEK_API_KEY");
-    if (!key) return { error: "DeepSeek unavailable. DEEPSEEK_API_KEY not set.", status: 503 };
+    if (!key) return { error: "DeepSeek unavailable — DEEPSEEK_API_KEY not set.", status: 503 };
 
     const { messages: normalized } = normalizeMessages(messages, "deepseek", false);
     const allMsgs = buildOpenAIMessages(normalized, system);
@@ -888,23 +781,22 @@ async function callProvider(opts: CallProviderOptions): Promise<ProviderResult> 
     if (allMsgs.length === 0 || (allMsgs.length === 1 && allMsgs[0].role === "system"))
       return { error: "No user messages for DeepSeek.", status: 400 };
 
+    const body: Record<string, unknown> = {
+      model,
+      messages: allMsgs,
+      max_tokens: Math.min(max_tokens, 65_536),
+      temperature: 0.7,
+    };
+    if (useJsonFormat) body.response_format = { type: "json_object" };
+
     const r = await fetchWithRetry(
       "https://api.deepseek.com/v1/chat/completions",
       {
         method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          Authorization: `Bearer ${key}`,
-        },
-        body: JSON.stringify({
-          model,
-          messages: allMsgs,
-          max_tokens: Math.min(max_tokens, 65_536),
-          temperature: 0.7,
-          ...(useJsonFormat ? { response_format: { type: "json_object" } } : {}),
-        }),
+        headers: { "Content-Type": "application/json", Authorization: `Bearer ${key}` },
+        body: JSON.stringify(body),
       },
-      1,
+      2,
       REQUEST_TIMEOUT_MS
     );
 
@@ -915,19 +807,13 @@ async function callProvider(opts: CallProviderOptions): Promise<ProviderResult> 
         return { error: "DeepSeek: Insufficient credits.", status: 402 };
       if (err.status === 429) return { error: "DeepSeek: Rate limit. Please wait.", status: 429 };
       if (err.status === 404 || /model/i.test(err.message))
-        return {
-          error: `DeepSeek: Model "${model}" not found or unavailable. Check the model name.`,
-          status: 404,
-        };
+        return { error: `DeepSeek: Model "${model}" not found.`, status: 404 };
       return { error: safeErrMsg(err.message), status: err.status || 500 };
     }
 
     interface DeepSeekResponse {
       choices?: Array<{
-        message?: {
-          content?: string;
-          reasoning_content?: string;
-        };
+        message?: { content?: string; reasoning_content?: string };
         finish_reason?: string;
       }>;
     }
@@ -940,18 +826,13 @@ async function callProvider(opts: CallProviderOptions): Promise<ProviderResult> 
     const truncated = choice.finish_reason === "length";
 
     if (!text) return { error: "Empty response from DeepSeek.", status: 500 };
-
-    return {
-      text,
-      ...(reasoning ? { reasoning } : {}),
-      ...(truncated ? { truncated: true } : {}),
-    };
+    return { text, ...(reasoning ? { reasoning } : {}), ...(truncated ? { truncated: true } : {}) };
   }
 
   // ── GROQ ────────────────────────────────────────────────────────────────────
   if (provider === "groq") {
     const key = getEnvKey("GROQ_API_KEY");
-    if (!key) return { error: "Groq unavailable. GROQ_API_KEY not set.", status: 503 };
+    if (!key) return { error: "Groq unavailable — GROQ_API_KEY not set.", status: 503 };
 
     const groqTokenLimits: Record<string, number> = {
       "llama-3.1-8b-instant": 8_192,
@@ -975,23 +856,22 @@ async function callProvider(opts: CallProviderOptions): Promise<ProviderResult> 
     if (allMsgs.length === 0 || (allMsgs.length === 1 && allMsgs[0].role === "system"))
       return { error: "No user messages for Groq.", status: 400 };
 
+    const body: Record<string, unknown> = {
+      model,
+      messages: allMsgs,
+      max_tokens: Math.min(max_tokens, modelMax),
+      temperature: 0.7,
+    };
+    if (useJsonFormat) body.response_format = { type: "json_object" };
+
     const r = await fetchWithRetry(
       "https://api.groq.com/openai/v1/chat/completions",
       {
         method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          Authorization: `Bearer ${key}`,
-        },
-        body: JSON.stringify({
-          model,
-          messages: allMsgs,
-          max_tokens: Math.min(max_tokens, modelMax),
-          temperature: 0.7,
-          ...(useJsonFormat ? { response_format: { type: "json_object" } } : {}),
-        }),
+        headers: { "Content-Type": "application/json", Authorization: `Bearer ${key}` },
+        body: JSON.stringify(body),
       },
-      1,
+      2,
       REQUEST_TIMEOUT_MS
     );
 
@@ -1012,7 +892,6 @@ async function callProvider(opts: CallProviderOptions): Promise<ProviderResult> 
     const text = choice?.message?.content?.trim() || "";
     if (!text) return { error: "Empty response from Groq.", status: 500 };
 
-    // FIX: same as OpenAI-compatible — Groq never reported `truncated`.
     const truncated = choice?.finish_reason === "length";
     return { text, ...(truncated ? { truncated: true } : {}) };
   }
@@ -1020,24 +899,14 @@ async function callProvider(opts: CallProviderOptions): Promise<ProviderResult> 
   // ── MISTRAL ──────────────────────────────────────────────────────────────────
   if (provider === "mistral") {
     const key = getEnvKey("MISTRAL_API_KEY");
-    if (!key) return { error: "Mistral unavailable. MISTRAL_API_KEY not set.", status: 503 };
-    return openAICompatible(
-      "mistral",
-      "https://api.mistral.ai/v1/chat/completions",
-      key,
-      {},
-      65_536
-    );
+    if (!key) return { error: "Mistral unavailable — MISTRAL_API_KEY not set.", status: 503 };
+    return openAICompatible("mistral", "https://api.mistral.ai/v1/chat/completions", key, {}, 65_536, true);
   }
 
   // ── STEPFUN ──────────────────────────────────────────────────────────────────
   if (provider === "stepfun") {
     const key = getEnvKey("STEPFUN_API_KEY");
-    if (!key)
-      return {
-        error: "StepFun unavailable. Add STEPFUN_API_KEY to Vercel Environment Variables.",
-        status: 503,
-      };
+    if (!key) return { error: "StepFun unavailable — STEPFUN_API_KEY not set.", status: 503 };
 
     const { messages: normalized } = normalizeMessages(messages, "stepfun", false);
     const allMsgs = buildOpenAIMessages(normalized, system);
@@ -1065,9 +934,8 @@ async function callProvider(opts: CallProviderOptions): Promise<ProviderResult> 
       "step-3-5-flash": 16_384,
     };
 
-    const primaryFallback = stepfunFallback[model] || "step-1-8k";
-    const modelChain = [...new Set([model, primaryFallback, "step-1-8k"])];
-    let lastStepError = "StepFun did not respond";
+    const modelChain = [...new Set([model, stepfunFallback[model] || "step-1-8k", "step-1-8k"])];
+    let lastError = "StepFun did not respond";
 
     for (const tryModel of modelChain) {
       const maxTok = Math.min(max_tokens, stepfunMaxTokens[tryModel] || 8_192);
@@ -1076,24 +944,16 @@ async function callProvider(opts: CallProviderOptions): Promise<ProviderResult> 
           "https://api.stepfun.com/v1/chat/completions",
           {
             method: "POST",
-            headers: {
-              "Content-Type": "application/json",
-              Authorization: `Bearer ${key}`,
-            },
-            body: JSON.stringify({
-              model: tryModel,
-              messages: allMsgs,
-              max_tokens: maxTok,
-              temperature: 0.7,
-            }),
+            headers: { "Content-Type": "application/json", Authorization: `Bearer ${key}` },
+            body: JSON.stringify({ model: tryModel, messages: allMsgs, max_tokens: maxTok, temperature: 0.7 }),
           },
-          1,
+          2,
           REQUEST_TIMEOUT_MS
         );
 
         if (!r.ok) {
           const err = await parseApiError(r, "StepFun");
-          lastStepError = err.message;
+          lastError = err.message;
           if (err.status === 401) return { error: "StepFun: Invalid API key.", status: 401 };
           if (err.status === 402 || /insufficient|balance/i.test(err.message))
             return { error: "StepFun: Insufficient credits.", status: 402 };
@@ -1109,38 +969,26 @@ async function callProvider(opts: CallProviderOptions): Promise<ProviderResult> 
         const d = (await r.json()) as StepFunResponse;
         const choice = d?.choices?.[0];
         const text = choice?.message?.content?.trim() || "";
-        if (!text) {
-          lastStepError = `Empty response from ${tryModel}`;
-          continue;
-        }
+        if (!text) { lastError = `Empty response from ${tryModel}`; continue; }
+
         const truncated = choice?.finish_reason === "length";
         return { text, model_used: tryModel, ...(truncated ? { truncated: true } : {}) };
       } catch (e) {
-        if ((e as Error).name === "AbortError") return { error: "StepFun request timed out.", status: 408 };
-        lastStepError = (e as Error).message;
+        if ((e as Error).name === "AbortError")
+          return { error: "StepFun request timed out.", status: 408 };
+        lastError = (e as Error).message;
         continue;
       }
     }
 
-    return {
-      error: `StepFun unavailable: ${safeErrMsg(lastStepError)}. Try Gemini or Groq.`,
-      status: 503,
-    };
+    return { error: `StepFun unavailable: ${safeErrMsg(lastError)}`, status: 503 };
   }
 
-  // ── UNKNOWN PROVIDER ──────────────────────────────────────────────────────
   return { error: `Unknown provider: "${provider}".`, status: 400 };
 }
 
-// ─── MAIN PROCESSOR ───────────────────────────────────────────────────────────
+// ─── MAIN HANDLER ─────────────────────────────────────────────────────────────
 
-/**
- * processAIRequest — core handler, fully App Router compatible.
- *
- * @param params.body    Validated request body
- * @param params.ip      Caller IP for rate limiting
- * @param params.userId  Optional user ID for per-user rate limiting
- */
 export async function processAIRequest({
   body,
   ip = "unknown",
@@ -1148,59 +996,37 @@ export async function processAIRequest({
 }: AIRequestParams): Promise<AIResult> {
   const reqId = crypto.randomBytes(4).toString("hex");
 
-  // ── Rate limiting ──────────────────────────────────────────────────────────
-  if (!checkRateLimit(`ai_ip:${ip}`, 60)) {
+  if (!checkRateLimit(`ai_ip:${ip}`, 60))
     return { status: 429, data: { error: "Rate limit exceeded. Try again in 1 minute.", reqId } };
-  }
-  if (userId && !checkRateLimit(`ai_user:${userId}`, 40)) {
+  if (userId && !checkRateLimit(`ai_user:${userId}`, 40))
     return { status: 429, data: { error: "Per-user rate limit exceeded. Please wait.", reqId } };
-  }
 
-  // ── Validate body ──────────────────────────────────────────────────────────
-  if (!body || typeof body !== "object") {
+  if (!body || typeof body !== "object")
     return { status: 400, data: { error: "Request body is invalid or empty.", reqId } };
-  }
 
   const provider = sanitizeProvider(body.provider) as Provider;
   const model = sanitizeModelName(body.model);
   const system = body.system ? String(body.system).substring(0, MAX_SYSTEM_LEN) : undefined;
-  // NOTE: this is the REQUESTED max_tokens; each provider branch clamps it
-  // further to that provider/model's real output ceiling (see e.g.
-  // getClaudeOutputLimit). Raising this generic cap alone would not have
-  // fixed long-output failures — the per-model clamp is what matters.
-  const max_tokens = Math.min(Math.max(parseInt(String(body.max_tokens)) || 4_000, 1), 64_000);
+
+  // Raised default from 4000 → 16000 so code generation doesn't silently truncate.
+  // Each provider branch clamps this further to that model's real output ceiling.
+  const max_tokens = Math.min(Math.max(parseInt(String(body.max_tokens)) || 16_000, 1), 64_000);
   const useJsonFormat = body.response_format?.type === "json_object";
 
-  if (!provider) {
+  if (!provider)
     return { status: 400, data: { error: "`provider` is required.", reqId } };
-  }
-  if (!VALID_PROVIDERS.has(provider)) {
-    return {
-      status: 400,
-      data: {
-        error: `Unknown provider "${provider}". Available: ${[...VALID_PROVIDERS].join(", ")}`,
-        reqId,
-      },
-    };
-  }
-  if (!model) {
+  if (!VALID_PROVIDERS.has(provider))
+    return { status: 400, data: { error: `Unknown provider "${provider}". Available: ${[...VALID_PROVIDERS].join(", ")}`, reqId } };
+  if (!model)
     return { status: 400, data: { error: "`model` is required.", reqId } };
-  }
-  if (!Array.isArray(body.messages) || body.messages.length === 0) {
+  if (!Array.isArray(body.messages) || body.messages.length === 0)
     return { status: 400, data: { error: "`messages` must be a non-empty array.", reqId } };
-  }
 
-  // FIX: previously this sliced to the FIRST 100 messages (`.slice(0,
-  // MAX_MESSAGES)`), which — on a long-running conversation — discards the
-  // most recent turns (including the actual current request) and keeps
-  // only old history. Long conversations are exactly when this would have
-  // mattered, so the request to "make the loading screen" could already be
-  // sliced away before it was ever sent to a provider. Now we keep the
-  // LAST `MAX_MESSAGES` messages instead.
+  // Keep the LAST MAX_MESSAGES turns — newest messages are most important.
   const workingMessages: Message[] = body.messages.slice(-MAX_MESSAGES);
 
   console.log(
-    `[ai:${reqId}] provider=${provider} model=${model} msgs=${workingMessages.length} json=${useJsonFormat} ip=${ip}`
+    `[ai:${reqId}] provider=${provider} model=${model} msgs=${workingMessages.length} maxTokens=${max_tokens} json=${useJsonFormat} ip=${ip}`
   );
 
   try {
@@ -1214,19 +1040,17 @@ export async function processAIRequest({
       reqId,
     });
 
-    if (result.error) {
+    if (result.error)
       return { status: result.status || 500, data: { error: result.error, reqId } };
-    }
-    if (!result.text) {
+    if (!result.text)
       return { status: 500, data: { error: "Empty response from provider.", reqId } };
-    }
 
     const responseData: AIResponseData = {
       content: result.text,
       reqId,
       ...(result.model_used ? { model_used: result.model_used } : {}),
       ...(result.reasoning ? { reasoning: result.reasoning } : {}),
-      ...(result.truncated ? { truncated: result.truncated } : {}),
+      ...(result.truncated ? { truncated: true } : {}),
     };
 
     return { status: 200, data: responseData };
@@ -1235,8 +1059,7 @@ export async function processAIRequest({
       return {
         status: 408,
         data: {
-          error:
-            "Request timed out. The response may have been too long to generate in time — try asking for it in smaller parts.",
+          error: "Request timed out. The response may have been too long — try asking for it in smaller parts.",
           reqId,
         },
       };
@@ -1246,27 +1069,20 @@ export async function processAIRequest({
   }
 }
 
-// ─── LEGACY PAGES ROUTER HANDLER ─────────────────────────────────────────────
+// ─── PAGES ROUTER HANDLER ────────────────────────────────────────────────────
 
 import type { NextApiRequest, NextApiResponse } from "next";
 
-/**
- * Default export — legacy Next.js Pages Router handler.
- * For App Router, use `processAIRequest` directly.
- */
 export default async function handler(
   req: NextApiRequest,
   res: NextApiResponse<AIResponseData>
 ): Promise<void> {
   res.setHeader("Access-Control-Allow-Origin", "*");
   res.setHeader("Access-Control-Allow-Methods", "POST, OPTIONS");
-  res.setHeader("Access-Control-Allow-Headers", "Content-Type, X-User-Id, X-Username");
+  res.setHeader("Access-Control-Allow-Headers", "Content-Type, X-User-Id");
   res.setHeader("X-Content-Type-Options", "nosniff");
 
-  if (req.method === "OPTIONS") {
-    res.status(204).end();
-    return;
-  }
+  if (req.method === "OPTIONS") { res.status(204).end(); return; }
   if (req.method !== "POST") {
     res.status(405).json({ error: "Method not allowed. Use POST.", reqId: "" });
     return;
@@ -1276,10 +1092,6 @@ export default async function handler(
   const ip = rawIp.split(",")[0].trim() || "unknown";
   const userId = String(req.headers["x-user-id"] || "").substring(0, 64);
 
-  const result = await processAIRequest({
-    body: req.body as AIRequestBody,
-    ip,
-    userId,
-  });
+  const result = await processAIRequest({ body: req.body as AIRequestBody, ip, userId });
   res.status(result.status).json(result.data);
 }
