@@ -12,9 +12,9 @@ const MAX_BODY_FIELD_LEN    = 50_000;
 const MAX_LOG_ENTRIES       = 500;
 const MAX_HIST_ENTRIES      = 200;
 const MAX_USER_HIST         = 100;
-const RATE_USER_PER_MIN     = 300;  // Increased: multi-action flows need more headroom
-const RATE_IP_PER_MIN       = 600;  // Increased: same reason
-const RATE_BURST_COUNT      = 60;   // Was 20 — too low for inject loops sending 5-10 actions
+const RATE_USER_PER_MIN     = 300;
+const RATE_IP_PER_MIN       = 600;
+const RATE_BURST_COUNT      = 60;
 const RATE_BURST_WINDOW     = 5_000;
 const TTL_TOOLBOX           = 5  * 60_000;
 const TTL_ASSET             = 30 * 60_000;
@@ -25,31 +25,18 @@ const MAX_MULTI_TARGETS     = 20;
 const MAX_AI_FEED_ENTRIES   = 300;
 const AI_FEED_DEFAULT_LIMIT = 50;
 
-// Nonce TTL: how long a nonce is remembered to prevent replay attacks.
-// Set to 5 minutes — wide enough to cover slow plugin poll cycles.
-const NONCE_TTL_MS = 5 * 60_000;
+const NONCE_TTL_MS  = 5 * 60_000;
+const MAX_DELAY_MS  = 60_000;
 
-// Maximum delay allowed for the "delay" action (in milliseconds).
-// Prevents clients from scheduling commands arbitrarily far in the future.
-const MAX_DELAY_MS = 60_000; // 60 seconds
+// Suppress unused warning for SESSION_TTL (used conceptually for docs)
+void SESSION_TTL;
 
 // ── DISPATCH ACTIONS — nonce replay exempt ─────────────────────────────────────
-// These are web→plugin injection actions sent by chats.ts in a sequential
-// loop. Each call uses a fresh per-request nonce (generated in safeFetch on
-// the frontend), so they are NOT replay attacks — they just arrive rapidly
-// from the same session. We skip the server-side nonce dedup for these so
-// that injecting 5+ actions in a row does not produce "Nonce already used".
-//
-// NOTE: The frontend (chats.ts) MUST generate a fresh nonce per safeFetch()
-// call (not reuse _csrfNonce) for this to be safe. If both sides are fixed,
-// each request carries a unique nonce and the server never sees a replay.
-// This constant is the server-side safety net for the transition period.
 const NONCE_EXEMPT_ACTIONS = new Set<string>([
   "dispatch_command",
   "dispatch_batch",
   "dispatch_from_text",
   "dispatch_multi_target",
-  // Generic action names that come through the fallback handler:
   "inject_command",
   "create_instance",
   "create_script",
@@ -84,8 +71,8 @@ const ALLOWED_ORIGINS = new Set<string>([
   "https://nexusai-rbx.vercel.app",
   "https://nexusai.gg",
   "http://localhost:3000",
-  "https://fine-setter-131.convex.site",    // production
-  "https://brazen-lapwing-697.convex.site", // development
+  "https://fine-setter-131.convex.site",
+  "https://brazen-lapwing-697.convex.site",
 ]);
 
 // ── VALID ASSET TYPE SETS ──────────────────────────────────────────────────────
@@ -100,8 +87,6 @@ const INSERTABLE_ASSET_TYPES = new Set<string>([
 ]);
 
 // ── ADMIN-GATED ACTIONS ────────────────────────────────────────────────────────
-// Actions that require an admin token. Configured via the NEXUS_ADMIN_ACTIONS
-// environment variable (comma-separated). If unset, no extra actions are gated.
 function getAdminGatedActions(): Set<string> {
   const env = process.env.NEXUS_ADMIN_ACTIONS ?? "";
   if (!env) return new Set();
@@ -109,11 +94,7 @@ function getAdminGatedActions(): Set<string> {
 }
 
 // ── ACTION NAME MIGRATION ──────────────────────────────────────────────────────
-// Maps legacy action names to their current snake_case equivalents.
-// Applied immediately after parsing the action name so all downstream logic
-// only ever sees the canonical names.
 const ACTION_RENAME_MAP: Record<string, string> = {
-  // Plugin → server (report actions)
   script_content:         "read_script",
   log_output:             "output_log",
   output_data:            "output_report",
@@ -142,13 +123,11 @@ const ACTION_RENAME_MAP: Record<string, string> = {
   script_lines:           "script_lines_report",
   nxai_connect:           "plugin_connect",
   nxai_disconnect:        "plugin_disconnect",
-  // Web/AI → plugin (dispatch actions)
   inject_command:         "dispatch_command",
   batch_commands:         "dispatch_batch",
   execute_json:           "dispatch_from_text",
   execute_text:           "dispatch_from_text",
   multi_target:           "dispatch_multi_target",
-  // run_code alias normalisation
   RunCode:                "run_code",
 };
 
@@ -168,102 +147,99 @@ interface QueueCommand {
 }
 
 interface ProjectData {
-  projectId: string;
+  projectId:   string;
   projectName: string;
-  placeId: string;
-  updatedAt: number;
+  placeId:     string;
+  updatedAt:   number;
 }
 
 interface AssetResult {
-  valid: boolean;
-  assetId: string;
-  name: string;
+  valid:        boolean;
+  assetId:      string;
+  name:         string;
   description?: string;
-  assetType: string;
-  creator: { name: string; type: string; userId: string };
-  isPublic: boolean;
-  insertable: boolean;
+  assetType:    string;
+  creator:      { name: string; type: string; userId: string };
+  isPublic:     boolean;
+  insertable:   boolean;
   insertScript: string;
-  unverified?: boolean;
+  unverified?:  boolean;
 }
 
 interface ToolboxResult {
-  assets: AssetItem[];
+  assets:     AssetItem[];
   nextCursor: string | null;
-  total: number;
+  total:      number;
 }
 
 interface AssetItem {
-  assetId: string;
-  name: string;
+  assetId:     string;
+  name:        string;
   description: string;
-  assetType: string;
-  creator: { name: string; type: string; userId: string };
-  thumbnail: string;
-  updated: string | null;
+  assetType:   string;
+  creator:     { name: string; type: string; userId: string };
+  thumbnail:   string;
+  updated:     string | null;
 }
 
 interface UserInfo {
-  userId: number;
-  username: string;
+  userId:      number;
+  username:    string;
   displayName: string;
   description: string;
-  isBanned: boolean;
-  created: string | null;
-  avatarUrl: string;
+  isBanned:    boolean;
+  created:     string | null;
+  avatarUrl:   string;
 }
 
 interface GameInfo {
-  universeId: number;
-  placeId: number;
-  name: string;
-  description: string;
-  creator: { name: string; type: string };
-  playing: number;
-  visits: number;
-  maxPlayers: number;
+  universeId:     number;
+  placeId:        number;
+  name:           string;
+  description:    string;
+  creator:        { name: string; type: string };
+  playing:        number;
+  visits:         number;
+  maxPlayers:     number;
   favoritedCount: number;
-  genre: string;
-  thumbnailUrl: string;
+  genre:          string;
+  thumbnailUrl:   string;
 }
 
 interface DocsResult {
   results: DocEntry[];
-  source: string;
-  query: string;
+  source:  string;
+  query:   string;
 }
 
 interface DocEntry {
-  title: string;
-  url: string;
-  snippet: string;
-  category: string;
-  score?: number;
+  title:     string;
+  url:       string;
+  snippet:   string;
+  category:  string;
+  score?:    number;
   keywords?: string;
 }
 
 interface AuthResult {
-  ok: boolean;
+  ok:      boolean;
   status?: number;
-  error?: string;
+  error?:  string;
 }
 
 interface FilterResult {
-  safe: QueueCommand[];
+  safe:    QueueCommand[];
   removed: string[];
 }
 
-// AiFeedEntry: a durable, ordered message the AI can pull at any time.
-// Every plugin report (read_script, output_log, runcode_report, etc.) is
-// appended here so the AI can react to Studio events even across sessions.
 interface AiFeedEntry {
-  id: string;
+  id:       string;
   username: string;
-  kind: string;
-  summary: string;
-  data: unknown;
-  ts: number;
-  read: boolean;
+  kind:     string;
+  summary:  string;
+  data:     unknown;
+  ts:       number;
+  read:     boolean;
 }
 
 // ── SANITISERS ─────────────────────────────────────────────────────────────────
@@ -358,11 +334,8 @@ function robustJsonParse(raw: unknown): unknown {
   if (!raw || typeof raw !== "string") return null;
   const s = cleanControlChars(raw.trim());
   if (!s) return null;
-  // Attempt 1: standard parse
   try { return JSON.parse(s); } catch (_) {}
-  // Attempt 2: strip trailing commas
   try { return JSON.parse(s.replace(/,\s*([}\]])/g, "$1")); } catch (_) {}
-  // Attempt 3: unquoted keys
   try {
     return JSON.parse(
       s
@@ -370,7 +343,6 @@ function robustJsonParse(raw: unknown): unknown {
         .replace(/([{,]\s*)([a-zA-Z_$][a-zA-Z0-9_$]*)(\s*:(?!:))/g, '$1"$2"$3')
     );
   } catch (_) {}
-  // Attempt 4: Lua-style objects (key = value notation)
   try {
     return JSON.parse(
       s
@@ -464,7 +436,6 @@ function extractCommandsFromText(text: string): QueueCommand[] {
     }
   }
 
-  // Mask code block ranges before scanning bare text for JSON objects
   let textNoBraces = text;
   for (let r = codeBlockRanges.length - 1; r >= 0; r--) {
     const [start, end] = codeBlockRanges[r];
@@ -565,8 +536,6 @@ function verifyAdminToken(request: Request, queryToken?: string): boolean {
   return timingSafeCompare(candidate, env);
 }
 
-// Verifies X-Nexus-Signature / X-Roblox-Signature as HMAC-SHA256 over the
-// raw request body. Opt-in: skipped if PLUGIN_HMAC_SECRET is not configured.
 async function verifyPluginHmac(request: Request, rawBody: string): Promise<boolean> {
   const secret = process.env.PLUGIN_HMAC_SECRET ?? "";
   if (!secret || secret.length < 16) return true;
@@ -592,24 +561,15 @@ async function verifyPluginHmac(request: Request, rawBody: string): Promise<bool
   }
 }
 
-// Nonce replay guard only runs on POST requests (not GET polls).
-// GET polls are read-only and may be repeated many times with the same nonce.
-// Dispatch/inject actions are exempt — the frontend generates a fresh nonce
-// per safeFetch() call, so each inject is unique. The server exemption here is
-// a safety net: if the frontend ever reuses a nonce by mistake, dispatch
-// commands still succeed (they require a valid session token for auth instead).
 async function checkNonceReplay(
   ctx: ActionCtx,
   request: Request,
   actionName: string
 ): Promise<boolean> {
-  // Dispatch/inject actions are exempt — see NONCE_EXEMPT_ACTIONS.
   if (NONCE_EXEMPT_ACTIONS.has(actionName)) return true;
-
   const nonce = (request.headers.get("x-nexus-nonce") ?? "").trim();
-  if (!nonce) return true;           // Nonce is opt-in
+  if (!nonce) return true;
   if (nonce.length > 128) return false;
-
   const isReplay = await ctx.runMutation(internal.store.checkAndSetDedup, {
     hash:     `nonce:${nonce}`,
     windowMs: NONCE_TTL_MS,
@@ -644,8 +604,6 @@ async function authorizeCommand(
   const isAdmin = verifyAdminToken(request);
   if (isAdmin) return { ok: true };
 
-  // Allow self-targeting when sender resolves to "default" (anonymous web caller).
-  // "default" is the san() fallback for empty/missing _user fields.
   if (senderUser !== "default" && senderUser !== targetUser)
     return {
       ok: false,
@@ -669,10 +627,8 @@ async function authorizeCommand(
     username: targetUser,
   });
 
-  // No session registered yet (plugin never connected) — allow through.
   if (!session) return { ok: true };
 
-  // A session exists, so a valid token is mandatory.
   if (!candidate)
     return { ok: false, status: 401, error: "Session token required." };
 
@@ -1138,11 +1094,7 @@ async function dispatchWebhook(ctx: ActionCtx, u: string, event: string, data: u
 }
 
 // ── AI FEED ────────────────────────────────────────────────────────────────────
-// Durable, ordered outbox of messages the AI can pull at any time.
-// Every plugin report (read_script, output_log, runcode_report, etc.) appends
-// a small entry here. The AI polls GET ?ai_feed=1&user=... to consume unread
-// entries oldest-first; entries are marked read atomically so nothing is
-// delivered twice.
+
 async function pushAiFeed(
   ctx: ActionCtx, username: string, kind: string, summary: string, data: unknown
 ): Promise<void> {
@@ -1157,20 +1109,31 @@ async function pushAiFeed(
 
 // ── PROJECT ────────────────────────────────────────────────────────────────────
 
+// FIX: Properly cast loadData result to ProjectData with explicit field extraction
+// to avoid silent undefined fields when the stored JSON shape changes.
 async function getProject(ctx: ActionCtx, u: string): Promise<ProjectData> {
   const d = await loadData(ctx, u, "project");
-  return d
-    ? (d as unknown as ProjectData)
-    : { projectId: "", projectName: "", placeId: "", updatedAt: 0 };
+  if (!d) {
+    return { projectId: "", projectName: "", placeId: "", updatedAt: 0 };
+  }
+  return {
+    projectId:   sanStr(d["projectId"]   ?? "", 100),
+    projectName: sanStr(d["projectName"] ?? "", 100),
+    placeId:     sanStr(d["placeId"]     ?? "", 50),
+    updatedAt:   typeof d["updatedAt"] === "number" ? d["updatedAt"] : 0,
+  };
 }
 
 async function saveProject(ctx: ActionCtx, u: string, d: Partial<ProjectData>): Promise<void> {
-  await saveData(ctx, u, "project", {
-    projectId:   sanStr(d.projectId   ?? "", 100),
-    projectName: sanStr(d.projectName ?? "", 100),
-    placeId:     sanStr(d.placeId     ?? "", 50),
+  // Load existing project so we preserve fields not included in the update
+  const existing = await getProject(ctx, u);
+  const merged: Record<string, unknown> = {
+    projectId:   sanStr(d.projectId   ?? existing.projectId   ?? "", 100),
+    projectName: sanStr(d.projectName ?? existing.projectName ?? "", 100),
+    placeId:     sanStr(d.placeId     ?? existing.placeId     ?? "", 50),
     updatedAt:   Date.now(),
-  });
+  };
+  await saveData(ctx, u, "project", merged);
 }
 
 // ── SESSION HELPERS ────────────────────────────────────────────────────────────
@@ -1248,19 +1211,15 @@ export const controlHandler = httpAction(async (ctx, request) => {
 });
 
 // ── GET HANDLER ────────────────────────────────────────────────────────────────
-// Nonce replay checking does NOT run for GET requests. GET polls are
-// read-only and may be repeated many times with the same nonce.
 async function handleGet(
   ctx: ActionCtx, request: Request, cors: Record<string, string>
 ): Promise<Response> {
   const url = new URL(request.url);
   const q   = Object.fromEntries(url.searchParams.entries()) as Record<string, string>;
 
-  // Ping (no params)
   if (Object.keys(q).length === 0)
     return jsonResp({ ok: true, status: "ok", required_plugin_version: REQUIRED_PLUGIN_VERSION }, 200, cors);
 
-  // Health check
   if (q["health"] === "1") {
     const rawStats      = await ctx.runQuery(internal.store.getGlobalStats, {});
     const s             = rawStats
@@ -1279,7 +1238,6 @@ async function handleGet(
     }, 200, cors);
   }
 
-  // User info lookup
   if (q["userinfo"] === "1") {
     const uid = parseInt(String(q["userId"] ?? "0"), 10);
     if (!uid || uid <= 0 || uid > 9_999_999_999)
@@ -1291,7 +1249,6 @@ async function handleGet(
     }
   }
 
-  // Game info lookup
   if (q["gameinfo"] === "1") {
     const id = parseInt(String(q["id"] ?? "0"), 10);
     if (!id) return errResp(cors, 400, 'Parameter "id" is required.');
@@ -1302,7 +1259,6 @@ async function handleGet(
     }
   }
 
-  // Connection / status check
   if (q["check"] != null) {
     const u        = san(q["user"] ?? "");
     const rawStats = await ctx.runQuery(internal.store.getGlobalStats, {});
@@ -1326,7 +1282,6 @@ async function handleGet(
     }, 200, cors);
   }
 
-  // Admin: clear cache
   if (q["clear_cache"] != null) {
     if (!verifyAdminToken(request, q["token"]))
       return errResp(cors, 401, "Admin token required.");
@@ -1339,9 +1294,6 @@ async function handleGet(
   const u = san(q["user"] ?? "");
 
   // AI Feed
-  // GET ?ai_feed=1&user=<username>         → unread entries (consumed, oldest first)
-  // GET ?ai_feed=1&user=<username>&peek=1  → unread entries (NOT consumed)
-  // GET ?ai_feed=1&user=<username>&all=1   → full history (read + unread)
   if (q["ai_feed"] != null) {
     if (!u) return errResp(cors, 400, '"user" parameter is required.');
     const limit = sanInt(q["limit"], AI_FEED_DEFAULT_LIMIT, 1, MAX_AI_FEED_ENTRIES);
@@ -1367,23 +1319,19 @@ async function handleGet(
     }, 200, cors);
   }
 
-  // Webhook info
   if (q["get_webhook"] != null) {
     const wh = await ctx.runQuery(internal.store.getWebhook, { username: u });
     return jsonResp({ ok: true, webhook: wh, user: u }, 200, cors);
   }
 
-  // Project info
   if (q["get_project"] != null)
     return jsonResp({ ok: true, ...(await getProject(ctx, u)) }, 200, cors);
 
-  // Output report snapshot
   if (q["get_output_data"] != null) {
     const d = await loadData(ctx, u, "output_report");
     return jsonResp({ ok: true, ...(d ?? { outputs: [] }) }, 200, cors);
   }
 
-  // Studio output log
   if (q["get_output"] != null) {
     const raw   = await ctx.runQuery(internal.store.getData, { username: u, key: "output_log" });
     let logs    = raw ? (JSON.parse(raw) as Record<string, unknown>[]) : [];
@@ -1393,9 +1341,6 @@ async function handleGet(
     return jsonResp({ ok: true, logs, count: logs.length }, 200, cors);
   }
 
-  // Generic data getters
-  // ?get_workspace returns an empty-but-valid response if no scan stored yet,
-  // avoiding noisy 404s when the AI polls before the plugin has run a scan.
   const dataGetterKeys: Record<string, string> = {
     get_workspace:       "workspace_scan",
     get_script:          "read_script",
@@ -1419,7 +1364,9 @@ async function handleGet(
 
   const emptyDefaults: Record<string, Record<string, unknown>> = {
     workspace_scan:           { data: {}, ts: 0, user: u },
-    read_script:              { name: "", source: "", lineCount: 0, class: "Script" },
+    // FIX: read_script empty default now includes all expected fields
+    // so GET ?get_script never returns a payload that silently omits source/class/etc.
+    read_script:              { name: "", source: "", lineCount: 0, class: "Script", parent: "", fullPath: "", disabled: false },
     script_list_report:       { scripts: [], count: 0, total: 0, breakdown: {} },
     script_lines_report:      { content: "", lineStart: 0, lineEnd: 0, total: 0 },
     toolbox_search_report:    { results: [], count: 0, query: "" },
@@ -1444,28 +1391,24 @@ async function handleGet(
     }
   }
 
-  // Plugin errors
   if (q["get_plugin_errors"] != null) {
     const raw    = await ctx.runQuery(internal.store.getData, { username: u, key: "plugin_error_report" });
     const errors = raw ? (JSON.parse(raw) as unknown[]) : [];
     return jsonResp({ ok: true, errors, count: errors.length }, 200, cors);
   }
 
-  // Mentions
   if (q["get_mentions"] != null) {
     const raw      = await ctx.runQuery(internal.store.getData, { username: u, key: "mentions" });
     const mentions = raw ? (JSON.parse(raw) as unknown[]) : [];
     return jsonResp({ ok: true, mentions, count: mentions.length }, 200, cors);
   }
 
-  // Command history (per user)
   if (q["get_cmd_history"] != null) {
     const limit   = sanInt(q["limit"], 50, 1, MAX_USER_HIST);
     const history = await ctx.runQuery(internal.store.getUserHistory, { username: u, limit });
     return jsonResp({ ok: true, history, user: u }, 200, cors);
   }
 
-  // Queue stats
   if (q["queue_stats"] != null) {
     const qc         = await ctx.runQuery(internal.store.countQueueItems, { username: u });
     const lastPollTs = await ctx.runQuery(internal.store.getLastPoll,     { username: u });
@@ -1479,7 +1422,6 @@ async function handleGet(
     }, 200, cors);
   }
 
-  // Admin: raw logs
   if (q["get_logs"] != null) {
     if (!verifyAdminToken(request, q["token"]))
       return errResp(cors, 401, "Admin token required.");
@@ -1488,7 +1430,6 @@ async function handleGet(
     return jsonResp({ ok: true, logs, count: logs.length }, 200, cors);
   }
 
-  // Admin: history
   if (q["get_history"] != null) {
     if (!verifyAdminToken(request, q["token"]))
       return errResp(cors, 401, "Admin token required.");
@@ -1497,7 +1438,6 @@ async function handleGet(
     return jsonResp({ ok: true, history, count: history.length }, 200, cors);
   }
 
-  // Admin: global stats
   if (q["get_stats"] != null) {
     const rawStats = await ctx.runQuery(internal.store.getGlobalStats, {});
     const s        = rawStats
@@ -1518,7 +1458,6 @@ async function handleGet(
     }, 200, cors);
   }
 
-  // Admin: clear queue
   if (q["clear_queue"] != null) {
     if (!verifyAdminToken(request, q["token"]))
       return errResp(cors, 401, "Admin token required.");
@@ -1527,7 +1466,7 @@ async function handleGet(
     return jsonResp({ ok: true, message: "Queue cleared.", user: u }, 200, cors);
   }
 
-  // Plugin Poll — main poll endpoint used by the Roblox Studio plugin
+  // Plugin Poll
   if (!u) return errResp(cors, 400, '"user" parameter is required.');
 
   if (q["session_token"]) {
@@ -1550,9 +1489,9 @@ async function handleGet(
     priorityCount: queue.filter((c: QueueCommand) => c._priority === "critical" || c._priority === "high").length,
     required_plugin_version: REQUIRED_PLUGIN_VERSION,
     currentProject: proj,
-    projectId:      proj.projectId   ?? "",
-    projectName:    proj.projectName ?? "",
-    placeId:        proj.placeId     ?? "",
+    projectId:      proj.projectId,
+    projectName:    proj.projectName,
+    placeId:        proj.placeId,
   }, 200, cors);
 }
 
@@ -1572,7 +1511,6 @@ async function handlePost(
   const hasIdentity = !!(body["_user"] ?? body["user"]);
   const ratUser     = hasIdentity ? san(body["_user"] ?? body["user"]) : `ip_${ip || "unknown"}`;
 
-  // Rate limiting
   const okIp = await ctx.runMutation(internal.store.checkAndIncrRateLimit, {
     key: ip, kind: "ip", max: RATE_IP_PER_MIN, windowMs: 60_000,
   });
@@ -1588,16 +1526,9 @@ async function handlePost(
   });
   if (!okBurst) return rateLimitResp(cors, 5);
 
-  // HMAC verification (opt-in via PLUGIN_HMAC_SECRET env var)
   if (!(await verifyPluginHmac(request, rawBody)))
     return errResp(cors, 401, "Invalid HMAC signature.", { hint: "Check PLUGIN_HMAC_SECRET." });
 
-  // Resolve action name early so nonce check can be action-aware.
-  // Dispatch/inject actions skip nonce replay — they fire in rapid succession
-  // from chats.ts (one per Studio action in the inject loop). Each call now
-  // generates its own nonce on the frontend, but the server exemption ensures
-  // zero "Nonce already used" errors even during the transition before every
-  // client has the new frontend deployed.
   const rawAction    = migrateActionName(sanStr(String(body["action"] ?? body["type"] ?? ""), 80));
   const resolvedUser = san(body["_user"] ?? "");
 
@@ -1620,8 +1551,8 @@ async function handlePost(
       ok: true, status: "ok",
       required_plugin_version: REQUIRED_PLUGIN_VERSION,
       currentProject: proj,
-      projectId:      proj.projectId   ?? "",
-      projectName:    proj.projectName ?? "",
+      projectId:      proj.projectId,
+      projectName:    proj.projectName,
     }, 200, cors);
   }
 
@@ -1639,29 +1570,36 @@ async function handlePost(
   }
 
   // ── read_script ────────────────────────────────────────────────────────────
-  // The plugin sends this after the AI sends a read_script dispatch action.
-  // Fields accepted (all optional except name):
-  //   name        — script name (required)
-  //   source      — full Lua source text
-  //   parent / parentName — parent instance name
-  //   fullPath    — full hierarchy path, e.g. "ServerScriptService.MyScript"
-  //   class / scriptType  — "Script" | "LocalScript" | "ModuleScript"
-  //   lineCount   — number of lines in the script
-  //   disabled    — whether the script is currently disabled
+  // FIX: The plugin (ControlBridge.lua) sends the script content using field
+  // names: name, source, class (or scriptType), lineCount, fullPath, parentName.
+  // Previously this handler only accepted "source" but the plugin's safePost
+  // in Bridge.readScript sends "source" directly — and the ACTION_RENAME_MAP
+  // now routes "script_content" → "read_script" so both old and new plugin
+  // versions land here.  All alternative field names are accepted below.
   if (rawAction === "read_script") {
-    const name       = sanStr(body["name"] ?? "", 100);
+    const name = sanStr(
+      body["name"] ?? body["scriptName"] ?? body["script_name"] ?? "",
+      100
+    );
+    // Accept: source, script_source, content (all plugin versions)
+    const rawSource =
+      body["source"]        ??
+      body["script_source"] ??
+      body["content"]       ??
+      "";
     const reportData = {
       name,
-      parent:    sanStr(body["parentName"] ?? body["parent"] ?? "", 100),
-      fullPath:  sanStr(body["fullPath"]   ?? "", 200),
-      class:     sanStr(body["class"]      ?? body["scriptType"] ?? "Script", 30),
-      source:    sanStrSafe(body["source"] ?? ""),
-      lineCount: sanInt(body["lineCount"], 0, 0, 99_999),
+      parent:    sanStr(body["parentName"] ?? body["parent_name"] ?? body["parent"] ?? "", 100),
+      fullPath:  sanStr(body["fullPath"]   ?? body["full_path"]   ?? "", 200),
+      // Accept: class, scriptType, script_type
+      class:     sanStr(body["class"]      ?? body["scriptType"]  ?? body["script_type"] ?? "Script", 30),
+      // FIX: Use sanStrSafe (not sanStr) so source is not truncated to 200 chars
+      source:    sanStrSafe(rawSource),
+      lineCount: sanInt(body["lineCount"]  ?? body["line_count"]  ?? body["lines"], 0, 0, 99_999),
       disabled:  !!body["disabled"],
       updatedAt: Date.now(),
     };
     await saveData(ctx, resolvedUser, "read_script", reportData);
-    // Push to AI feed so the AI can react to the script content
     await pushAiFeed(
       ctx, resolvedUser, "read_script",
       `Script "${name}" (${reportData.class}, ${reportData.lineCount} lines) was read from Studio.`,
@@ -1670,7 +1608,7 @@ async function handlePost(
     await ctx.runMutation(internal.store.pushLog, {
       action: "read_script", user: resolvedUser, details: name,
     });
-    return jsonResp({ ok: true, status: "ok", name }, 200, cors);
+    return jsonResp({ ok: true, status: "ok", name, lineCount: reportData.lineCount }, 200, cors);
   }
 
   // ── workspace_scan ─────────────────────────────────────────────────────────
@@ -1708,8 +1646,8 @@ async function handlePost(
   if (rawAction === "script_lines_report") {
     await saveData(ctx, resolvedUser, "script_lines_report", {
       name:      sanStr(body["name"] ?? "", 100),
-      lineStart: sanInt(body["lineStart"], 1, 1, 99_999),
-      lineEnd:   sanInt(body["lineEnd"],   1, 1, 99_999),
+      lineStart: sanInt(body["lineStart"] ?? body["line_start"], 1, 1, 99_999),
+      lineEnd:   sanInt(body["lineEnd"]   ?? body["line_end"],   1, 1, 99_999),
       total:     sanInt(body["total"],     0, 0, 99_999),
       content:   sanStrSafe(body["content"] ?? ""),
     });
@@ -1717,7 +1655,6 @@ async function handlePost(
   }
 
   // ── output_log ─────────────────────────────────────────────────────────────
-  // Plugin reports captured Studio output log entries back to the server.
   if (rawAction === "output_log") {
     const logs = sanArr(body["logs"], 100);
     await ctx.runMutation(internal.store.pushLogSvc, {
@@ -1858,7 +1795,6 @@ async function handlePost(
   }
 
   // ── runcode_report ─────────────────────────────────────────────────────────
-  // Result of a run_code action sent back from Studio to the server.
   if (rawAction === "runcode_report") {
     const result = {
       mode:    sanStr(body["mode"] ?? "pipeline", 20),
@@ -1903,7 +1839,6 @@ async function handlePost(
   }
 
   // ── plugin_error_report ────────────────────────────────────────────────────
-  // Plugin errors are forwarded to the AI feed so the AI is aware of failures.
   if (rawAction === "plugin_error_report") {
     const errorEntry = {
       actionName: sanStr(body["actionName"] ?? body["action_name"] ?? "unknown", 80),
@@ -1927,8 +1862,6 @@ async function handlePost(
   }
 
   // ── ping ───────────────────────────────────────────────────────────────────
-  // Lightweight keepalive / connectivity check. Returns immediately without
-  // queuing anything to Studio.
   if (rawAction === "ping") {
     const target     = san(body["_target_user"] ?? body["_user"] ?? "");
     const lastPollTs = target
@@ -1943,7 +1876,6 @@ async function handlePost(
   }
 
   // ── get_info ───────────────────────────────────────────────────────────────
-  // Returns session and queue status for a user without queuing any Studio action.
   if (rawAction === "get_info") {
     const target = san(body["_target_user"] ?? body["_user"] ?? "");
     if (!target) return errResp(cors, 400, '"_user" is required.');
@@ -1965,11 +1897,8 @@ async function handlePost(
   }
 
   // ── get_all_actions ────────────────────────────────────────────────────────
-  // Returns the full list of supported server-side action names so the AI /
-  // frontend can enumerate available commands without hard-coding them.
   if (rawAction === "get_all_actions") {
     const allActions = [
-      // Plugin → server reports
       "read_script", "output_log", "output_report", "workspace_scan",
       "toolbox_search_report", "descendants_report", "properties_report",
       "properties_set_report", "action_list_report", "asset_library_report",
@@ -1978,15 +1907,12 @@ async function handlePost(
       "expression_report", "query_report", "mention_report",
       "plugin_error_report", "script_list_report", "script_lines_report",
       "plugin_connect", "plugin_disconnect",
-      // Web/AI → plugin dispatch
       "dispatch_command", "dispatch_batch", "dispatch_from_text",
       "dispatch_multi_target",
-      // Studio actions (queued to plugin)
       "create_instance", "create_script", "edit_script", "set_properties",
       "rename", "delete", "parent", "list", "insert_asset", "play_test",
       "run_test", "stop_test", "terrain", "undo", "redo",
       "resolve_mention", "run_code", "delay", "none",
-      // Server-handled utility actions
       "ping", "get_info", "get_all_actions", "status", "reset",
       "set_project", "set_webhook", "search_toolbox", "insert_model",
       "search_docs", "get_game_info", "get_user_info", "validate_asset",
@@ -2000,16 +1926,11 @@ async function handlePost(
   }
 
   // ── none ───────────────────────────────────────────────────────────────────
-  // Explicit no-op. Useful for testing connectivity or flushing nonces.
   if (rawAction === "none") {
     return jsonResp({ ok: true, status: "ok", action: "none" }, 200, cors);
   }
 
   // ── delay ──────────────────────────────────────────────────────────────────
-  // Schedules a nested command to be queued after a specified delay (ms).
-  // Usage: { action: "delay", _user: "...", ms: 2000, command: { action: "ping", ... } }
-  // The nested command is queued immediately but carries a _executeAfter timestamp
-  // that the plugin is expected to honour before executing.
   if (rawAction === "delay") {
     const sender   = san(body["_user"] ?? "");
     const target   = san(body["_target_user"] ?? sender);
@@ -2041,7 +1962,7 @@ async function handlePost(
       action:          nestedAct,
       _user:           String(body["_user"] ?? "web").substring(0, 50),
       _target_user:    target,
-      _executeAfter:   executeAfter,  // Plugin should wait until this timestamp (ms) before running
+      _executeAfter:   executeAfter,
       _delayMs:        delayMs,
       _apiKey:         undefined,
       _session_token:  undefined,
@@ -2076,8 +1997,6 @@ async function handlePost(
   }
 
   // ── dispatch_command ───────────────────────────────────────────────────────
-  // Primary path used by chats.ts autoInjectToStudio() to send one Studio
-  // action at a time. Nonce replay is exempt (see NONCE_EXEMPT_ACTIONS).
   if (rawAction === "dispatch_command") {
     const sender   = san(body["_user"]        ?? "");
     const target   = san(body["_target_user"] ?? sender);
@@ -2163,16 +2082,18 @@ async function handlePost(
     if (!resolvedUser) return errResp(cors, 400, '"_user" is required.');
     const auth = await authorizeCommand(ctx, request, body, ratUser, resolvedUser, "set_project");
     if (!auth.ok) return errResp(cors, auth.status!, auth.error!);
-    const data: Partial<ProjectData> = {
-      projectId:   sanStr(String(body["projectId"]   ?? body["project_id"]   ?? ""), 100),
-      projectName: sanStr(String(body["projectName"] ?? body["project_name"] ?? ""), 100),
-      placeId:     sanStr(String(body["placeId"]     ?? body["place_id"]     ?? ""), 50),
+    // FIX: Accept both camelCase and snake_case field names, merge with existing
+    const incoming: Partial<ProjectData> = {
+      projectId:   sanStr(String(body["projectId"]   ?? body["project_id"]   ?? ""), 100) || undefined,
+      projectName: sanStr(String(body["projectName"] ?? body["project_name"] ?? ""), 100) || undefined,
+      placeId:     sanStr(String(body["placeId"]     ?? body["place_id"]     ?? ""), 50)  || undefined,
     };
-    await saveProject(ctx, resolvedUser, data);
+    await saveProject(ctx, resolvedUser, incoming);
+    const saved = await getProject(ctx, resolvedUser);
     await ctx.runMutation(internal.store.pushLog, {
-      action: "set_project", user: resolvedUser, details: JSON.stringify(data),
+      action: "set_project", user: resolvedUser, details: JSON.stringify(incoming),
     });
-    return jsonResp({ ok: true, status: "ok", ...data }, 200, cors);
+    return jsonResp({ ok: true, status: "ok", ...saved }, 200, cors);
   }
 
   // ── set_webhook ────────────────────────────────────────────────────────────
@@ -2504,12 +2425,6 @@ async function handlePost(
   }
 
   // ── Generic single-action dispatch (fallback) ──────────────────────────────
-  // Handles all plugin-registered actions not explicitly covered above:
-  //   create_instance, create_script, edit_script, set_properties, rename,
-  //   delete, parent, list, insert_asset, play_test, run_test, stop_test,
-  //   terrain, undo, redo, resolve_mention, run_code, get_info,
-  //   get_all_actions, none, etc.
-  // Nonce replay is exempt for all of these (see NONCE_EXEMPT_ACTIONS).
   if (rawAction) {
     const act      = migrateActionName(sanAction(rawAction));
     const priority = sanPriority(body["priority"] ?? body["_priority"]);
@@ -2551,7 +2466,6 @@ async function handlePost(
     }, 200, cors);
   }
 
-  // Fallback — no recognisable action found in the request body
   return errResp(
     cors, 400,
     'Request not recognised. Include a valid "action" or query parameter.',
