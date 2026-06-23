@@ -2,7 +2,7 @@ import { httpAction, type ActionCtx } from "./_generated/server";
 import { internal } from "./_generated/api";
 
 // ── VERSION ────────────────────────────────────────────────────────────────────
-const REQUIRED_PLUGIN_VERSION = "V1.3.29";
+const REQUIRED_PLUGIN_VERSION = "V1.3.44";
 
 // ── TUNABLES ───────────────────────────────────────────────────────────────────
 const SESSION_TTL           = 24 * 60 * 60 * 1_000;
