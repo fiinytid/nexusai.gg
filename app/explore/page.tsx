@@ -774,7 +774,7 @@ export default function ExplorePage() {
   useEffect(() => {
     const checkAuth = async () => {
       try {
-        const userStr = localStorage.getItem('nexus_user')
+        const userStr = localStorage.getItem('nexus_session')
         if (!userStr) {
           router.push('/')
           return
