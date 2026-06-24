@@ -536,8 +536,8 @@ const MODEL_LIST: ModelEntry[] = [
   { id: 'gemini-3.5-flash',     prov: 'gemini',     cost: 3,  label: 'Gemini 3.5 Flash',    icon: '/images/gemini.png',   badge: 'FAST', inputImages: 'enabled' },
   { grp: 'Nvidia' },
   { id: 'nvidia/nemotron-3-ultra-550b-a55b:free', prov: 'openrouter', cost: 0, label: 'Nemotron 3 Ultra',   icon: '/images/nvidia.png', badge: 'FREE', inputImages: 'disabled' },
-  { grp: 'DeepSeek' },
-  { id: 'deepseek/deepseek-v4-flash', prov: 'openrouter', cost: 6, label: 'DeepSeek V4',   icon: '/images/deepseek.svg', badge: 'BEST', inputImages: 'disabled' },
+  { grp: 'Qwen' },
+  { id: 'qwen/qwen3-next-80b-a3b-instruct', prov: 'openrouter', cost: 6, label: 'DeepSeek V4',   icon: '/images/qwen.png', badge: 'BEST', inputImages: 'disabled' },
 ]
 
 function getFreeModel(): ModelEntry {
