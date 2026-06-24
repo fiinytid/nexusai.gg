@@ -54,13 +54,6 @@ export const upsertSession = internalMutation({
 export const touchSession = internalMutation({
   args: { username: v.string() },
   handler: async (ctx, { username }) => {
-    // Same high-frequency-write situation as bumpPoll above: this fires on
-    // every plugin poll that doesn't carry a session_token. A patch (not
-    // insert) only, so it can never create a duplicate row — but it can
-    // still lose a race and throw an OCC conflict if two polls for the
-    // same username land at nearly the same instant. One manual retry
-    // keeps that from bubbling up and failing the whole GET /poll request
-    // over what is just liveness/counter bookkeeping.
     try {
       const s = await ctx.db.query("sessions")
         .withIndex("by_username", q => q.eq("username", username)).first();
@@ -184,23 +177,6 @@ export const getLastPoll = internalQuery({
 export const bumpPoll = internalMutation({
   args: { username: v.string() },
   handler: async (ctx, { username }) => {
-    // bumpPoll fires on every plugin poll (high frequency), so it is the
-    // single most likely mutation to collide with itself when more than
-    // one Studio instance / plugin session polls under the same username
-    // at nearly the same moment. The original read-then-patch-or-insert
-    // pattern has a window between the query and the write where a
-    // concurrent call can insert first, causing either (a) an OCC write
-    // conflict on the same document, or (b) — worse — two "polls" rows
-    // for the same username if both calls see `p` as null and both insert.
-    //
-    // Fix: treat this as a single best-effort "upsert latest timestamp"
-    // operation. If the initial read is stale by the time we go to write
-    // (someone else inserted/patched in between), re-read once and patch
-    // the row that now exists instead of inserting a duplicate. lastPoll
-    // is liveness-tracking data only (used for an 8s "is plugin online"
-    // window) — losing a single update to a race is harmless, but ending
-    // up with two rows per username, or throwing and failing the whole
-    // GET /poll response, is not.
     const now = Date.now();
     try {
       const p = await ctx.db.query("polls")
@@ -211,31 +187,18 @@ export const bumpPoll = internalMutation({
         await ctx.db.insert("polls", { username, lastPoll: now });
       }
     } catch (_err) {
-      // Lost a race against a concurrent bumpPoll for the same username.
-      // Re-read (the other call's write is now committed) and patch the
-      // row that exists rather than retrying the original insert, which
-      // would either conflict again or create a duplicate row.
       try {
         const p2 = await ctx.db.query("polls")
           .withIndex("by_username", q => q.eq("username", username)).first();
         if (p2) await ctx.db.patch(p2._id, { lastPoll: now });
         else    await ctx.db.insert("polls", { username, lastPoll: now });
       } catch {
-        // Best-effort: if it still fails, skip silently. A missed
-        // liveness timestamp on one poll cycle self-corrects on the very
-        // next poll a few seconds later.
+        // Best-effort: missed liveness timestamp self-corrects on next poll.
       }
     }
   },
 });
 
-// De-duplication safeguard: if two "polls" rows ever exist for the same
-// username (e.g. from before this fix shipped, or any other race), keep
-// only the most recently updated one. getLastPoll already takes .first()
-// off an index lookup, so a stray duplicate wouldn't break reads, but
-// cleaning up keeps the table honest. Not called automatically — run
-// manually from the Convex dashboard / a one-off script if you suspect
-// duplicates accumulated before this fix.
 export const dedupePollRows = internalMutation({
   args: { username: v.string() },
   handler: async (ctx, { username }) => {
@@ -470,13 +433,7 @@ export const checkAndIncrBurst = internalMutation({
   },
 });
 
-// ── DEDUP / NONCE REPLAY GUARD ───────────────────────────────────────────────────
-// NOTE: this is NOT the old command-dedup feature (DEDUP_ACTIONS /
-// isDuplicateCommand), which has been removed entirely from control.ts.
-// This generic hash-based "seen before within windowMs?" check is still
-// required because control.ts's checkNonceReplay() reuses it as a replay
-// guard for the X-Nexus-Nonce header. Keep this function and the
-// "dedupCache" table — removing them would break nonce replay protection.
+// ── DEDUP / NONCE REPLAY GUARD ─────────────────────────────────────────────────
 export const checkAndSetDedup = internalMutation({
   args: { hash: v.string(), windowMs: v.number() },
   handler: async (ctx, { hash, windowMs }) => {
@@ -544,25 +501,6 @@ export const setCacheEntry = internalMutation({
 });
 
 // ── GIF STORAGE (Studio play-test captures) ────────────────────────────────────
-// Backs storage.ts's /storage endpoint. Each row tracks one uploaded gif:
-// the Convex File Storage id (`storageId`) plus ownership/metadata. The
-// actual bytes live in Convex's built-in file storage; this table is just
-// the index that lets us list "this user's captures" and resolve a short
-// record id back to a real, signed download URL via ctx.storage.getUrl().
-//
-// Requires a "gifs" table in schema.ts:
-//
-//   gifs: defineTable({
-//     username:  v.string(),
-//     storageId: v.id("_storage"),
-//     mime:      v.string(),
-//     name:      v.string(),
-//     sizeBytes: v.number(),
-//     seen:      v.boolean(),
-//     createdAt: v.number(),
-//   })
-//     .index("by_username", ["username", "createdAt"])
-//     .index("by_username_unseen", ["username", "seen", "createdAt"]),
 export const insertGifRecord = internalMutation({
   args: {
     username:  v.string(),
@@ -575,8 +513,7 @@ export const insertGifRecord = internalMutation({
   handler: async (ctx, args) => {
     const id = await ctx.db.insert("gifs", { ...args, seen: false });
 
-    // Cap how many captures we keep per user — oldest first, and also
-    // delete the underlying file so storage doesn't grow unbounded.
+    // Cap per-user captures — delete oldest rows + their storage blobs.
     const all = await ctx.db.query("gifs")
       .withIndex("by_username", q => q.eq("username", args.username)).collect();
     if (all.length > MAX_GIFS_PER_USER) {
@@ -607,7 +544,6 @@ export const getGifRecord = internalQuery({
         createdAt: number;
       };
     } catch {
-      // Malformed / foreign id — treat exactly like "not found".
       return null;
     }
   },
@@ -620,6 +556,8 @@ export const listGifRecords = internalQuery({
     unreadOnly: v.boolean(),
   },
   handler: async (ctx, { username, limit, unreadOnly }) => {
+    // by_username_unseen index: ["username", "seen", "createdAt"]
+    // by_username         index: ["username", "createdAt"]
     const rows = unreadOnly
       ? await ctx.db.query("gifs")
           .withIndex("by_username_unseen", q => q.eq("username", username).eq("seen", false))
@@ -640,7 +578,7 @@ export const markGifSeen = internalMutation({
       const doc = await ctx.db.get(id as any);
       if (doc && "storageId" in doc) await ctx.db.patch(id as any, { seen: true });
     } catch {
-      // Ignore malformed/foreign ids rather than failing the whole call.
+      // Ignore malformed/foreign ids.
     }
   },
 });
@@ -652,35 +590,12 @@ export const deleteGifRecord = internalMutation({
       const doc = await ctx.db.get(id as any);
       if (doc && "storageId" in doc) await ctx.db.delete(id as any);
     } catch {
-      // Already gone / malformed id — deleting is idempotent either way.
+      // Already gone / malformed id.
     }
   },
 });
 
 // ── AI FEED ────────────────────────────────────────────────────────────────────
-// Durable, time-ordered inbox of "messages to the AI". Every report-type
-// action in control.ts (read_script, output_log, runcode_report,
-// plugin_error_report, ...) appends one entry here via pushAiFeedEntry,
-// in addition to saving its usual upsertData() snapshot. The AI retrieves
-// unread entries via getAiFeedEntries and they are marked read via
-// markAiFeedRead so the same entry is never delivered twice. Nothing is
-// overwritten — every event is its own row — so the AI can catch up on
-// everything that happened even if it wasn't asked anything for a while.
-//
-// storage.ts also pushes a "gif_captured" entry here after every successful
-// upload, so the web app's explore/publish UI can be notified without
-// having to poll /storage on a timer.
-//
-// Requires a new "aiFeed" table in schema.ts:
-//
-//   aiFeed: defineTable({
-//     username: v.string(),
-//     kind:     v.string(),
-//     summary:  v.string(),
-//     data:     v.string(),
-//     ts:       v.number(),
-//     read:     v.boolean(),
-//   }).index("by_username_ts", ["username", "ts"]),
 export const pushAiFeedEntry = internalMutation({
   args: {
     username: v.string(),
@@ -735,7 +650,7 @@ export const markAiFeedRead = internalMutation({
           await ctx.db.patch(id, { read: true });
         }
       } catch {
-        // Ignore malformed/foreign ids rather than failing the whole batch.
+        // Ignore malformed/foreign ids.
       }
     }
   },

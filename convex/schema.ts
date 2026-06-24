@@ -116,6 +116,8 @@ export default defineSchema({
     sizeBytes: v.number(),
     seen:      v.boolean(),
     createdAt: v.number(),
-  }).index("by_username", ["username"])
-    .index("by_username_createdAt", ["username", "createdAt"]),
+  })
+    .index("by_username",         ["username", "createdAt"])
+    // ↓ required by store.ts listGifRecords — filters unseen per user
+    .index("by_username_unseen",  ["username", "seen", "createdAt"]),
 });
