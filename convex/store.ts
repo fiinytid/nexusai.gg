@@ -11,6 +11,7 @@ const QUEUE_MAX_AGE     = 30 * 60_000;
 const MAX_QUEUE_SIZE    = 300;
 const MAX_PRIORITY_Q    = 50;
 const MAX_AI_FEED_PER_USER = 1_000;
+const MAX_GIFS_PER_USER    = 200;
 const PRIORITY_ORDER: Record<string, number> = { critical: 0, high: 1, normal: 2, low: 3 };
 
 // ── SESSION ────────────────────────────────────────────────────────────────────
@@ -542,6 +543,120 @@ export const setCacheEntry = internalMutation({
   },
 });
 
+// ── GIF STORAGE (Studio play-test captures) ────────────────────────────────────
+// Backs storage.ts's /storage endpoint. Each row tracks one uploaded gif:
+// the Convex File Storage id (`storageId`) plus ownership/metadata. The
+// actual bytes live in Convex's built-in file storage; this table is just
+// the index that lets us list "this user's captures" and resolve a short
+// record id back to a real, signed download URL via ctx.storage.getUrl().
+//
+// Requires a "gifs" table in schema.ts:
+//
+//   gifs: defineTable({
+//     username:  v.string(),
+//     storageId: v.id("_storage"),
+//     mime:      v.string(),
+//     name:      v.string(),
+//     sizeBytes: v.number(),
+//     seen:      v.boolean(),
+//     createdAt: v.number(),
+//   })
+//     .index("by_username", ["username", "createdAt"])
+//     .index("by_username_unseen", ["username", "seen", "createdAt"]),
+export const insertGifRecord = internalMutation({
+  args: {
+    username:  v.string(),
+    storageId: v.id("_storage"),
+    mime:      v.string(),
+    name:      v.string(),
+    sizeBytes: v.number(),
+    createdAt: v.number(),
+  },
+  handler: async (ctx, args) => {
+    const id = await ctx.db.insert("gifs", { ...args, seen: false });
+
+    // Cap how many captures we keep per user — oldest first, and also
+    // delete the underlying file so storage doesn't grow unbounded.
+    const all = await ctx.db.query("gifs")
+      .withIndex("by_username", q => q.eq("username", args.username)).collect();
+    if (all.length > MAX_GIFS_PER_USER) {
+      all.sort((a, b) => a.createdAt - b.createdAt);
+      for (const stale of all.slice(0, all.length - MAX_GIFS_PER_USER)) {
+        try { await ctx.storage.delete(stale.storageId); } catch { /* already gone */ }
+        await ctx.db.delete(stale._id);
+      }
+    }
+    return id;
+  },
+});
+
+export const getGifRecord = internalQuery({
+  args: { id: v.string() },
+  handler: async (ctx, { id }) => {
+    try {
+      const doc = await ctx.db.get(id as any);
+      if (!doc || !("storageId" in doc)) return null;
+      return doc as unknown as {
+        _id:       string;
+        username:  string;
+        storageId: any;
+        mime:      string;
+        name:      string;
+        sizeBytes: number;
+        seen:      boolean;
+        createdAt: number;
+      };
+    } catch {
+      // Malformed / foreign id — treat exactly like "not found".
+      return null;
+    }
+  },
+});
+
+export const listGifRecords = internalQuery({
+  args: {
+    username:   v.string(),
+    limit:      v.number(),
+    unreadOnly: v.boolean(),
+  },
+  handler: async (ctx, { username, limit, unreadOnly }) => {
+    const rows = unreadOnly
+      ? await ctx.db.query("gifs")
+          .withIndex("by_username_unseen", q => q.eq("username", username).eq("seen", false))
+          .order("desc")
+          .take(limit)
+      : await ctx.db.query("gifs")
+          .withIndex("by_username", q => q.eq("username", username))
+          .order("desc")
+          .take(limit);
+    return rows;
+  },
+});
+
+export const markGifSeen = internalMutation({
+  args: { id: v.string() },
+  handler: async (ctx, { id }) => {
+    try {
+      const doc = await ctx.db.get(id as any);
+      if (doc && "storageId" in doc) await ctx.db.patch(id as any, { seen: true });
+    } catch {
+      // Ignore malformed/foreign ids rather than failing the whole call.
+    }
+  },
+});
+
+export const deleteGifRecord = internalMutation({
+  args: { id: v.string() },
+  handler: async (ctx, { id }) => {
+    try {
+      const doc = await ctx.db.get(id as any);
+      if (doc && "storageId" in doc) await ctx.db.delete(id as any);
+    } catch {
+      // Already gone / malformed id — deleting is idempotent either way.
+    }
+  },
+});
+
 // ── AI FEED ────────────────────────────────────────────────────────────────────
 // Durable, time-ordered inbox of "messages to the AI". Every report-type
 // action in control.ts (read_script, output_log, runcode_report,
@@ -551,6 +666,10 @@ export const setCacheEntry = internalMutation({
 // markAiFeedRead so the same entry is never delivered twice. Nothing is
 // overwritten — every event is its own row — so the AI can catch up on
 // everything that happened even if it wasn't asked anything for a while.
+//
+// storage.ts also pushes a "gif_captured" entry here after every successful
+// upload, so the web app's explore/publish UI can be notified without
+// having to poll /storage on a timer.
 //
 // Requires a new "aiFeed" table in schema.ts:
 //

@@ -10,6 +10,7 @@
 
 import type * as control from "../control.js";
 import type * as http from "../http.js";
+import type * as storage from "../storage.js";
 import type * as store from "../store.js";
 
 import type {
@@ -21,6 +22,7 @@ import type {
 declare const fullApi: ApiFromModules<{
   control: typeof control;
   http: typeof http;
+  storage: typeof storage;
   store: typeof store;
 }>;
 

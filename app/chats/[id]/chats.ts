@@ -582,8 +582,6 @@ const UI = {
 const MODEL_LIST: ModelEntry[] = [
   { grp: 'Google' },
   { id: 'gemini-3.5-flash',     prov: 'gemini',     cost: 3,  label: 'Gemini 3.5 Flash',    icon: '/images/gemini.png',   badge: 'FAST', inputImages: 'enabled' },
-  { id: 'gemini-3.1-flash-lite',prov: 'gemini',     cost: 2,  label: 'Gemini 3.1 Flash Lite',icon: '/images/gemini.png',  badge: 'FAST', inputImages: 'enabled' },
-  { id: 'gemini-3.1-pro',       prov: 'gemini',     cost: 12, label: 'Gemini 3.1 Pro',       icon: '/images/gemini.png',  badge: 'BEST', inputImages: 'enabled' },
   { grp: 'Nvidia' },
   { id: 'nvidia/nemotron-3-ultra-550b-a55b:free', prov: 'openrouter', cost: 0, label: 'Nemotron 3 Ultra',   icon: '/images/nvidia.png', badge: 'FREE', inputImages: 'disabled' },
   { grp: 'DeepSeek' },

@@ -102,4 +102,20 @@ export default defineSchema({
     ts:       v.number(),
     read:     v.boolean(),
   }).index("by_username_ts", ["username", "ts"]),
+
+  // ── GIFS ─────────────────────────────────────────────────────────────────
+  // One row per play-test capture uploaded via storage.ts (POST /api/storage).
+  // `storageId` points at the underlying Convex file storage blob; the row
+  // itself just carries ownership + metadata so we can list/filter/delete
+  // without touching ctx.storage directly outside storage.ts.
+  gifs: defineTable({
+    username:  v.string(),
+    storageId: v.id("_storage"),
+    mime:      v.string(),
+    name:      v.string(),
+    sizeBytes: v.number(),
+    seen:      v.boolean(),
+    createdAt: v.number(),
+  }).index("by_username", ["username"])
+    .index("by_username_createdAt", ["username", "createdAt"]),
 });

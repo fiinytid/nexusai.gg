@@ -1,8 +1,7 @@
 'use client'
 
-import React, { useEffect, useState, useCallback, useMemo } from 'react'
+import React, { useEffect, useState, useCallback, useRef, useMemo } from 'react'
 import { useRouter } from 'next/navigation'
-import Script from 'next/script'
 import Link from 'next/link'
 
 // ═══════════════════════════════════════════════════════════════════════════
@@ -10,63 +9,100 @@ import Link from 'next/link'
 // ═══════════════════════════════════════════════════════════════════════════
 
 interface Prompt {
-  id:          string
-  title:       string
-  description: string
-  category:    string
-  tags:        string[]
-  author:      string
-  authorId:    string
-  content:     string
-  uses:        number
-  rating:      number
-  createdAt:   string
-  updatedAt:   string
-  icon?:       string
-  featured?:   boolean
+  id:        string
+  title:     string
+  content:   string
+  gifUrl:    string | null
+  author:    string
+  authorId:  string
+  uses:      number
+  rating:    number
+  createdAt: string
+  updatedAt: string
+  featured?: boolean
 }
 
-interface PublishFormData {
-  title:       string
-  description: string
-  category:    string
-  tags:        string
-  content:     string
+interface CapturedGif {
+  id:        string
+  url:       string | null
+  mime:      string
+  name:      string
+  seen:      boolean
+  createdAt: number
 }
 
-interface UserSession {
-  username:  string
-  robloxId:  string
-  email?:    string
-  avatar?:   string
+interface NexusSession {
+  loginTime?: number
+  user: {
+    username:    string
+    avatar?:     string
+    robloxId?:   string
+    displayName?: string
+  }
+  data?: Record<string, unknown>
 }
 
 // ═══════════════════════════════════════════════════════════════════════════
-// STYLES — inlined CSS
+// CONSTANTS
+// ═══════════════════════════════════════════════════════════════════════════
+
+const SESSION_KEY        = 'nexus_session'   // FIX: was reading "nexus_user", which is never written anywhere — that's why logged-in users got bounced to "/"
+const SESSION_MAX_AGE_MS = 86_400_000 * 7
+const SEARCH_DEBOUNCE_MS = 350
+const MAX_TITLE_LEN      = 80
+const MIN_CONTENT_LEN    = 10
+
+// ═══════════════════════════════════════════════════════════════════════════
+// ICONS — inline SVG, no emoji, matches dashboard's icon set
+// ═══════════════════════════════════════════════════════════════════════════
+
+const I = {
+  sparkle:  () => <svg viewBox="0 0 24 24"><path d="M12 3l1.8 5.2L19 10l-5.2 1.8L12 17l-1.8-5.2L5 10l5.2-1.8L12 3z" /><path d="M19 14l.7 2 2 .7-2 .7-.7 2-.7-2-2-.7 2-.7.7-2z" /></svg>,
+  search:   () => <svg viewBox="0 0 24 24"><circle cx="11" cy="11" r="8" /><path d="m21 21-4.35-4.35" /></svg>,
+  plus:     () => <svg viewBox="0 0 24 24"><line x1="12" y1="5" x2="12" y2="19" /><line x1="5" y1="12" x2="19" y2="12" /></svg>,
+  star:     () => <svg viewBox="0 0 24 24"><polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2" /></svg>,
+  play:     () => <svg viewBox="0 0 24 24"><polygon points="5 3 19 12 5 21 5 3" /></svg>,
+  copy:     () => <svg viewBox="0 0 24 24"><rect x="9" y="9" width="13" height="13" rx="2" /><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1" /></svg>,
+  check:    () => <svg viewBox="0 0 24 24"><polyline points="20 6 9 17 4 12" /></svg>,
+  cross:    () => <svg viewBox="0 0 24 24"><line x1="18" y1="6" x2="6" y2="18" /><line x1="6" y1="6" x2="18" y2="18" /></svg>,
+  image:    () => <svg viewBox="0 0 24 24"><rect x="3" y="3" width="18" height="18" rx="2" /><circle cx="8.5" cy="8.5" r="1.5" /><path d="M21 15l-5-5L5 21" /></svg>,
+  film:     () => <svg viewBox="0 0 24 24"><rect x="2" y="3" width="20" height="18" rx="2" /><path d="M7 3v18M17 3v18M2 9h5M2 15h5M17 9h5M17 15h5" /></svg>,
+  loader:   () => <svg viewBox="0 0 24 24"><path d="M12 2v4m0 12v4m10-10h-4M6 12H2m15.36-6.36l-2.83 2.83M9.47 14.53l-2.83 2.83m12.72 0l-2.83-2.83M9.47 9.47L6.64 6.64" /></svg>,
+  inbox:    () => <svg viewBox="0 0 24 24"><polyline points="22 12 16 12 14 15 10 15 8 12 2 12" /><path d="M5.45 5.11L2 12v6a2 2 0 002 2h16a2 2 0 002-2v-6l-3.45-6.89A2 2 0 0016.76 4H7.24a2 2 0 00-1.79 1.11z" /></svg>,
+  empty:    () => <svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="10" /><line x1="9" y1="9" x2="9.01" y2="9" /><line x1="15" y1="9" x2="15.01" y2="9" /><path d="M8 16s1.5-2 4-2 4 2 4 2" /></svg>,
+  user:     () => <svg viewBox="0 0 24 24"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2" /><circle cx="12" cy="7" r="4" /></svg>,
+  trending: () => <svg viewBox="0 0 24 24"><polyline points="23 6 13.5 15.5 8.5 10.5 1 18" /><polyline points="17 6 23 6 23 12" /></svg>,
+  arrow:    () => <svg viewBox="0 0 24 24"><path d="M5 12h14M12 5l7 7-7 7" /></svg>,
+  refresh:  () => <svg viewBox="0 0 24 24"><polyline points="23 4 23 10 17 10" /><polyline points="1 20 1 14 7 14" /><path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15" /></svg>,
+}
+
+// ═══════════════════════════════════════════════════════════════════════════
+// STYLES
 // ═══════════════════════════════════════════════════════════════════════════
 
 const EXPLORE_CSS = `
-* {
-  margin: 0;
-  padding: 0;
-  box-sizing: border-box;
-}
+@import url('https://fonts.googleapis.com/css2?family=Orbitron:wght@400;700;900&family=JetBrains+Mono:wght@300;400;500;600&display=swap');
+
+* { margin: 0; padding: 0; box-sizing: border-box; }
 
 :root {
-  --bg:      #030312;
-  --bg2:     #06071a;
-  --bg3:     #0a0b22;
-  --card:    rgba(0, 229, 255, 0.04);
-  --hover:   rgba(0, 229, 255, 0.08);
-  --cyan:    #00e5ff;
-  --purple:  #8800ff;
-  --pink:    #ff2d6b;
-  --green:   #00ffaa;
-  --yellow:  #ffd600;
-  --text:    #b8cfff;
-  --dim:     #3a4a7a;
-  --b:       rgba(0, 229, 255, 0.12);
-  --r:       8px;
+  --bg:      #050514;
+  --bg2:     #09091f;
+  --bg3:     #0e0e28;
+  --card:    rgba(0, 212, 255, 0.04);
+  --hover:   rgba(0, 212, 255, 0.08);
+  --cyan:    #00d4ff;
+  --purple:  #7c3aed;
+  --pink:    #f43f5e;
+  --green:   #10b981;
+  --yellow:  #f59e0b;
+  --text:    #e2e8f0;
+  --text2:   #94a3b8;
+  --dim:     #334155;
+  --dim2:    #475569;
+  --b:       rgba(0, 212, 255, 0.12);
+  --r:       10px;
+  --r2:      14px;
 }
 
 html, body {
@@ -75,671 +111,339 @@ html, body {
   font-family: 'JetBrains Mono', monospace;
   overflow-x: hidden;
 }
+body { line-height: 1.6; -webkit-tap-highlight-color: transparent; }
 
-body {
-  line-height: 1.6;
-}
+::-webkit-scrollbar { width: 5px; height: 5px; }
+::-webkit-scrollbar-thumb { background: rgba(255,255,255,.10); border-radius: 4px; }
+::-webkit-scrollbar-track { background: transparent; }
 
-.explore-container {
-  min-height: 100vh;
-  background: var(--bg);
-  padding: 0;
-  overflow-x: hidden;
+@keyframes spin    { to { transform: rotate(360deg); } }
+@keyframes fadeUp  { from { opacity:0; transform: translateY(14px); } to { opacity:1; transform:none; } }
+@keyframes fadeIn  { from { opacity:0; } to { opacity:1; } }
+@keyframes scaleIn { from { opacity:0; transform: scale(.96) translateY(8px); } to { opacity:1; transform:none; } }
+@keyframes cardIn  { from { opacity:0; transform: translateY(16px); } to { opacity:1; transform:none; } }
+@keyframes slideUp { from { transform: translateY(20px); opacity:0; } to { transform:none; opacity:1; } }
+@keyframes toastIn { from { opacity:0; transform: translateY(12px) scale(.97); } to { opacity:1; transform:none; } }
+@keyframes toastOut{ from { opacity:1; } to { opacity:0; transform: translateY(12px) scale(.97); } }
+
+.explore-container { min-height: 100vh; background: var(--bg); position: relative; z-index: 1; }
+
+body::before {
+  content: ""; position: fixed; inset: 0; pointer-events: none; z-index: 0;
+  background:
+    radial-gradient(ellipse 70% 50% at 85% -10%, rgba(124,58,237,.16) 0%, transparent 100%),
+    radial-gradient(ellipse 60% 40% at -10% 90%, rgba(0,212,255,.08) 0%, transparent 100%);
 }
 
 /* ─── Header ─────────────────────────────────────────────────────────── */
 .explore-header {
-  background: linear-gradient(135deg, rgba(0,229,255,.1), rgba(136,0,255,.1));
+  background: linear-gradient(135deg, rgba(0,212,255,.08), rgba(124,58,237,.08));
   border-bottom: 1px solid var(--b);
-  padding: 32px 24px;
-  position: sticky;
-  top: 0;
-  z-index: 100;
-  backdrop-filter: blur(10px);
+  padding: 22px 24px;
+  position: sticky; top: 0; z-index: 100;
+  backdrop-filter: blur(20px);
 }
-
 .header-content {
-  max-width: 1400px;
-  margin: 0 auto;
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 20px;
+  max-width: 1320px; margin: 0 auto;
+  display: flex; align-items: center; justify-content: space-between; gap: 16px; flex-wrap: wrap;
 }
-
-.header-left {
-  display: flex;
-  align-items: center;
-  gap: 16px;
-  flex: 1;
-  min-width: 0;
+.header-left { display: flex; align-items: center; gap: 14px; min-width: 0; }
+.header-icon {
+  width: 42px; height: 42px; border-radius: 12px; flex-shrink: 0;
+  background: linear-gradient(135deg, rgba(0,212,255,.12), rgba(124,58,237,.12));
+  border: 1px solid rgba(0,212,255,.18);
+  display: flex; align-items: center; justify-content: center;
 }
-
+.header-icon svg { width: 20px; height: 20px; stroke: var(--cyan); fill: none; stroke-width: 1.8; }
 .header-title {
-  font-size: 28px;
-  font-weight: 900;
+  font-size: 22px; font-weight: 900;
   background: linear-gradient(135deg, var(--cyan), var(--purple));
-  -webkit-background-clip: text;
-  -webkit-text-fill-color: transparent;
-  background-clip: text;
-  font-family: 'Orbitron', sans-serif;
+  -webkit-background-clip: text; -webkit-text-fill-color: transparent; background-clip: text;
+  font-family: 'Orbitron', sans-serif; line-height: 1.2;
 }
-
-.header-subtitle {
-  font-size: 13px;
-  color: var(--dim);
-}
-
-.header-right {
-  display: flex;
-  align-items: center;
-  gap: 12px;
-}
+.header-subtitle { font-size: 11px; color: var(--dim2); margin-top: 2px; }
+.header-right { display: flex; align-items: center; gap: 10px; flex-shrink: 0; }
 
 .btn {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  gap: 8px;
-  padding: 0 16px;
-  height: 40px;
-  border-radius: var(--r);
-  border: 1px solid rgba(0, 229, 255, .2);
-  background: rgba(0, 229, 255, .04);
-  color: var(--cyan);
-  font-size: 12px;
-  font-weight: 700;
-  cursor: pointer;
-  transition: all .2s;
-  font-family: 'JetBrains Mono', monospace;
-  white-space: nowrap;
-  -webkit-tap-highlight-color: transparent;
+  display: inline-flex; align-items: center; justify-content: center; gap: 8px;
+  padding: 0 18px; height: 42px; border-radius: var(--r);
+  border: 1px solid rgba(0,212,255,.2); background: rgba(0,212,255,.04);
+  color: var(--cyan); font-size: 12px; font-weight: 700; cursor: pointer;
+  transition: all .2s; font-family: 'JetBrains Mono', monospace; white-space: nowrap;
 }
-
-.btn:hover {
-  background: rgba(0, 229, 255, .12);
-  border-color: var(--cyan);
-  transform: translateY(-2px);
-}
-
-.btn:active {
-  transform: translateY(0);
-  opacity: .8;
-}
-
+.btn:hover  { background: rgba(0,212,255,.12); border-color: var(--cyan); transform: translateY(-1px); }
+.btn:active { transform: translateY(0); opacity: .85; }
+.btn svg { width: 14px; height: 14px; stroke: currentColor; fill: none; stroke-width: 2.2; }
 .btn.primary {
-  background: linear-gradient(135deg, var(--cyan), var(--purple));
-  color: white;
-  border: none;
+  background: linear-gradient(135deg, var(--cyan), var(--purple)); color: #030314; border: none;
 }
-
-.btn.primary:hover {
-  opacity: .9;
-}
-
-.btn.danger {
-  color: var(--pink);
-  border-color: rgba(255, 45, 107, .2);
-  background: rgba(255, 45, 107, .04);
-}
-
-.btn.danger:hover {
-  background: rgba(255, 45, 107, .12);
-  border-color: var(--pink);
-}
+.btn.primary:hover { filter: brightness(1.08); }
+.btn.ghost { border-color: var(--dim); color: var(--text2); background: transparent; }
+.btn.ghost:hover { border-color: rgba(0,212,255,.3); color: var(--cyan); background: rgba(0,212,255,.04); }
+.btn:disabled { opacity: .35; cursor: not-allowed; transform: none; }
 
 /* ─── Search & Filter Bar ───────────────────────────────────────────── */
 .search-bar-wrapper {
-  max-width: 1400px;
-  margin: 0 auto;
-  padding: 24px;
-  display: flex;
-  gap: 16px;
-  align-items: center;
-  flex-wrap: wrap;
+  max-width: 1320px; margin: 0 auto; padding: 22px 24px 0;
+  display: flex; gap: 12px; align-items: center; flex-wrap: wrap;
 }
-
 .search-box {
-  flex: 1;
-  min-width: 250px;
-  display: flex;
-  align-items: center;
-  background: var(--bg3);
-  border: 1.5px solid rgba(0, 229, 255, .18);
-  border-radius: 20px;
-  padding: 0 16px;
-  transition: all .2s;
+  flex: 1; min-width: 240px; display: flex; align-items: center;
+  background: var(--bg2); border: 1.5px solid rgba(0,212,255,.16);
+  border-radius: 20px; padding: 0 16px; transition: all .2s; height: 46px;
 }
-
-.search-box:focus-within {
-  border-color: var(--cyan);
-  box-shadow: 0 0 0 3px rgba(0, 229, 255, .08);
-}
-
+.search-box:focus-within { border-color: var(--cyan); box-shadow: 0 0 0 3px rgba(0,212,255,.08); }
+.search-box svg { width: 15px; height: 15px; stroke: var(--dim2); fill: none; stroke-width: 2; flex-shrink: 0; }
 .search-box input {
-  flex: 1;
-  background: transparent;
-  border: none;
-  outline: none;
-  color: white;
-  font-size: 13px;
-  padding: 12px 8px;
-  font-family: 'JetBrains Mono', monospace;
+  flex: 1; background: transparent; border: none; outline: none; color: #fff;
+  font-size: 13px; padding: 0 10px; font-family: 'JetBrains Mono', monospace;
 }
+.search-box input::placeholder { color: var(--dim2); }
+.search-spinner {
+  width: 13px; height: 13px; border: 2px solid rgba(0,212,255,.2);
+  border-top-color: var(--cyan); border-radius: 50%; animation: spin .6s linear infinite; flex-shrink: 0;
+}
+.search-clear {
+  width: 20px; height: 20px; border-radius: 50%; border: none; background: rgba(255,255,255,.06);
+  color: var(--dim2); display: flex; align-items: center; justify-content: center; cursor: pointer;
+  flex-shrink: 0; transition: all .15s;
+}
+.search-clear:hover { background: rgba(244,63,94,.15); color: var(--pink); }
+.search-clear svg { width: 10px; height: 10px; stroke: currentColor; fill: none; stroke-width: 2.5; }
 
-.search-box input::placeholder {
-  color: rgba(58, 74, 122, .6);
-}
-
-.search-icon {
-  width: 16px;
-  height: 16px;
-  color: var(--dim);
-  flex-shrink: 0;
-  stroke: currentColor;
-  fill: none;
-  stroke-width: 2;
-}
-
-.filter-select {
-  background: var(--bg3);
-  border: 1.5px solid rgba(0, 229, 255, .18);
-  border-radius: var(--r);
-  padding: 10px 14px;
-  color: white;
-  font-size: 12px;
-  font-family: 'JetBrains Mono', monospace;
-  cursor: pointer;
-  transition: all .2s;
-  outline: none;
-  -webkit-appearance: none;
-  appearance: none;
-  background-image: url("data:image/svg+xml;charset=UTF-8,%3csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%2300e5ff' stroke-width='2'%3e%3cpolyline points='6 9 12 15 18 9'%3e%3c/polyline%3e%3c/svg%3e");
-  background-repeat: no-repeat;
-  background-position: right 8px center;
-  background-size: 16px;
-  padding-right: 32px;
-}
-
-.filter-select:hover {
-  border-color: var(--cyan);
-  background-color: rgba(0, 229, 255, .04);
-}
+.result-count { font-size: 11px; color: var(--dim2); padding: 0 14px; white-space: nowrap; }
 
 /* ─── Prompts Grid ──────────────────────────────────────────────────── */
-.prompts-wrapper {
-  max-width: 1400px;
-  margin: 0 auto;
-  padding: 24px;
-}
-
+.prompts-wrapper { max-width: 1320px; margin: 0 auto; padding: 22px 24px 80px; }
 .prompts-grid {
-  display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(320px, 1fr));
-  gap: 20px;
-  margin-bottom: 40px;
+  display: grid; grid-template-columns: repeat(auto-fill, minmax(300px, 1fr)); gap: 16px;
 }
 
 .prompt-card {
-  background: var(--bg2);
-  border: 1px solid var(--b);
-  border-radius: 12px;
-  padding: 20px;
-  cursor: pointer;
-  transition: all .25s;
-  position: relative;
-  overflow: hidden;
-  display: flex;
-  flex-direction: column;
+  background: var(--bg2); border: 1px solid var(--b); border-radius: var(--r2);
+  cursor: pointer; transition: all .22s; position: relative; overflow: hidden;
+  display: flex; flex-direction: column; animation: cardIn .35s ease both;
 }
+.prompt-card:hover { border-color: rgba(0,212,255,.32); transform: translateY(-3px); box-shadow: 0 16px 40px rgba(0,0,0,.45); }
 
-.prompt-card::before {
-  content: '';
-  position: absolute;
-  inset: 0;
-  background: linear-gradient(135deg, rgba(0,229,255,.1), transparent);
-  opacity: 0;
-  transition: opacity .25s;
-  pointer-events: none;
+.prompt-media {
+  width: 100%; aspect-ratio: 16/9; background: var(--bg3); position: relative; overflow: hidden;
+  border-bottom: 1px solid rgba(0,212,255,.08);
 }
-
-.prompt-card:hover {
-  border-color: var(--cyan);
-  background: rgba(0, 229, 255, .06);
-  transform: translateY(-4px);
+.prompt-media img { width: 100%; height: 100%; object-fit: cover; display: block; }
+.prompt-media .media-placeholder {
+  width: 100%; height: 100%; display: flex; align-items: center; justify-content: center;
+  background: linear-gradient(135deg, rgba(0,212,255,.05), rgba(124,58,237,.05));
 }
-
-.prompt-card:hover::before {
-  opacity: 1;
+.prompt-media .media-placeholder svg { width: 28px; height: 28px; stroke: var(--dim); fill: none; stroke-width: 1.5; }
+.media-badge {
+  position: absolute; bottom: 8px; right: 8px;
+  display: inline-flex; align-items: center; gap: 4px;
+  font-size: 9px; font-weight: 700; color: #fff;
+  padding: 3px 8px; background: rgba(0,0,0,.55); border-radius: 6px;
+  backdrop-filter: blur(4px);
 }
+.media-badge svg { width: 10px; height: 10px; stroke: currentColor; fill: none; stroke-width: 2; }
 
-.prompt-header {
-  display: flex;
-  align-items: flex-start;
-  gap: 12px;
-  margin-bottom: 12px;
-}
-
-.prompt-icon {
-  width: 40px;
-  height: 40px;
-  border-radius: 8px;
-  background: rgba(0, 229, 255, .1);
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  font-size: 20px;
-  flex-shrink: 0;
-}
-
-.prompt-title-group {
-  flex: 1;
-  min-width: 0;
-}
-
+.prompt-body { padding: 16px; display: flex; flex-direction: column; flex: 1; gap: 10px; }
+.prompt-header { display: flex; align-items: flex-start; justify-content: space-between; gap: 8px; }
 .prompt-title {
-  font-size: 14px;
-  font-weight: 700;
-  color: white;
-  margin-bottom: 4px;
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
+  font-size: 14px; font-weight: 700; color: #fff;
+  overflow: hidden; text-overflow: ellipsis; display: -webkit-box;
+  -webkit-line-clamp: 2; -webkit-box-orient: vertical; line-height: 1.4;
 }
-
-.prompt-author {
-  font-size: 11px;
-  color: var(--dim);
-}
-
 .prompt-featured {
-  display: inline-flex;
-  align-items: center;
-  gap: 4px;
-  font-size: 10px;
-  color: var(--yellow);
-  padding: 2px 8px;
-  background: rgba(255, 214, 0, .1);
-  border-radius: 4px;
-  font-weight: 700;
+  display: inline-flex; align-items: center; gap: 3px; font-size: 9px; color: var(--yellow);
+  padding: 3px 8px; background: rgba(245,158,11,.1); border: 1px solid rgba(245,158,11,.2);
+  border-radius: 5px; font-weight: 700; flex-shrink: 0; white-space: nowrap;
 }
+.prompt-featured svg { width: 9px; height: 9px; stroke: currentColor; fill: var(--yellow); stroke-width: 1; }
 
-.prompt-description {
-  font-size: 12px;
-  color: var(--text);
-  line-height: 1.5;
-  margin-bottom: 12px;
-  flex: 1;
-  display: -webkit-box;
-  -webkit-line-clamp: 3;
-  -webkit-box-orient: vertical;
-  overflow: hidden;
-}
+.prompt-author { display: flex; align-items: center; gap: 6px; font-size: 11px; color: var(--dim2); }
+.prompt-author svg { width: 11px; height: 11px; stroke: currentColor; fill: none; stroke-width: 2; }
 
-.prompt-tags {
-  display: flex;
-  gap: 6px;
-  flex-wrap: wrap;
-  margin-bottom: 12px;
-}
-
-.tag {
-  display: inline-flex;
-  align-items: center;
-  padding: 4px 8px;
-  background: rgba(0, 229, 255, .08);
-  border: 1px solid rgba(0, 229, 255, .15);
-  border-radius: 4px;
-  font-size: 10px;
-  color: var(--cyan);
-  white-space: nowrap;
+.prompt-preview {
+  font-size: 11px; color: var(--text2); line-height: 1.6; flex: 1;
+  overflow: hidden; display: -webkit-box; -webkit-line-clamp: 3; -webkit-box-orient: vertical;
+  font-family: 'JetBrains Mono', monospace;
 }
 
 .prompt-meta {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  font-size: 11px;
-  color: var(--dim);
-  padding-top: 12px;
-  border-top: 1px solid rgba(0, 229, 255, .06);
+  display: flex; justify-content: space-between; align-items: center;
+  font-size: 10px; color: var(--dim2); padding-top: 10px; border-top: 1px solid rgba(0,212,255,.06);
 }
+.meta-item { display: flex; align-items: center; gap: 4px; }
+.meta-item svg { width: 11px; height: 11px; stroke: currentColor; fill: none; stroke-width: 2; }
 
-.meta-item {
-  display: flex;
-  align-items: center;
-  gap: 4px;
+/* ─── Empty / Loading State ──────────────────────────────────────────── */
+.empty-state, .loading-state { grid-column: 1 / -1; text-align: center; padding: 70px 24px; }
+.empty-icon, .loading-icon {
+  width: 56px; height: 56px; border-radius: 16px; background: var(--bg2);
+  border: 1px solid var(--b); display: flex; align-items: center; justify-content: center;
+  margin: 0 auto 18px;
 }
+.empty-icon svg { width: 24px; height: 24px; stroke: var(--dim2); fill: none; stroke-width: 1.5; }
+.loading-icon svg { width: 22px; height: 22px; stroke: var(--cyan); fill: none; stroke-width: 2; animation: spin 1s linear infinite; }
+.empty-title { font-family: 'Orbitron', sans-serif; font-size: 13px; color: #fff; margin-bottom: 8px; letter-spacing: .3px; }
+.empty-text { font-size: 12px; color: var(--dim2); line-height: 1.7; max-width: 380px; margin: 0 auto; }
 
-.meta-icon {
-  width: 12px;
-  height: 12px;
-  stroke: currentColor;
-  fill: none;
-  stroke-width: 2;
-}
-
-/* ─── Empty State ───────────────────────────────────────────────────── */
-.empty-state {
-  text-align: center;
-  padding: 80px 24px;
-  color: var(--dim);
-}
-
-.empty-icon {
-  width: 60px;
-  height: 60px;
-  margin: 0 auto 20px;
-  stroke: currentColor;
-  fill: none;
-  stroke-width: 1.5;
-  opacity: .5;
-}
-
-.empty-title {
-  font-size: 18px;
-  font-weight: 700;
-  margin-bottom: 8px;
-  color: var(--text);
-}
-
-.empty-text {
-  font-size: 12px;
-  line-height: 1.6;
-  max-width: 400px;
-  margin: 0 auto;
-}
-
-/* ─── Loading State ─────────────────────────────────────────────────── */
-.loading-spinner {
-  width: 20px;
-  height: 20px;
-  border: 2px solid rgba(0, 229, 255, .2);
-  border-top-color: var(--cyan);
-  border-radius: 50%;
-  animation: spin .6s linear infinite;
-}
-
-@keyframes spin {
-  to { transform: rotate(360deg); }
-}
-
-.loading-container {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  padding: 40px;
-  gap: 12px;
-}
-
-/* ─── Modal/Dialog ──────────────────────────────────────────────────── */
+/* ─── Modal ───────────────────────────────────────────────────────────── */
 .modal-overlay {
-  position: fixed;
-  inset: 0;
-  background: rgba(3, 3, 18, .9);
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  z-index: 1000;
-  padding: 20px;
-  opacity: 0;
-  pointer-events: none;
-  transition: opacity .3s;
+  position: fixed; inset: 0; background: rgba(0,0,0,.78); backdrop-filter: blur(10px);
+  z-index: 1000; display: flex; align-items: flex-end; justify-content: center;
+  opacity: 0; pointer-events: none; transition: opacity .25s; overflow-y: auto;
 }
-
-.modal-overlay.show {
-  opacity: 1;
-  pointer-events: auto;
-}
+.modal-overlay.show { opacity: 1; pointer-events: auto; animation: fadeIn .2s ease; }
 
 .modal-content {
-  background: var(--bg2);
-  border: 1px solid var(--b);
-  border-radius: 12px;
-  max-width: 600px;
-  width: 100%;
-  max-height: 90vh;
-  overflow-y: auto;
-  box-shadow: 0 24px 64px rgba(0, 0, 0, .95);
-  animation: modalSlide .3s;
+  background: var(--bg2); border: 1px solid var(--b); border-radius: 20px 20px 0 0;
+  max-width: 620px; width: 100%; max-height: 92vh; overflow-y: auto;
+  box-shadow: 0 -24px 64px rgba(0,0,0,.7); animation: slideUp .3s cubic-bezier(.32,1,.6,1);
+  position: relative;
 }
-
-@keyframes modalSlide {
-  from {
-    transform: translateY(20px);
-    opacity: 0;
-  }
-  to {
-    transform: translateY(0);
-    opacity: 1;
-  }
+.modal-content::before {
+  content: ""; position: absolute; top: 0; left: 0; right: 0; height: 2px;
+  background: linear-gradient(90deg, transparent 5%, var(--cyan) 35%, var(--purple) 65%, transparent 95%);
 }
 
 .modal-header {
-  padding: 24px;
-  border-bottom: 1px solid var(--b);
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
+  padding: 20px 22px; border-bottom: 1px solid var(--b);
+  display: flex; align-items: center; justify-content: space-between; gap: 12px;
 }
-
-.modal-title {
-  font-size: 18px;
-  font-weight: 700;
-  color: var(--cyan);
-  font-family: 'Orbitron', sans-serif;
-}
-
+.modal-title { font-size: 15px; font-weight: 700; color: var(--cyan); font-family: 'Orbitron', sans-serif; }
 .modal-close {
-  background: none;
-  border: none;
-  color: var(--dim);
-  cursor: pointer;
-  padding: 4px;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  transition: .2s;
+  width: 34px; height: 34px; border-radius: 9px; background: var(--bg3); border: 1px solid var(--b);
+  color: var(--dim2); cursor: pointer; display: flex; align-items: center; justify-content: center;
+  transition: .15s; flex-shrink: 0;
 }
+.modal-close:hover { color: var(--pink); border-color: rgba(244,63,94,.3); background: rgba(244,63,94,.06); }
+.modal-close svg { width: 15px; height: 15px; stroke: currentColor; fill: none; stroke-width: 2; }
+.modal-body { padding: 22px; }
+.modal-footer { padding: 18px 22px; border-top: 1px solid var(--b); display: flex; gap: 10px; justify-content: flex-end; }
 
-.modal-close:hover {
-  color: var(--text);
+/* ─── Detail view ───────────────────────────────────────────────────── */
+.detail-media {
+  width: 100%; max-height: 320px; border-radius: var(--r); overflow: hidden;
+  background: var(--bg3); margin-bottom: 18px; border: 1px solid var(--b);
 }
-
-.modal-body {
-  padding: 24px;
+.detail-media img { width: 100%; height: 100%; object-fit: contain; display: block; max-height: 320px; }
+.detail-title { font-size: 18px; font-weight: 900; color: #fff; margin-bottom: 6px; font-family: 'Orbitron', sans-serif; line-height: 1.4; }
+.detail-author { font-size: 11px; color: var(--dim2); margin-bottom: 16px; display: flex; align-items: center; gap: 6px; }
+.detail-author svg { width: 12px; height: 12px; stroke: currentColor; fill: none; stroke-width: 2; }
+.detail-label {
+  font-size: 10px; color: var(--cyan); font-weight: 700; margin-bottom: 8px;
+  text-transform: uppercase; letter-spacing: 1.5px;
 }
-
-.form-group {
-  margin-bottom: 20px;
+.detail-content {
+  background: rgba(0,212,255,.04); border: 1px solid rgba(0,212,255,.08); border-radius: var(--r);
+  padding: 14px; font-size: 12px; line-height: 1.7; word-break: break-word; color: var(--text);
+  white-space: pre-wrap; max-height: 280px; overflow-y: auto;
 }
+.detail-stats { display: flex; gap: 16px; margin-top: 14px; font-size: 11px; color: var(--text2); }
+.detail-stat { display: flex; align-items: center; gap: 5px; }
+.detail-stat svg { width: 13px; height: 13px; stroke: currentColor; fill: none; stroke-width: 2; }
 
+/* ─── Publish Form ───────────────────────────────────────────────────── */
+.form-group { margin-bottom: 18px; }
 .form-label {
-  display: block;
-  font-size: 12px;
-  font-weight: 700;
-  color: var(--cyan);
-  margin-bottom: 8px;
-  text-transform: uppercase;
-  letter-spacing: 1px;
+  display: block; font-size: 11px; font-weight: 700; color: var(--cyan); margin-bottom: 8px;
+  text-transform: uppercase; letter-spacing: 1px;
+}
+.form-input, .form-textarea {
+  width: 100%; background: var(--bg3); border: 1.5px solid rgba(0,212,255,.16);
+  border-radius: var(--r); padding: 11px 14px; color: #fff; font-size: 13px;
+  font-family: 'JetBrains Mono', monospace; outline: none; transition: all .2s;
+}
+.form-input:focus, .form-textarea:focus { border-color: var(--cyan); box-shadow: 0 0 0 3px rgba(0,212,255,.08); }
+.form-textarea { resize: vertical; min-height: 140px; line-height: 1.6; }
+.form-hint { font-size: 10px; color: var(--dim2); margin-top: 6px; }
+.char-count { font-size: 10px; color: var(--dim2); margin-top: 6px; text-align: right; }
+.char-count.warn { color: var(--yellow); }
+.char-count.over { color: var(--pink); }
+
+/* ─── GIF picker ─────────────────────────────────────────────────────── */
+.gif-picker { display: flex; flex-direction: column; gap: 10px; }
+.gif-picker-grid {
+  display: grid; grid-template-columns: repeat(auto-fill, minmax(96px, 1fr)); gap: 8px;
+  max-height: 220px; overflow-y: auto; padding: 2px;
+}
+.gif-option {
+  position: relative; aspect-ratio: 1; border-radius: 8px; overflow: hidden; cursor: pointer;
+  border: 2px solid transparent; background: var(--bg3); transition: all .15s;
+}
+.gif-option img { width: 100%; height: 100%; object-fit: cover; display: block; }
+.gif-option:hover { border-color: rgba(0,212,255,.4); }
+.gif-option.selected { border-color: var(--cyan); box-shadow: 0 0 0 2px rgba(0,212,255,.2); }
+.gif-option.selected::after {
+  content: ""; position: absolute; top: 4px; right: 4px; width: 16px; height: 16px;
+  border-radius: 50%; background: var(--cyan);
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23030314' stroke-width='3'%3e%3cpolyline points='20 6 9 17 4 12'/%3e%3c/svg%3e");
+  background-repeat: no-repeat; background-position: center; background-size: 10px;
+}
+.gif-empty {
+  text-align: center; padding: 24px 12px; font-size: 11px; color: var(--dim2);
+  border: 1px dashed var(--b); border-radius: var(--r); line-height: 1.7;
+}
+.gif-empty svg { width: 22px; height: 22px; stroke: var(--dim2); fill: none; stroke-width: 1.5; margin-bottom: 8px; }
+.gif-clear-btn {
+  font-size: 10px; color: var(--pink); background: none; border: none; cursor: pointer;
+  text-decoration: underline; align-self: flex-start; padding: 0;
 }
 
-.form-input,
-.form-select,
-.form-textarea {
-  width: 100%;
-  background: var(--bg3);
-  border: 1.5px solid rgba(0, 229, 255, .18);
-  border-radius: var(--r);
-  padding: 10px 14px;
-  color: white;
-  font-size: 12px;
-  font-family: 'JetBrains Mono', monospace;
-  outline: none;
-  transition: all .2s;
+.form-error {
+  padding: 11px 14px; background: rgba(244,63,94,.08); border: 1px solid rgba(244,63,94,.2);
+  border-radius: var(--r); color: var(--pink); font-size: 12px; margin-bottom: 14px;
 }
 
-.form-input:focus,
-.form-select:focus,
-.form-textarea:focus {
-  border-color: var(--cyan);
-  box-shadow: 0 0 0 3px rgba(0, 229, 255, .08);
+/* ─── Toast ──────────────────────────────────────────────────────────── */
+.nx-toast {
+  position: fixed; bottom: 20px; right: 16px; z-index: 99999;
+  padding: 12px 16px; border-radius: 10px; font-size: 12px;
+  font-family: 'JetBrains Mono', monospace; background: var(--bg3); border: 1px solid var(--b);
+  box-shadow: 0 12px 40px rgba(0,0,0,.8); pointer-events: none;
+  max-width: min(320px, calc(100vw - 32px)); display: flex; align-items: center; gap: 9px; font-weight: 500;
 }
+.nx-toast.in  { animation: toastIn  .22s ease; }
+.nx-toast.out { animation: toastOut .22s ease forwards; }
+.nx-toast svg { width: 13px; height: 13px; stroke: currentColor; fill: none; stroke-width: 2; flex-shrink: 0; }
 
-.form-textarea {
-  resize: vertical;
-  min-height: 100px;
-  font-family: 'JetBrains Mono', monospace;
-}
-
-.form-hint {
-  font-size: 11px;
-  color: var(--dim);
-  margin-top: 4px;
-}
-
-.modal-footer {
-  padding: 24px;
-  border-top: 1px solid var(--b);
-  display: flex;
-  gap: 12px;
-  justify-content: flex-end;
-}
-
-/* ─── Prompt Detail Modal ───────────────────────────────────────────── */
-.prompt-detail {
-  display: flex;
-  flex-direction: column;
-  gap: 20px;
-}
-
-.prompt-detail-header {
-  display: flex;
-  gap: 16px;
-}
-
-.prompt-detail-icon {
-  width: 60px;
-  height: 60px;
-  border-radius: 12px;
-  background: rgba(0, 229, 255, .1);
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  font-size: 32px;
-  flex-shrink: 0;
-}
-
-.prompt-detail-info {
-  flex: 1;
-  min-width: 0;
-}
-
-.prompt-detail-title {
-  font-size: 20px;
-  font-weight: 900;
-  color: white;
-  margin-bottom: 4px;
-}
-
-.prompt-detail-author {
-  font-size: 12px;
-  color: var(--dim);
-  margin-bottom: 8px;
-}
-
-.prompt-detail-stats {
-  display: flex;
-  gap: 16px;
-  font-size: 11px;
-  color: var(--text);
-}
-
-.stat {
-  display: flex;
-  align-items: center;
-  gap: 4px;
-}
-
-.stat-icon {
-  width: 14px;
-  height: 14px;
-  stroke: currentColor;
-  fill: none;
-  stroke-width: 2;
-}
-
-.prompt-detail-section {
-  padding-top: 20px;
-  border-top: 1px solid rgba(0, 229, 255, .06);
-}
-
-.prompt-detail-label {
-  font-size: 11px;
-  color: var(--cyan);
-  font-weight: 700;
-  margin-bottom: 8px;
-  text-transform: uppercase;
-  letter-spacing: 1px;
-}
-
-.prompt-detail-content {
-  background: rgba(0, 229, 255, .04);
-  border: 1px solid rgba(0, 229, 255, .08);
-  border-radius: var(--r);
-  padding: 12px;
-  font-size: 12px;
-  line-height: 1.6;
-  word-break: break-word;
-  color: var(--text);
-}
-
-/* ─── Responsive ────────────────────────────────────────────────────── */
+/* ─── Responsive ─────────────────────────────────────────────────────── */
 @media (max-width: 768px) {
-  .explore-header {
-    padding: 20px 16px;
-  }
+  .explore-header { padding: 16px 16px; }
+  .header-title { font-size: 18px; }
+  .header-content { gap: 12px; }
+  .search-bar-wrapper { padding: 18px 16px 0; }
+  .prompts-wrapper { padding: 18px 16px 70px; }
+  .prompts-grid { grid-template-columns: 1fr; }
+  .modal-content { max-width: 100%; }
+  .header-right .btn span.btn-text-full { display: none; }
+}
 
-  .header-content {
-    flex-direction: column;
-    align-items: stretch;
-  }
+@media (min-width: 769px) {
+  .modal-overlay { align-items: center; padding: 24px; }
+  .modal-content { border-radius: var(--r2); max-height: 88vh; }
+}
 
-  .header-title {
-    font-size: 22px;
-  }
-
-  .header-right {
-    width: 100%;
-    justify-content: stretch;
-  }
-
-  .header-right .btn {
-    flex: 1;
-    justify-content: center;
-  }
-
-  .search-bar-wrapper {
-    flex-direction: column;
-  }
-
-  .search-box {
-    min-width: auto;
-  }
-
-  .filter-select {
-    width: 100%;
-  }
-
-  .prompts-grid {
-    grid-template-columns: 1fr;
-  }
-
-  .modal-content {
-    max-width: calc(100vw - 40px);
-  }
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after { animation-duration: .01ms !important; transition-duration: .01ms !important; }
 }
 `
+
+// ═══════════════════════════════════════════════════════════════════════════
+// HELPERS
+// ═══════════════════════════════════════════════════════════════════════════
+
+function timeAgo(iso: string): string {
+  const diffMs = Date.now() - new Date(iso).getTime()
+  const mins   = Math.floor(diffMs / 60_000)
+  if (mins < 1)     return 'just now'
+  if (mins < 60)    return `${mins}m ago`
+  const hours = Math.floor(mins / 60)
+  if (hours < 24)   return `${hours}h ago`
+  const days = Math.floor(hours / 24)
+  if (days < 30)    return `${days}d ago`
+  return new Date(iso).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })
+}
 
 // ═══════════════════════════════════════════════════════════════════════════
 // COMPONENT
@@ -749,55 +453,54 @@ export default function ExplorePage() {
   const router = useRouter()
 
   // ─── State ─────────────────────────────────────────────────────────────
-  const [user, setUser] = useState<UserSession | null>(null)
-  const [loading, setLoading] = useState(true)
-  const [prompts, setPrompts] = useState<Prompt[]>([])
-  const [filteredPrompts, setFilteredPrompts] = useState<Prompt[]>([])
-  const [searchTerm, setSearchTerm] = useState('')
-  const [selectedCategory, setSelectedCategory] = useState('all')
-  const [showPublishModal, setShowPublishModal] = useState(false)
-  const [showDetailModal, setShowDetailModal] = useState(false)
-  const [selectedPrompt, setSelectedPrompt] = useState<Prompt | null>(null)
-  const [publishing, setPublishing] = useState(false)
-  const [loadingPrompts, setLoadingPrompts] = useState(false)
-  const [publishError, setPublishError] = useState('')
+  const [session,        setSession]        = useState<NexusSession | null>(null)
+  const [loading,         setLoading]         = useState(true)
+  const [prompts,         setPrompts]         = useState<Prompt[]>([])
+  const [loadingPrompts,  setLoadingPrompts]  = useState(false)
+  const [searchInput,     setSearchInput]     = useState('')   // raw input, updates instantly
+  const [searchTerm,      setSearchTerm]      = useState('')   // debounced value actually used to query
+  const [searching,       setSearching]       = useState(false)
 
-  const [formData, setFormData] = useState<PublishFormData>({
-    title: '',
-    description: '',
-    category: 'general',
-    tags: '',
-    content: '',
-  })
+  const [showPublish,     setShowPublish]     = useState(false)
+  const [showDetail,      setShowDetail]      = useState(false)
+  const [selectedPrompt,  setSelectedPrompt]  = useState<Prompt | null>(null)
+  const [publishing,      setPublishing]      = useState(false)
+  const [publishError,    setPublishError]    = useState('')
 
-  // ─── Check Auth on Mount ───────────────────────────────────────────────
+  const [title,           setTitle]           = useState('')
+  const [content,         setContent]         = useState('')
+  const [selectedGif,     setSelectedGif]     = useState<CapturedGif | null>(null)
+  const [capturedGifs,    setCapturedGifs]    = useState<CapturedGif[]>([])
+  const [loadingGifs,     setLoadingGifs]     = useState(false)
+  const [copiedId,        setCopiedId]        = useState<string | null>(null)
+
+  const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null)
+
+  // ─── Auth check — FIX: read the session key that actually gets written ──
   useEffect(() => {
-    const checkAuth = async () => {
-      try {
-        const userStr = localStorage.getItem('nexus_session')
-        if (!userStr) {
-          router.push('/')
-          return
-        }
+    const raw = localStorage.getItem(SESSION_KEY)
+    if (!raw) { router.push('/'); return }
 
-        const userData = JSON.parse(userStr) as UserSession
-        setUser(userData)
-      } catch (err) {
-        console.error('Auth check failed:', err)
-        router.push('/')
-      } finally {
-        setLoading(false)
-      }
+    try {
+      const sess = JSON.parse(raw) as NexusSession
+      if (!sess?.user?.username) throw new Error('no user')
+      if (Date.now() - (sess.loginTime || 0) > SESSION_MAX_AGE_MS) throw new Error('session expired')
+      setSession(sess)
+    } catch {
+      localStorage.removeItem(SESSION_KEY)
+      router.push('/')
+      return
     }
-
-    checkAuth()
+    setLoading(false)
   }, [router])
 
-  // ─── Fetch Prompts from Convex Cloud ───────────────────────────────────
-  const fetchPrompts = useCallback(async () => {
+  // ─── Fetch prompts ───────────────────────────────────────────────────────
+  const fetchPrompts = useCallback(async (q: string) => {
     setLoadingPrompts(true)
     try {
-      const response = await fetch('/api/explore')
+      const params = new URLSearchParams()
+      if (q.trim()) params.set('q', q.trim())
+      const response = await fetch(`/api/explore?${params.toString()}`)
       if (!response.ok) throw new Error('Failed to fetch prompts')
       const data = await response.json()
       setPrompts(data.prompts || [])
@@ -806,508 +509,383 @@ export default function ExplorePage() {
       setPrompts([])
     } finally {
       setLoadingPrompts(false)
+      setSearching(false)
     }
   }, [])
 
-  // ─── Load Prompts on Mount ─────────────────────────────────────────────
   useEffect(() => {
-    if (user) {
-      fetchPrompts()
-    }
-  }, [user, fetchPrompts])
+    if (!loading) fetchPrompts(searchTerm)
+  }, [loading, searchTerm, fetchPrompts])
 
-  // ─── Filter Prompts ────────────────────────────────────────────────────
+  // ─── Debounced search — updates searchTerm 350ms after typing stops ─────
+  function handleSearchChange(value: string) {
+    setSearchInput(value)
+    setSearching(true)
+    if (debounceRef.current) clearTimeout(debounceRef.current)
+    debounceRef.current = setTimeout(() => {
+      setSearchTerm(value)
+    }, SEARCH_DEBOUNCE_MS)
+  }
+
+  function clearSearch() {
+    setSearchInput('')
+    setSearchTerm('')
+    setSearching(false)
+    if (debounceRef.current) clearTimeout(debounceRef.current)
+  }
+
   useEffect(() => {
-    let filtered = [...prompts]
+    return () => { if (debounceRef.current) clearTimeout(debounceRef.current) }
+  }, [])
 
-    // Search filter
-    if (searchTerm) {
-      const term = searchTerm.toLowerCase()
-      filtered = filtered.filter(
-        p =>
-          p.title.toLowerCase().includes(term) ||
-          p.description.toLowerCase().includes(term) ||
-          p.tags.some(t => t.toLowerCase().includes(term)),
-      )
+  // ─── Fetch this user's Studio play-test captures ────────────────────────
+  const fetchCapturedGifs = useCallback(async () => {
+    if (!session?.user?.username) return
+    setLoadingGifs(true)
+    try {
+      const res = await fetch(`/api/storage?user=${encodeURIComponent(session.user.username.toLowerCase())}&limit=24`)
+      if (!res.ok) throw new Error('Failed to fetch captures')
+      const data = await res.json()
+      setCapturedGifs(Array.isArray(data.gifs) ? data.gifs : [])
+    } catch (err) {
+      console.error('Error fetching captures:', err)
+      setCapturedGifs([])
+    } finally {
+      setLoadingGifs(false)
     }
+  }, [session])
 
-    // Category filter
-    if (selectedCategory !== 'all') {
-      filtered = filtered.filter(p => p.category === selectedCategory)
-    }
+  useEffect(() => {
+    if (showPublish) fetchCapturedGifs()
+  }, [showPublish, fetchCapturedGifs])
 
-    // Sort by featured first, then by rating, then by uses
-    filtered.sort((a, b) => {
-      if (a.featured && !b.featured) return -1
-      if (!a.featured && b.featured) return 1
-      if (b.rating !== a.rating) return b.rating - a.rating
-      return b.uses - a.uses
-    })
-
-    setFilteredPrompts(filtered)
-  }, [prompts, searchTerm, selectedCategory])
-
-  // ─── Publish Prompt to Supabase ────────────────────────────────────────
-  const handlePublish = async () => {
-    if (!user || !formData.title.trim() || !formData.content.trim()) {
-      setPublishError('Title and content are required')
-      return
-    }
+  // ─── Publish ──────────────────────────────────────────────────────────────
+  async function handlePublish() {
+    if (!session) return
+    if (title.trim().length < 3) { setPublishError('Give your prompt a title (at least 3 characters).'); return }
+    if (content.trim().length < MIN_CONTENT_LEN) { setPublishError('Write the actual prompt text before publishing.'); return }
 
     setPublishing(true)
     setPublishError('')
-
     try {
-      const tagsArray = formData.tags
-        .split(',')
-        .map(t => t.trim())
-        .filter(Boolean)
-
-      const newPrompt: Prompt = {
-        id: `${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
-        title: formData.title.trim(),
-        description: formData.description.trim(),
-        category: formData.category,
-        tags: tagsArray,
-        author: user.username,
-        authorId: user.robloxId,
-        content: formData.content.trim(),
-        uses: 0,
-        rating: 0,
-        createdAt: new Date().toISOString(),
-        updatedAt: new Date().toISOString(),
-        featured: false,
-      }
-
-      // Save to Supabase via API
-      const response = await fetch('/api/sync', {
-        method: 'POST',
+      const res = await fetch('/api/explore', {
+        method:  'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          user: user.username,
-          action: 'publish-prompt',
-          prompt: newPrompt,
+          user:     session.user.username.toLowerCase(),
+          robloxId: session.user.robloxId || '',
+          title:    title.trim(),
+          content:  content.trim(),
+          gifUrl:   selectedGif?.url || null,
         }),
       })
+      const data = await res.json()
+      if (!res.ok) throw new Error(data.error || 'Failed to publish prompt')
 
-      if (!response.ok) {
-        const error = await response.json()
-        throw new Error(error.error || 'Failed to publish prompt')
-      }
-
-      // Add to local state
-      setPrompts(prev => [newPrompt, ...prev])
-
-      // Reset form
-      setFormData({
-        title: '',
-        description: '',
-        category: 'general',
-        tags: '',
-        content: '',
-      })
-
-      setShowPublishModal(false)
+      setPrompts(prev => [data.prompt, ...prev])
+      closePublish()
+      showToast('Prompt published', 'var(--green)')
     } catch (err) {
-      const message = err instanceof Error ? err.message : 'An error occurred'
-      setPublishError(message)
-      console.error('Publish error:', err)
+      setPublishError(err instanceof Error ? err.message : 'An error occurred')
     } finally {
       setPublishing(false)
     }
   }
 
-  // ─── Handlers ──────────────────────────────────────────────────────────
-  const handleOpenDetail = (prompt: Prompt) => {
-    setSelectedPrompt(prompt)
-    setShowDetailModal(true)
-  }
-
-  const handleCloseDetail = () => {
-    setShowDetailModal(false)
-    setSelectedPrompt(null)
-  }
-
-  const handleClosePublish = () => {
-    setShowPublishModal(false)
-    setFormData({
-      title: '',
-      description: '',
-      category: 'general',
-      tags: '',
-      content: '',
-    })
+  function closePublish() {
+    setShowPublish(false)
+    setTitle('')
+    setContent('')
+    setSelectedGif(null)
     setPublishError('')
   }
 
-  const handleCopyPrompt = async (content: string) => {
+  function openDetail(prompt: Prompt) {
+    setSelectedPrompt(prompt)
+    setShowDetail(true)
+    fetch('/api/explore', {
+      method:  'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body:    JSON.stringify({ id: prompt.id }),
+    }).catch(() => { /* non-critical */ })
+  }
+
+  async function copyPrompt(prompt: Prompt) {
     try {
-      await navigator.clipboard.writeText(content)
-    } catch (err) {
-      console.error('Copy failed:', err)
+      await navigator.clipboard.writeText(prompt.content)
+      setCopiedId(prompt.id)
+      showToast('Copied to clipboard', 'var(--green)')
+      setTimeout(() => setCopiedId(null), 1800)
+    } catch {
+      showToast('Copy failed — select the text manually', 'var(--pink)')
     }
   }
+
+  function showToast(msg: string, color?: string) {
+    document.querySelectorAll('.nx-toast').forEach(t => t.remove())
+    const t = document.createElement('div')
+    t.className   = 'nx-toast in'
+    t.style.color = color || 'var(--cyan)'
+    t.innerHTML = `<svg viewBox="0 0 24 24" width="13" height="13" stroke="currentColor" fill="none" stroke-width="2"><polyline points="20 6 9 17 4 12"/></svg><span>${msg.replace(/</g, '&lt;')}</span>`
+    document.body.appendChild(t)
+    setTimeout(() => {
+      t.classList.remove('in')
+      t.classList.add('out')
+      setTimeout(() => t.remove(), 250)
+    }, 2400)
+  }
+
+  const charLen = title.length
+  const charCls = charLen >= MAX_TITLE_LEN ? 'over' : charLen >= MAX_TITLE_LEN - 10 ? 'warn' : ''
+
+  const hasQuery = searchTerm.trim().length > 0
 
   // ─── Render ────────────────────────────────────────────────────────────
   if (loading) {
     return (
-      <div className="explore-container">
-        <div className="loading-container">
-          <div className="loading-spinner" />
-          <span>Loading explore page...</span>
+      <>
+        <style dangerouslySetInnerHTML={{ __html: EXPLORE_CSS }} />
+        <div className="explore-container">
+          <div className="loading-state" style={{ paddingTop: 120 }}>
+            <div className="loading-icon"><I.loader /></div>
+            <div className="empty-text">Loading explore...</div>
+          </div>
         </div>
-      </div>
+      </>
     )
   }
-
-  const categories = ['all', 'general', 'scripting', 'ui', 'gameplay', 'optimization']
 
   return (
     <>
       <style dangerouslySetInnerHTML={{ __html: EXPLORE_CSS }} />
-      <link
-        rel="stylesheet"
-        href="https://fonts.googleapis.com/css2?family=Orbitron:wght@400;700;900&family=JetBrains+Mono:wght@300;400;500&display=swap"
-      />
 
       <div className="explore-container">
-        {/* ─── HEADER ─────────────────────────────────────────────────────── */}
+        {/* ─── HEADER ───────────────────────────────────────────────────── */}
         <div className="explore-header">
           <div className="header-content">
             <div className="header-left">
+              <div className="header-icon"><I.sparkle /></div>
               <div>
                 <div className="header-title">EXPLORE</div>
-                <div className="header-subtitle">Discover & share powerful prompts</div>
+                <div className="header-subtitle">Discover & share community prompts</div>
               </div>
             </div>
             <div className="header-right">
-              <button className="btn primary" onClick={() => setShowPublishModal(true)}>
-                <span>+ Publish Prompt</span>
+              <button className="btn primary" onClick={() => setShowPublish(true)}>
+                <I.plus /><span className="btn-text-full">Publish Prompt</span>
               </button>
               <Link href="/dashboard">
-                <button className="btn">Dashboard</button>
+                <button className="btn ghost">Dashboard</button>
               </Link>
             </div>
           </div>
         </div>
 
-        {/* ─── SEARCH & FILTER ─────────────────────────────────────────────── */}
+        {/* ─── SEARCH ───────────────────────────────────────────────────── */}
         <div className="search-bar-wrapper">
           <div className="search-box">
-            <svg className="search-icon" viewBox="0 0 24 24">
-              <circle cx="11" cy="11" r="8" />
-              <path d="m21 21-4.35-4.35" />
-            </svg>
+            <I.search />
             <input
               type="text"
-              placeholder="Search prompts by title, description, or tags..."
-              value={searchTerm}
-              onChange={e => setSearchTerm(e.target.value)}
+              placeholder="Search prompts by title or content..."
+              value={searchInput}
+              onChange={e => handleSearchChange(e.target.value)}
+              aria-label="Search prompts"
             />
+            {searching && <div className="search-spinner" aria-hidden="true" />}
+            {!searching && searchInput && (
+              <button className="search-clear" onClick={clearSearch} aria-label="Clear search">
+                <I.cross />
+              </button>
+            )}
           </div>
-
-          <select
-            className="filter-select"
-            value={selectedCategory}
-            onChange={e => setSelectedCategory(e.target.value)}
-          >
-            {categories.map(cat => (
-              <option key={cat} value={cat}>
-                {cat === 'all' ? 'All Categories' : cat.charAt(0).toUpperCase() + cat.slice(1)}
-              </option>
-            ))}
-          </select>
-        </div>
-
-        {/* ─── PROMPTS GRID ───────────────────────────────────────────────── */}
-        <div className="prompts-wrapper">
-          {loadingPrompts ? (
-            <div className="loading-container">
-              <div className="loading-spinner" />
-              <span>Loading prompts...</span>
-            </div>
-          ) : filteredPrompts.length === 0 ? (
-            <div className="empty-state">
-              <svg className="empty-icon" viewBox="0 0 24 24">
-                <path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm0 18c-4.41 0-8-3.59-8-8s3.59-8 8-8 8 3.59 8 8-3.59 8-8 8zm-5-9h10v2H7z" />
-              </svg>
-              <div className="empty-title">No prompts found</div>
-              <div className="empty-text">
-                {searchTerm || selectedCategory !== 'all'
-                  ? 'Try adjusting your search or filter criteria.'
-                  : 'Be the first to publish a prompt! Click "Publish Prompt" to get started.'}
-              </div>
-            </div>
-          ) : (
-            <div className="prompts-grid">
-              {filteredPrompts.map(prompt => (
-                <div
-                  key={prompt.id}
-                  className="prompt-card"
-                  onClick={() => handleOpenDetail(prompt)}
-                >
-                  <div className="prompt-header">
-                    <div className="prompt-icon">{prompt.icon || '✨'}</div>
-                    <div className="prompt-title-group">
-                      <div className="prompt-title">{prompt.title}</div>
-                      <div className="prompt-author">by {prompt.author}</div>
-                    </div>
-                    {prompt.featured && (
-                      <div className="prompt-featured">
-                        ⭐ Featured
-                      </div>
-                    )}
-                  </div>
-
-                  <div className="prompt-description">{prompt.description}</div>
-
-                  <div className="prompt-tags">
-                    {prompt.tags.slice(0, 3).map((tag, idx) => (
-                      <div key={idx} className="tag">
-                        {tag}
-                      </div>
-                    ))}
-                    {prompt.tags.length > 3 && (
-                      <div className="tag">+{prompt.tags.length - 3}</div>
-                    )}
-                  </div>
-
-                  <div className="prompt-meta">
-                    <div className="meta-item">
-                      <svg className="meta-icon" viewBox="0 0 24 24">
-                        <path d="M12 4.5C7 4.5 2.73 7.61 1 12c1.73 4.39 6 7.5 11 7.5s9.27-3.11 11-7.5c-1.73-4.39-6-7.5-11-7.5zM12 17c-2.76 0-5-2.24-5-5s2.24-5 5-5 5 2.24 5 5-2.24 5-5 5zm0-8c-1.66 0-3 1.34-3 3s1.34 3 3 3 3-1.34 3-3-1.34-3-3-3z" />
-                      </svg>
-                      {prompt.uses} uses
-                    </div>
-                    <div className="meta-item">
-                      <svg className="meta-icon" viewBox="0 0 24 24">
-                        <path d="M12 17.27L18.18 21l-1.64-7.03L22 9.24l-7.19-.61L12 2l-2.81 6.63L2 9.24l5.46 4.73L5.82 21 12 17.27z" />
-                      </svg>
-                      {prompt.rating.toFixed(1)}
-                    </div>
-                  </div>
-                </div>
-              ))}
-            </div>
+          {!loadingPrompts && (
+            <span className="result-count">{prompts.length} prompt{prompts.length !== 1 ? 's' : ''}</span>
           )}
         </div>
 
-        {/* ─── DETAIL MODAL ───────────────────────────────────────────────── */}
-        <div className={`modal-overlay ${showDetailModal ? 'show' : ''}`}
-          onClick={handleCloseDetail}>
+        {/* ─── GRID ─────────────────────────────────────────────────────── */}
+        <div className="prompts-wrapper">
+          <div className="prompts-grid">
+            {loadingPrompts ? (
+              <div className="loading-state">
+                <div className="loading-icon"><I.loader /></div>
+                <div className="empty-text">Loading prompts...</div>
+              </div>
+            ) : prompts.length === 0 ? (
+              <div className="empty-state">
+                <div className="empty-icon"><I.empty /></div>
+                <div className="empty-title">No prompts found</div>
+                <div className="empty-text">
+                  {hasQuery
+                    ? <>Nothing matches &quot;{searchTerm}&quot;. Try a different search term.</>
+                    : 'Be the first to publish a prompt — click "Publish Prompt" to get started.'}
+                </div>
+              </div>
+            ) : (
+              prompts.map(prompt => (
+                <div key={prompt.id} className="prompt-card" onClick={() => openDetail(prompt)}>
+                  <div className="prompt-media">
+                    {prompt.gifUrl ? (
+                      <>
+                        <img src={prompt.gifUrl} alt="" loading="lazy" />
+                        <span className="media-badge"><I.film />GIF</span>
+                      </>
+                    ) : (
+                      <div className="media-placeholder"><I.image /></div>
+                    )}
+                  </div>
+
+                  <div className="prompt-body">
+                    <div className="prompt-header">
+                      <div className="prompt-title">{prompt.title}</div>
+                      {prompt.featured && (
+                        <div className="prompt-featured"><I.star />Featured</div>
+                      )}
+                    </div>
+
+                    <div className="prompt-author"><I.user />@{prompt.author}</div>
+                    <div className="prompt-preview">{prompt.content}</div>
+
+                    <div className="prompt-meta">
+                      <div className="meta-item"><I.play />{prompt.uses} uses</div>
+                      <div className="meta-item"><I.star />{prompt.rating.toFixed(1)}</div>
+                      <div className="meta-item">{timeAgo(prompt.createdAt)}</div>
+                    </div>
+                  </div>
+                </div>
+              ))
+            )}
+          </div>
+        </div>
+
+        {/* ─── DETAIL MODAL ─────────────────────────────────────────────── */}
+        <div className={`modal-overlay ${showDetail ? 'show' : ''}`} onClick={() => setShowDetail(false)}>
           <div className="modal-content" onClick={e => e.stopPropagation()}>
             {selectedPrompt && (
               <>
                 <div className="modal-header">
                   <div className="modal-title">Prompt Details</div>
-                  <button className="modal-close" onClick={handleCloseDetail}>
-                    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                      <line x1="18" y1="6" x2="6" y2="18" />
-                      <line x1="6" y1="6" x2="18" y2="18" />
-                    </svg>
+                  <button className="modal-close" onClick={() => setShowDetail(false)} aria-label="Close">
+                    <I.cross />
                   </button>
                 </div>
 
                 <div className="modal-body">
-                  <div className="prompt-detail">
-                    <div className="prompt-detail-header">
-                      <div className="prompt-detail-icon">
-                        {selectedPrompt.icon || '✨'}
-                      </div>
-                      <div className="prompt-detail-info">
-                        <div className="prompt-detail-title">
-                          {selectedPrompt.title}
-                        </div>
-                        <div className="prompt-detail-author">
-                          by {selectedPrompt.author}
-                        </div>
-                        <div className="prompt-detail-stats">
-                          <div className="stat">
-                            <svg className="stat-icon" viewBox="0 0 24 24">
-                              <path d="M12 4.5C7 4.5 2.73 7.61 1 12c1.73 4.39 6 7.5 11 7.5s9.27-3.11 11-7.5c-1.73-4.39-6-7.5-11-7.5z" />
-                            </svg>
-                            {selectedPrompt.uses} uses
-                          </div>
-                          <div className="stat">
-                            <svg className="stat-icon" viewBox="0 0 24 24">
-                              <path d="M12 17.27L18.18 21l-1.64-7.03L22 9.24l-7.19-.61L12 2l-2.81 6.63L2 9.24l5.46 4.73L5.82 21 12 17.27z" />
-                            </svg>
-                            {selectedPrompt.rating.toFixed(1)}
-                          </div>
-                        </div>
-                      </div>
+                  {selectedPrompt.gifUrl && (
+                    <div className="detail-media">
+                      <img src={selectedPrompt.gifUrl} alt="" />
                     </div>
+                  )}
 
-                    <div className="prompt-detail-section">
-                      <div className="prompt-detail-label">Description</div>
-                      <div className="prompt-detail-content">
-                        {selectedPrompt.description}
-                      </div>
-                    </div>
+                  <div className="detail-title">{selectedPrompt.title}</div>
+                  <div className="detail-author"><I.user />@{selectedPrompt.author}</div>
 
-                    <div className="prompt-detail-section">
-                      <div className="prompt-detail-label">Category</div>
-                      <div className="prompt-detail-content">
-                        {selectedPrompt.category}
-                      </div>
-                    </div>
+                  <div className="detail-label">Prompt</div>
+                  <div className="detail-content">{selectedPrompt.content}</div>
 
-                    <div className="prompt-detail-section">
-                      <div className="prompt-detail-label">Tags</div>
-                      <div className="prompt-tags">
-                        {selectedPrompt.tags.map((tag, idx) => (
-                          <div key={idx} className="tag">
-                            {tag}
-                          </div>
-                        ))}
-                      </div>
-                    </div>
-
-                    <div className="prompt-detail-section">
-                      <div className="prompt-detail-label">Prompt Content</div>
-                      <div className="prompt-detail-content">
-                        {selectedPrompt.content}
-                      </div>
-                    </div>
+                  <div className="detail-stats">
+                    <div className="detail-stat"><I.play />{selectedPrompt.uses} uses</div>
+                    <div className="detail-stat"><I.star />{selectedPrompt.rating.toFixed(1)} rating</div>
+                    <div className="detail-stat">{timeAgo(selectedPrompt.createdAt)}</div>
                   </div>
                 </div>
 
                 <div className="modal-footer">
-                  <button
-                    className="btn"
-                    onClick={() => handleCopyPrompt(selectedPrompt.content)}
-                  >
-                    📋 Copy
+                  <button className="btn ghost" onClick={() => copyPrompt(selectedPrompt)}>
+                    {copiedId === selectedPrompt.id ? <><I.check />Copied</> : <><I.copy />Copy Prompt</>}
                   </button>
-                  <button className="btn primary" onClick={handleCloseDetail}>
-                    Close
-                  </button>
+                  <button className="btn primary" onClick={() => setShowDetail(false)}>Close</button>
                 </div>
               </>
             )}
           </div>
         </div>
 
-        {/* ─── PUBLISH MODAL ──────────────────────────────────────────────── */}
-        <div className={`modal-overlay ${showPublishModal ? 'show' : ''}`}
-          onClick={handleClosePublish}>
+        {/* ─── PUBLISH MODAL ─────────────────────────────────────────────── */}
+        <div className={`modal-overlay ${showPublish ? 'show' : ''}`} onClick={closePublish}>
           <div className="modal-content" onClick={e => e.stopPropagation()}>
             <div className="modal-header">
               <div className="modal-title">Publish Your Prompt</div>
-              <button className="modal-close" onClick={handleClosePublish}>
-                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                  <line x1="18" y1="6" x2="6" y2="18" />
-                  <line x1="6" y1="6" x2="18" y2="18" />
-                </svg>
+              <button className="modal-close" onClick={closePublish} aria-label="Close">
+                <I.cross />
               </button>
             </div>
 
             <div className="modal-body">
+              {publishError && <div className="form-error">{publishError}</div>}
+
               <div className="form-group">
                 <label className="form-label">Title</label>
                 <input
                   type="text"
                   className="form-input"
-                  placeholder="Enter a descriptive title for your prompt"
-                  value={formData.title}
-                  onChange={e =>
-                    setFormData({ ...formData, title: e.target.value })
-                  }
+                  placeholder="e.g. Roblox GUI Generator"
+                  maxLength={MAX_TITLE_LEN}
+                  value={title}
+                  onChange={e => setTitle(e.target.value)}
+                  autoComplete="off"
                 />
-                <div className="form-hint">
-                  Be clear and descriptive (e.g., "Roblox GUI Generator", "Lua Table Parser")
-                </div>
+                <div className={`char-count ${charCls}`}>{charLen} / {MAX_TITLE_LEN}</div>
               </div>
 
               <div className="form-group">
-                <label className="form-label">Description</label>
-                <input
-                  type="text"
-                  className="form-input"
-                  placeholder="What does this prompt do?"
-                  value={formData.description}
-                  onChange={e =>
-                    setFormData({ ...formData, description: e.target.value })
-                  }
-                />
-                <div className="form-hint">
-                  Write a brief overview of the prompt's purpose
-                </div>
-              </div>
-
-              <div className="form-group">
-                <label className="form-label">Category</label>
-                <select
-                  className="form-select"
-                  value={formData.category}
-                  onChange={e =>
-                    setFormData({ ...formData, category: e.target.value })
-                  }
-                >
-                  <option value="general">General</option>
-                  <option value="scripting">Scripting</option>
-                  <option value="ui">UI Design</option>
-                  <option value="gameplay">Gameplay</option>
-                  <option value="optimization">Optimization</option>
-                </select>
-              </div>
-
-              <div className="form-group">
-                <label className="form-label">Tags</label>
-                <input
-                  type="text"
-                  className="form-input"
-                  placeholder="lua, roblox, script (comma separated)"
-                  value={formData.tags}
-                  onChange={e => setFormData({ ...formData, tags: e.target.value })}
-                />
-                <div className="form-hint">
-                  Add up to 5 tags separated by commas
-                </div>
-              </div>
-
-              <div className="form-group">
-                <label className="form-label">Prompt Content</label>
+                <label className="form-label">Prompt for AI</label>
                 <textarea
                   className="form-textarea"
-                  placeholder="Paste your prompt here..."
-                  value={formData.content}
-                  onChange={e =>
-                    setFormData({ ...formData, content: e.target.value })
-                  }
+                  placeholder="Paste the exact prompt text you want to share..."
+                  value={content}
+                  onChange={e => setContent(e.target.value)}
                 />
-                <div className="form-hint">
-                  The actual prompt text that will be shared
-                </div>
+                <div className="form-hint">This is the only thing other users will see and copy.</div>
               </div>
 
-              {publishError && (
-                <div
-                  style={{
-                    padding: '12px',
-                    background: 'rgba(255, 45, 107, .1)',
-                    border: '1px solid rgba(255, 45, 107, .2)',
-                    borderRadius: 'var(--r)',
-                    color: '#ff2d6b',
-                    fontSize: '12px',
-                    marginBottom: '16px',
-                  }}
-                >
-                  {publishError}
+              <div className="form-group">
+                <label className="form-label">GIF Preview</label>
+                <div className="gif-picker">
+                  {selectedGif && (
+                    <button className="gif-clear-btn" onClick={() => setSelectedGif(null)}>
+                      Remove selected GIF
+                    </button>
+                  )}
+
+                  {loadingGifs ? (
+                    <div className="gif-empty">
+                      <div className="loading-icon" style={{ margin: '0 auto 8px', width: 36, height: 36 }}>
+                        <I.loader />
+                      </div>
+                      Loading your captures...
+                    </div>
+                  ) : capturedGifs.length === 0 ? (
+                    <div className="gif-empty">
+                      <I.film />
+                      <div>
+                        No play-test captures yet. Run a play test in Roblox Studio with the
+                        NEXUS AI plugin — your gameplay GIF will show up here automatically.
+                      </div>
+                    </div>
+                  ) : (
+                    <div className="gif-picker-grid">
+                      {capturedGifs.map(gif => (
+                        <div
+                          key={gif.id}
+                          className={`gif-option${selectedGif?.id === gif.id ? ' selected' : ''}`}
+                          onClick={() => setSelectedGif(gif)}
+                          title={gif.name}
+                        >
+                          {gif.url && <img src={gif.url} alt={gif.name} loading="lazy" />}
+                        </div>
+                      ))}
+                    </div>
+                  )}
                 </div>
-              )}
+              </div>
             </div>
 
             <div className="modal-footer">
-              <button className="btn" onClick={handleClosePublish}>
-                Cancel
-              </button>
-              <button
-                className="btn primary"
-                onClick={handlePublish}
-                disabled={publishing}
-              >
-                {publishing ? 'Publishing...' : 'Publish'}
+              <button className="btn ghost" onClick={closePublish}>Cancel</button>
+              <button className="btn primary" onClick={handlePublish} disabled={publishing}>
+                {publishing ? (<><I.loader />Publishing...</>) : (<><I.arrow />Publish</>)}
               </button>
             </div>
           </div>
