@@ -1,17 +1,17 @@
-// lib/ai.ts — AI Core Handler (TypeScript)
+// ts/ai.ts — AI Core Handler (TypeScript)
 // Supports: gemini, claude, openai, openrouter, deepseek, groq, mistral, stepfun
 //
-// Key fixes vs previous version:
-// 1. OpenRouter: higher retry count (free models are flaky), removed json_object
-//    format for models that don't support it, better error messages.
-// 2. max_tokens default raised to 16_000 so long code generation doesn't silently truncate.
-// 3. normalizeMessages: always keeps the NEWEST messages when trimming, never drops
-//    the current user request.
-// 4. body.messages slices the LAST MAX_MESSAGES, not first.
-// 5. truncated flag now reported consistently for ALL providers.
-// 6. Claude per-model output limits enforced to prevent hard 400 errors.
-// 7. fetchWithRetry retries on timeout (AbortError) — long generations need this.
-// 8. Removed all dead code, tool-call engine, and unnecessary complexity.
+// Fixes v3:
+// 1. OpenRouter: per-model token limits so Qwen3/free models never get max_tokens above their ceiling.
+// 2. OpenRouter: smarter max_tokens fallback — if model unknown, defaults to 4096 (safe), not 16000.
+// 3. OpenRouter: retries raised to 3 for free/flaky models.
+// 4. normalizeMessages: always keeps NEWEST messages, never drops current user request.
+// 5. body.messages slices LAST MAX_MESSAGES, not first.
+// 6. truncated flag reported consistently for ALL providers.
+// 7. Claude per-model output limits enforced to prevent hard 400 errors.
+// 8. fetchWithRetry retries on timeout (AbortError).
+// 9. max_tokens global default stays at 16000 but per-provider clamped properly.
+// 10. OpenRouter model token map added — includes Qwen3, Llama, Gemma, Mistral free variants.
 
 import crypto from "crypto";
 
@@ -92,8 +92,6 @@ const MAX_MESSAGES = 100;
 const MAX_MSG_CONTENT_LEN = 32_000;
 const MAX_SYSTEM_LEN = 8_000;
 const MAX_TOTAL_CHARS = 200_000;
-// Long generations (e.g. full components/pages) need more time.
-// Free OpenRouter models can also be slow to start.
 const REQUEST_TIMEOUT_MS = 120_000;
 
 const VALID_PROVIDERS = new Set<Provider>([
@@ -108,8 +106,6 @@ const VALID_PROVIDERS = new Set<Provider>([
 ]);
 
 // Only these providers reliably support response_format: json_object.
-// OpenRouter is intentionally excluded — support varies by model and
-// free models often return 400 if you send this field.
 const JSON_FORMAT_PROVIDERS = new Set<string>([
   "openai",
   "deepseek",
@@ -118,7 +114,6 @@ const JSON_FORMAT_PROVIDERS = new Set<string>([
 ]);
 
 // Claude hard output token limits per model.
-// Sending max_tokens above a model's ceiling causes a hard 400 from Anthropic.
 const CLAUDE_MODEL_OUTPUT_LIMITS: Record<string, number> = {
   "claude-opus-4-8": 32_000,
   "claude-opus-4-7": 64_000,
@@ -137,6 +132,154 @@ function getClaudeOutputLimit(model: string): number {
   if (CLAUDE_MODEL_OUTPUT_LIMITS[model]) return CLAUDE_MODEL_OUTPUT_LIMITS[model];
   if (/claude-(opus|sonnet|haiku)-4/i.test(model)) return 64_000;
   return 8_192;
+}
+
+// ─── OPENROUTER MODEL TOKEN LIMITS ───────────────────────────────────────────
+//
+// OpenRouter models have varying max_tokens limits depending on their provider
+// and quantization. If you send max_tokens above the model's ceiling, the API
+// returns a 400 error. This map covers commonly used free and paid models.
+//
+// When a model is NOT in this map, we default to 4096 (conservative safe value)
+// instead of passing a large number that might cause a hard 400.
+//
+// Free models (marked :free) typically have lower limits than paid variants.
+
+const OPENROUTER_MODEL_OUTPUT_LIMITS: Record<string, number> = {
+  // ── Qwen3 series ────────────────────────────────────────────────────────────
+  "qwen/qwen3-next-80b-a3b-instruct": 32_768,
+  "qwen/qwen3-235b-a22b": 32_768,
+  "qwen/qwen3-235b-a22b:free": 8_192,
+  "qwen/qwen3-30b-a3b": 32_768,
+  "qwen/qwen3-30b-a3b:free": 8_192,
+  "qwen/qwen3-14b": 32_768,
+  "qwen/qwen3-14b:free": 8_192,
+  "qwen/qwen3-8b": 32_768,
+  "qwen/qwen3-8b:free": 8_192,
+  "qwen/qwen3-4b:free": 8_192,
+  "qwen/qwen3-1.7b:free": 4_096,
+  "qwen/qwen3-0.6b:free": 4_096,
+  // ── Qwen2.5 series ──────────────────────────────────────────────────────────
+  "qwen/qwen-2.5-72b-instruct": 32_768,
+  "qwen/qwen-2.5-72b-instruct:free": 8_192,
+  "qwen/qwen-2.5-7b-instruct": 32_768,
+  "qwen/qwen-2.5-7b-instruct:free": 8_192,
+  "qwen/qwen-2.5-coder-32b-instruct": 32_768,
+  "qwen/qwen-2.5-coder-32b-instruct:free": 8_192,
+  // ── Llama 3.x series ────────────────────────────────────────────────────────
+  "meta-llama/llama-3.3-70b-instruct": 32_768,
+  "meta-llama/llama-3.3-70b-instruct:free": 8_192,
+  "meta-llama/llama-3.1-8b-instruct": 16_384,
+  "meta-llama/llama-3.1-8b-instruct:free": 8_192,
+  "meta-llama/llama-3.1-70b-instruct": 32_768,
+  "meta-llama/llama-3.1-70b-instruct:free": 8_192,
+  "meta-llama/llama-3.2-1b-instruct": 8_192,
+  "meta-llama/llama-3.2-1b-instruct:free": 4_096,
+  "meta-llama/llama-3.2-3b-instruct": 8_192,
+  "meta-llama/llama-3.2-3b-instruct:free": 4_096,
+  "meta-llama/llama-3.2-11b-vision-instruct": 16_384,
+  "meta-llama/llama-3.2-11b-vision-instruct:free": 8_192,
+  "meta-llama/llama-3.2-90b-vision-instruct": 32_768,
+  "meta-llama/llama-3.2-90b-vision-instruct:free": 8_192,
+  "meta-llama/llama-4-scout": 16_384,
+  "meta-llama/llama-4-scout:free": 8_192,
+  "meta-llama/llama-4-maverick": 32_768,
+  "meta-llama/llama-4-maverick:free": 8_192,
+  // ── Mistral series ──────────────────────────────────────────────────────────
+  "mistralai/mistral-7b-instruct": 32_768,
+  "mistralai/mistral-7b-instruct:free": 8_192,
+  "mistralai/mixtral-8x7b-instruct": 32_768,
+  "mistralai/mixtral-8x7b-instruct:free": 8_192,
+  "mistralai/mistral-nemo": 32_768,
+  "mistralai/mistral-nemo:free": 8_192,
+  "mistralai/mistral-small-3.1-24b-instruct": 32_768,
+  "mistralai/mistral-small-3.1-24b-instruct:free": 8_192,
+  // ── Gemma series ────────────────────────────────────────────────────────────
+  "google/gemma-3-27b-it": 16_384,
+  "google/gemma-3-27b-it:free": 8_192,
+  "google/gemma-3-12b-it": 16_384,
+  "google/gemma-3-12b-it:free": 8_192,
+  "google/gemma-3-4b-it": 8_192,
+  "google/gemma-3-4b-it:free": 4_096,
+  "google/gemma-2-9b-it": 8_192,
+  "google/gemma-2-9b-it:free": 4_096,
+  // ── DeepSeek via OpenRouter ──────────────────────────────────────────────────
+  "deepseek/deepseek-chat": 32_768,
+  "deepseek/deepseek-chat:free": 8_192,
+  "deepseek/deepseek-r1": 32_768,
+  "deepseek/deepseek-r1:free": 8_192,
+  "deepseek/deepseek-r1-distill-llama-70b": 32_768,
+  "deepseek/deepseek-r1-distill-llama-70b:free": 8_192,
+  // ── Microsoft Phi ────────────────────────────────────────────────────────────
+  "microsoft/phi-3-mini-128k-instruct": 16_384,
+  "microsoft/phi-3-mini-128k-instruct:free": 4_096,
+  "microsoft/phi-3-medium-128k-instruct": 16_384,
+  "microsoft/phi-3-medium-128k-instruct:free": 4_096,
+  "microsoft/phi-4": 16_384,
+  "microsoft/phi-4:free": 8_192,
+  // ── Nous Hermes ──────────────────────────────────────────────────────────────
+  "nousresearch/nous-hermes-2-mixtral-8x7b-dpo": 32_768,
+  // ── OpenChat ─────────────────────────────────────────────────────────────────
+  "openchat/openchat-7b": 8_192,
+  "openchat/openchat-7b:free": 4_096,
+  // ── Dolphin ──────────────────────────────────────────────────────────────────
+  "cognitivecomputations/dolphin3.0-r1-mistral-24b:free": 8_192,
+  // ── InternLM ─────────────────────────────────────────────────────────────────
+  "internlm/internlm2_5-20b-chat": 32_768,
+  // ── Grok ─────────────────────────────────────────────────────────────────────
+  "x-ai/grok-3-mini-beta": 32_768,
+  "x-ai/grok-3-beta": 32_768,
+  // ── Claude via OpenRouter ────────────────────────────────────────────────────
+  "anthropic/claude-3.5-sonnet": 8_192,
+  "anthropic/claude-3.5-haiku": 8_192,
+  "anthropic/claude-3-opus": 4_096,
+  "anthropic/claude-sonnet-4-5": 64_000,
+  "anthropic/claude-opus-4-5": 64_000,
+};
+
+/**
+ * Gets the safe max_tokens for an OpenRouter model.
+ * - Exact match first.
+ * - Then strips :free/:nitro/:floor suffix variants and retries.
+ * - Falls back to 4096 (safe conservative default) if unknown.
+ */
+function getOpenRouterOutputLimit(model: string, requested: number): number {
+  // Exact match
+  if (OPENROUTER_MODEL_OUTPUT_LIMITS[model]) {
+    return Math.min(requested, OPENROUTER_MODEL_OUTPUT_LIMITS[model]);
+  }
+
+  // Try matching without variant suffix (e.g. remove :free, :nitro, :floor, :beta)
+  const baseModel = model.replace(/:[\w-]+$/, "");
+  if (baseModel !== model && OPENROUTER_MODEL_OUTPUT_LIMITS[baseModel]) {
+    return Math.min(requested, OPENROUTER_MODEL_OUTPUT_LIMITS[baseModel]);
+  }
+
+  // Try matching by model family prefix for catch-all
+  // e.g. anything starting with "qwen/qwen3-" gets 8192 as safe default
+  const familyPatterns: [RegExp, number][] = [
+    [/qwen\/qwen3/i, 8_192],
+    [/qwen\/qwen2/i, 8_192],
+    [/qwen\//i, 8_192],
+    [/meta-llama\/llama-4/i, 8_192],
+    [/meta-llama\/llama-3\.[2-9]/i, 8_192],
+    [/meta-llama\//i, 8_192],
+    [/mistralai\//i, 8_192],
+    [/google\/gemma/i, 8_192],
+    [/deepseek\//i, 8_192],
+    [/microsoft\/phi/i, 8_192],
+    [/anthropic\//i, 8_192],
+    [/x-ai\//i, 8_192],
+  ];
+
+  for (const [pattern, limit] of familyPatterns) {
+    if (pattern.test(model)) {
+      return Math.min(requested, limit);
+    }
+  }
+
+  // Unknown model — use conservative safe default to avoid hard 400
+  return Math.min(requested, 4_096);
 }
 
 // ─── RATE LIMITING ────────────────────────────────────────────────────────────
@@ -250,7 +393,6 @@ function normalizeMessages(
 
   const isGemini = provider === "gemini";
 
-  // Pass 1: clean, role-map, and flatten each message individually.
   const cleaned: Message[] = [];
   for (const m of msgs) {
     if (!m || typeof m !== "object" || !m.role) continue;
@@ -269,7 +411,6 @@ function normalizeMessages(
 
     let content = trimContent(m.content);
 
-    // Flatten multimodal to text for providers that don't support it.
     if (!supportsMultimodal && !isGemini && Array.isArray(content)) {
       content = flattenContentToText(content);
     }
@@ -290,8 +431,7 @@ function normalizeMessages(
     cleaned.push({ role: role as MessageRole, content });
   }
 
-  // Pass 2: walk NEWEST → OLDEST and keep the most recent turns within budget.
-  // This ensures the current user request is never dropped when history is long.
+  // Walk NEWEST → OLDEST, keep most recent turns within budget
   let totalChars = 0;
   let historyTrimmed = false;
   const kept: Message[] = [];
@@ -312,7 +452,7 @@ function normalizeMessages(
   }
   kept.reverse();
 
-  // Gemini requires strictly alternating user/model turns.
+  // Gemini requires strictly alternating user/model turns
   if (isGemini && kept.length > 0) {
     const deduped: Message[] = [];
     for (const msg of kept) {
@@ -364,7 +504,7 @@ async function fetchWithRetry(
   for (let attempt = 0; attempt <= retries; attempt++) {
     try {
       const response = await fetchWithTimeout(url, options, timeoutMs);
-      // 4xx are definitive failures — don't retry (except 429 which callers handle).
+      // 4xx are definitive failures — don't retry (except 429 which callers handle)
       if (response.status >= 400 && response.status < 500) return response;
       if (!response.ok && attempt < retries) {
         await sleep(1000 * Math.pow(2, attempt));
@@ -373,7 +513,7 @@ async function fetchWithRetry(
       return response;
     } catch (e) {
       lastError = e;
-      // Retry on timeout too — long generations often brush the timeout window.
+      // Retry on timeout too — long generations often brush the timeout window
       if (attempt < retries) {
         await sleep(1000 * Math.pow(2, attempt));
         continue;
@@ -446,7 +586,6 @@ function ensureAlternating(
 
     const prev = result[result.length - 1];
     if (prev && prev.role === role) {
-      // Flatten both sides to text and merge — never silently drop a message.
       const prevText = flattenContentToText(prev.content);
       const curText = flattenContentToText(content);
       prev.content = [prevText, curText].filter(Boolean).join("\n");
@@ -455,7 +594,6 @@ function ensureAlternating(
     }
   }
 
-  // Providers like Claude require the first message to be from the user.
   if (result.length > 0 && result[0].role !== firstRole) {
     result.unshift({ role: firstRole as MessageRole, content: "." });
   }
@@ -666,7 +804,6 @@ async function callProvider(opts: CallProviderOptions): Promise<ProviderResult> 
   }
 
   // ── OPENAI-COMPATIBLE HELPER ─────────────────────────────────────────────────
-  // Used by: openai, openrouter, mistral
   async function openAICompatible(
     providerName: string,
     apiUrl: string,
@@ -688,7 +825,6 @@ async function callProvider(opts: CallProviderOptions): Promise<ProviderResult> 
       temperature: 0.7,
     };
 
-    // Only add response_format if this provider/model supports it.
     if (useJsonFormat && allowJsonFormat) {
       body.response_format = { type: "json_object" };
     }
@@ -753,21 +889,85 @@ async function callProvider(opts: CallProviderOptions): Promise<ProviderResult> 
     const siteUrl = getEnvKey("NEXT_PUBLIC_SITE_URL") || "https://localhost:3000";
     const appTitle = getEnvKey("NEXT_PUBLIC_APP_TITLE") || "AI App";
 
-    // OpenRouter free models:
-    // - Do NOT send response_format (most free models reject it with 400).
-    // - Require HTTP-Referer and X-Title headers for free tier access.
-    // - Are slower and need more retries.
-    return openAICompatible(
-      "openrouter",
+    const { messages: normalized } = normalizeMessages(messages, "openrouter", false);
+    const allMsgs = buildOpenAIMessages(normalized, system);
+
+    if (allMsgs.length === 0 || (allMsgs.length === 1 && allMsgs[0].role === "system"))
+      return { error: "No user messages for OpenRouter.", status: 400 };
+
+    // Clamp max_tokens to model's actual limit to avoid hard 400 errors.
+    // Unknown models default to 4096 (safe conservative value).
+    const safeMaxTokens = getOpenRouterOutputLimit(model, max_tokens);
+
+    console.log(`[openrouter] model=${model} requested_tokens=${max_tokens} safe_tokens=${safeMaxTokens}`);
+
+    const body: Record<string, unknown> = {
+      model,
+      messages: allMsgs,
+      max_tokens: safeMaxTokens,
+      temperature: 0.7,
+      // DO NOT send response_format for OpenRouter — most free models reject it with 400.
+    };
+
+    // Raise retries to 3 for OpenRouter free models which are flaky
+    const r = await fetchWithRetry(
       "https://openrouter.ai/api/v1/chat/completions",
-      key,
       {
-        "HTTP-Referer": siteUrl,
-        "X-Title": appTitle,
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${key}`,
+          "HTTP-Referer": siteUrl,
+          "X-Title": appTitle,
+        },
+        body: JSON.stringify(body),
       },
-      200_000,
-      false // do NOT send response_format for OpenRouter — free models reject it
+      3, // more retries for OpenRouter
+      REQUEST_TIMEOUT_MS
     );
+
+    if (!r.ok) {
+      const err = await parseApiError(r, "OpenRouter");
+      if (err.status === 401) return { error: "OpenRouter: Invalid API key.", status: 401 };
+      if (err.status === 429) return { error: "OpenRouter: Rate limit hit. Try again soon.", status: 429 };
+      if (err.status === 402 || /insufficient.quota|insufficient.balance|credit/i.test(err.message))
+        return { error: "OpenRouter: Insufficient credits.", status: 402 };
+      if (err.status === 413 || /context.length|too long|context_length/i.test(err.message))
+        return { error: "OpenRouter: Message too long. Start a new chat.", status: 413 };
+      if (err.status === 400) {
+        // Surface max_tokens hint to help debug
+        const isTokenErr = /max_tokens|token|output/i.test(err.message);
+        const hint = isTokenErr
+          ? ` (model=${model}, max_tokens sent=${safeMaxTokens})`
+          : "";
+        return { error: `OpenRouter: ${safeErrMsg(err.message)}${hint}`, status: 400 };
+      }
+      return { error: `OpenRouter: ${safeErrMsg(err.message)}`, status: err.status || 500 };
+    }
+
+    interface OpenRouterResponse {
+      choices?: Array<{
+        message?: { content?: string };
+        finish_reason?: string;
+      }>;
+      error?: { message?: string } | string;
+      model?: string;
+    }
+    const d = (await r.json()) as OpenRouterResponse;
+    const choice = d?.choices?.[0];
+    const text = choice?.message?.content?.trim() || "";
+
+    if (!text) {
+      const errDetail = d?.error
+        ? safeErrMsg(typeof d.error === "string" ? d.error : (d.error as { message?: string })?.message)
+        : "Empty response — the model may be loading or unavailable. Try again.";
+      return { error: `OpenRouter: ${errDetail}`, status: 500 };
+    }
+
+    const truncated = choice?.finish_reason === "length";
+    // Report which actual model OpenRouter routed to (may differ from requested)
+    const modelUsed = d?.model || model;
+    return { text, model_used: modelUsed, ...(truncated ? { truncated: true } : {}) };
   }
 
   // ── DEEPSEEK ─────────────────────────────────────────────────────────────────
@@ -1008,8 +1208,8 @@ export async function processAIRequest({
   const model = sanitizeModelName(body.model);
   const system = body.system ? String(body.system).substring(0, MAX_SYSTEM_LEN) : undefined;
 
-  // Raised default from 4000 → 16000 so code generation doesn't silently truncate.
-  // Each provider branch clamps this further to that model's real output ceiling.
+  // Default 16000 — each provider branch clamps to its real ceiling.
+  // For OpenRouter, getOpenRouterOutputLimit() does the per-model clamp.
   const max_tokens = Math.min(Math.max(parseInt(String(body.max_tokens)) || 16_000, 1), 64_000);
   const useJsonFormat = body.response_format?.type === "json_object";
 
@@ -1022,7 +1222,7 @@ export async function processAIRequest({
   if (!Array.isArray(body.messages) || body.messages.length === 0)
     return { status: 400, data: { error: "`messages` must be a non-empty array.", reqId } };
 
-  // Keep the LAST MAX_MESSAGES turns — newest messages are most important.
+  // Keep the LAST MAX_MESSAGES turns — newest messages are most important
   const workingMessages: Message[] = body.messages.slice(-MAX_MESSAGES);
 
   console.log(
