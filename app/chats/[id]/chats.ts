@@ -537,7 +537,7 @@ const MODEL_LIST: ModelEntry[] = [
   { grp: 'Nvidia' },
   { id: 'nvidia/nemotron-3-ultra-550b-a55b:free', prov: 'openrouter', cost: 0, label: 'Nemotron 3 Ultra',   icon: '/images/nvidia.png', badge: 'FREE', inputImages: 'disabled' },
   { grp: 'Qwen' },
-  { id: 'qwen/qwen3-next-80b-a3b-instruct', prov: 'openrouter', cost: 6, label: 'DeepSeek V4',   icon: '/images/qwen.png', badge: 'BEST', inputImages: 'disabled' },
+  { id: 'qwen/qwen3-next-80b-a3b-instruct', prov: 'openrouter', cost: 6, label: 'QWEN3',   icon: '/images/qwen.png', badge: 'BEST', inputImages: 'disabled' },
 ]
 
 function getFreeModel(): ModelEntry {
