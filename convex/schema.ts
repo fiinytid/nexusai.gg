@@ -109,13 +109,17 @@ export default defineSchema({
   // itself just carries ownership + metadata so we can list/filter/delete
   // without touching ctx.storage directly outside storage.ts.
   gifs: defineTable({
-    username:  v.string(),
-    storageId: v.id("_storage"),
-    mime:      v.string(),
-    name:      v.string(),
-    sizeBytes: v.number(),
-    seen:      v.boolean(),
-    createdAt: v.number(),
+    username:      v.string(),
+    storageId:     v.id("_storage"),
+    mime:          v.string(),
+    name:          v.string(),
+    sizeBytes:     v.number(),
+    seen:          v.boolean(),
+    // True once this capture has been pulled into an auto-publish payload.
+    // Set by store.ts markGifSeen (usedInPublish param) and defaulted to
+    // false on insert in insertGifRecord.
+    usedInPublish: v.boolean(),
+    createdAt:     v.number(),
   })
     .index("by_username",         ["username", "createdAt"])
     // ↓ required by store.ts listGifRecords — filters unseen per user

@@ -721,8 +721,16 @@ export const insertGifRecord = internalMutation({
     createdAt: v.number(),
   },
   handler: async (ctx, args) => {
+    // Written as an explicit object literal (not `...args` + extra fields)
+    // so it matches the `gifs` table shape in schema.ts exactly, including
+    // the `usedInPublish` flag that markGifSeen later updates.
     const id = await ctx.db.insert("gifs", {
-      ...args,
+      username:      args.username,
+      storageId:     args.storageId,
+      mime:          args.mime,
+      name:          args.name,
+      sizeBytes:     args.sizeBytes,
+      createdAt:     args.createdAt,
       seen:          false,
       usedInPublish: false,
     });
