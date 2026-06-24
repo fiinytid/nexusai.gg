@@ -13,8 +13,6 @@ interface ConvMsg {
 interface Conv { id: string; title?: string; time?: number; msgs: ConvMsg[]; projectId?: string | null }
 interface AttachItem  { type: string; name: string; mime?: string; data?: string; preview?: string; text?: string }
 
-// A command/action exactly as the NEXUS AI Studio plugin's ActionsManager
-// expects it: { action: "<one of the 24 official actions>", ...params }
 interface ActionCmd { action: string; [key: string]: unknown }
 
 interface StepMeta    { code: string; name: string; parent: string; type: string }
@@ -28,11 +26,6 @@ interface AppState {
   playTestEnabled: boolean; playTestDuration: number
 }
 
-// AI feed entry returned by the Convex backend's `ai_feed` endpoint —
-// see control.ts pushAiFeed() / getAiFeedEntries(). Each entry is a durable,
-// ordered "message to the AI" (read_script reports, output_log captures,
-// runcode results, plugin errors, etc.) that survives independently of
-// chat history, so the AI can react to Studio events even across sessions.
 interface AiFeedEntry {
   id: string
   username: string
@@ -43,10 +36,6 @@ interface AiFeedEntry {
   read: boolean
 }
 
-// ══════════════════════════════════════════════════════════════════════════════
-// PART 1 — SECURITY, CSRF, RATE LIMIT, CORE UTILITIES
-// ══════════════════════════════════════════════════════════════════════════════
-
 const _csrfNonce: string = (function () {
   try {
     return Array.from(crypto.getRandomValues(new Uint8Array(20)))
@@ -54,16 +43,6 @@ const _csrfNonce: string = (function () {
   } catch { return Math.random().toString(36).slice(2) + Date.now().toString(36) }
 })()
 
-// FIX (nonce replay bug): _csrfNonce above is generated exactly ONCE per
-// page session and is fine for one-off requests, but the Convex backend's
-// checkNonceReplay() rejects any nonce it has already seen within a 5-
-// minute window — so reusing _csrfNonce across multiple action dispatches
-// in the same batch (e.g. autoInjectToStudio() sending 2+ actions back to
-// back) caused every action after the first to fail with "Nonce already
-// used (possible replay)". generateFreshNonce() mints a brand-new random
-// value on every call so each individual request to the Convex backend
-// gets its own unique nonce, while _csrfNonce itself remains untouched for
-// any caller that still wants the stable per-session value.
 function generateFreshNonce(): string {
   try {
     return Array.from(crypto.getRandomValues(new Uint8Array(20)))
@@ -203,16 +182,6 @@ function safeMarked(md: string): string {
   } catch { return esc(md) }
 }
 
-// ══════════════════════════════════════════════════════════════════════════════
-// PART 1B — INJECTED UI FIXES
-// ══════════════════════════════════════════════════════════════════════════════
-// page.tsx ships its own <style> block (PAGE_CSS) that we cannot edit
-// directly from here. The fixes below are appended as a SEPARATE stylesheet
-// with higher specificity / !important so they win without touching
-// page.tsx. This covers:
-//   1. Attach <label> vs <button> misalignment in the input bar
-//   2. Model dropdown visual polish (spacing, badges, group headers, shadow)
-//   3. Small steps-card stability tweak (paired with the JS timing fix below)
 function _injectUiFixStyles(): void {
   if (document.getElementById('nx-ui-fix-styles')) return
   const s = document.createElement('style')
@@ -399,10 +368,6 @@ function _injectUiFixStyles(): void {
   document.head.appendChild(s)
 }
 
-// ══════════════════════════════════════════════════════════════════════════════
-// PART 2 — MODELS, CONSTANTS, SESSION
-// ══════════════════════════════════════════════════════════════════════════════
-
 const _docsCache: Record<string, unknown> = {}
 
 async function searchRobloxDocs(query: string, maxResults = 5): Promise<unknown> {
@@ -435,11 +400,6 @@ function _buildDocsContext(docsResult: unknown): string {
 }
 
 // ── AI FEED FETCH ──────────────────────────────────────────────────────────────
-// Pulls unread "messages to the AI" (read_script reports, output_log
-// captures, runcode results, plugin errors, ...) from the Convex backend's
-// durable per-user feed (see control.ts pushAiFeed / GET ?ai_feed=1).
-// Entries are marked read server-side as soon as they're returned, so this
-// is safe to call every time without re-processing the same event twice.
 let _aiFeedInFlight = false
 async function fetchAiFeed(maxResults = 8): Promise<AiFeedEntry[] | null> {
   if (!SESSION || !studioConnected || _aiFeedInFlight) return null
@@ -456,9 +416,6 @@ async function fetchAiFeed(maxResults = 8): Promise<AiFeedEntry[] | null> {
   finally { _aiFeedInFlight = false }
 }
 
-// True when the user's message + recent context suggests the AI feed
-// (Studio-reported events) is actually relevant — avoids spending a round
-// trip on every single "hi" or unrelated question.
 function _shouldCheckAiFeed(txt: string): boolean {
   if (!studioConnected) return false
   if (isPureGreeting(txt)) return false
@@ -574,18 +531,13 @@ const UI = {
 }
 
 // ── MODEL LIST ────────────────────────────────────────────────────────────────
-// `inputImages` marks whether a model's provider/endpoint actually accepts
-// image content blocks. Models with 'disabled' will have the attach button
-// disabled in the UI whenever they're the active model, and any pending
-// image attachments are dropped (with a toast) if the user switches into
-// one of these models while images are queued up.
 const MODEL_LIST: ModelEntry[] = [
   { grp: 'Google' },
   { id: 'gemini-3.5-flash',     prov: 'gemini',     cost: 3,  label: 'Gemini 3.5 Flash',    icon: '/images/gemini.png',   badge: 'FAST', inputImages: 'enabled' },
   { grp: 'Nvidia' },
   { id: 'nvidia/nemotron-3-ultra-550b-a55b:free', prov: 'openrouter', cost: 0, label: 'Nemotron 3 Ultra',   icon: '/images/nvidia.png', badge: 'FREE', inputImages: 'disabled' },
   { grp: 'DeepSeek' },
-  { id: 'deepseek/deepseek-v4-flash', prov: 'openrouter', cost: 15, label: 'DeepSeek V4',   icon: '/images/deepseek.svg', badge: 'BEST', inputImages: 'disabled' },
+  { id: 'deepseek/deepseek-v4-flash', prov: 'openrouter', cost: 6, label: 'DeepSeek V4',   icon: '/images/deepseek.svg', badge: 'BEST', inputImages: 'disabled' },
 ]
 
 function getFreeModel(): ModelEntry {
@@ -604,21 +556,12 @@ function _resolveModel(modelObj: unknown): ModelEntry {
   return found ?? getFreeModel()
 }
 
-// True if the given model entry's provider/endpoint accepts image content
-// blocks. Defaults to enabled for any model that doesn't explicitly set
-// the flag (keeps older/未来 entries working without edits).
 function modelSupportsImages(m: ModelEntry): boolean {
   return m.inputImages !== 'disabled'
 }
 
 const MAX_IMAGE_ATTACHMENTS = 5
 
-// Per-image cost: 0.15x the model's base text cost, rounded to 2 decimals.
-// Free models (cost 0) always cost 0 CR per image — no minimum floor.
-// This is intentionally proportional rather than flat: a premium model
-// (e.g. Gemini 3.1 Pro at 12 CR) costs more per attached image than a
-// cheap one (Gemini 3.1 Flash Lite at 2 CR), matching how much more the
-// underlying request actually costs upstream.
 const IMAGE_COST_MULTIPLIER = 0.15
 function costPerImageForModel(m: ModelEntry): number {
   const base = m.cost || 0
@@ -626,10 +569,6 @@ function costPerImageForModel(m: ModelEntry): number {
   return parseFloat((base * IMAGE_COST_MULTIPLIER).toFixed(2))
 }
 
-// Drops any queued image attachments if the now-active model can't accept
-// them, with a toast so the user isn't left wondering where their images
-// went. Non-image attachments (text files) are unaffected since every
-// model accepts plain text content.
 function _dropUnsupportedImageAttachments(): void {
   if (modelSupportsImages(S.model)) return
   const before = S.attachments.length
@@ -642,8 +581,6 @@ function _dropUnsupportedImageAttachments(): void {
   }
 }
 
-// Reflects current model's image support in the attach button (disabled +
-// tooltip) so the limitation is visible before the user even tries.
 function updateAttachAvailability(): void {
   const lbl = document.getElementById('fi')?.closest('label') as HTMLLabelElement | null
     ?? (document.querySelector('label[for="fi"]') as HTMLLabelElement | null)
@@ -660,13 +597,13 @@ function updateAttachAvailability(): void {
     lbl.setAttribute('aria-disabled', 'true')
     lbl.title = `${S.model.label || S.model.id} doesn't support image input. Attach text files only, or switch model.`
     lbl.style.opacity = '0.4'
-    // Text files are still fine for any model, so we don't fully block
-    // clicking — the file input itself still accepts .lua/.txt/etc. We
-    // just signal reduced capability visually rather than hard-disabling,
-    // since the same input also handles non-image files.
     lbl.style.pointerEvents = ''
   }
 }
+
+// ── AUTO-PUBLISH CONSTANTS ─────────────────────────────────────────────────
+const LS_AUTO_PUBLISH    = 'nexus_auto_publish'   // 'true' | 'false'
+const MAX_GIF_WAIT_MS    = 8000  // maks tunggu GIF dari https://fine-setter-131.convex.site/storage setelah play test
 
 const _defaultModel = { id: 'gemini-3.5-flash', prov: 'gemini', cost: 3, label: 'Gemini 3.5 Flash' }
 
@@ -703,19 +640,6 @@ const S: AppState = {
 // PART 3 — SAVE / LOAD / SYNC, DAILY REWARD, CREDITS, STUDIO POLL
 // ══════════════════════════════════════════════════════════════════════════════
 
-// FIX (Bug 1): previously this sliced mc.content down to 6000 chars with
-// "...slice(0, 6000) + '...'" — for long AI responses containing multiple
-// ```json action blocks (e.g. a full script + GUI + server logic in one
-// reply), that cut frequently landed in the *middle* of a JSON block,
-// corrupting it (e.g. `"action": "creat` cut off mid-word). Once that
-// corrupted content was persisted and later re-rendered or re-sent as
-// context, parseAllCommands() would fail to parse that block and silently
-// drop the action — this is what caused "short actions work, long ones
-// break". The `content` string itself is no longer truncated here.
-// _rawContent is still stripped before storage (it's only needed in
-// memory, for buildApiMsgs() to resend full untouched AI text as
-// conversation history) — that strip is safe because it removes the whole
-// field, not a partial slice of it, so nothing is left corrupted.
 function getStoreConvs(): Conv[] {
   return (S.allConvs || []).slice(-30).map((c) => ({
     ...c,
@@ -758,10 +682,6 @@ async function syncToServer(): Promise<void> {
   _syncInProgress = true
   const ctrl = new AbortController(); const timeoutId = setTimeout(() => ctrl.abort(), 12000)
   try {
-    // FIX (Bug 2): same class of bug as getStoreConvs() — truncating
-    // mc.content to 3000 chars mid-string could (and frequently did, for
-    // long multi-action replies) cut a ```json action block in half before
-    // it was even sent to the server, corrupting the stored history.
     const convsTrimmed = getStoreConvs().slice(-15).map((c) => ({
       ...c,
       msgs: (c.msgs || []).slice(-20),
@@ -811,9 +731,6 @@ function startAutoSync(): void {
 let _dailyClaimTimer: ReturnType<typeof setInterval> | null = null
 function startDailyClaimWatcher(): void {
   if (_dailyClaimTimer) clearInterval(_dailyClaimTimer)
-  // Checked far more often than the 24h window itself so that an app left
-  // open across midnight still claims close to on-time rather than only
-  // catching up the next time the tab is focused/reloaded.
   _dailyClaimTimer = setInterval(() => {
     if (document.hidden) return
     autoClaimDaily()
@@ -903,21 +820,11 @@ async function loadInboxCount(): Promise<void> {
 }
 
 // ── DAILY REWARD ──────────────────────────────────────────────────────────────
-// Auto-claims in the background — no click required. Each full 24h period
-// since the last claim is worth one day's reward, accumulated for up to 7
-// missed days at once (so leaving the app closed for a week doesn't lose
-// anything, but going longer than that caps the catch-up rather than
-// growing unbounded). The cycle resets from the moment of this claim, so
-// if the person comes back after 10 days they get the 7-day cap, then the
-// next cycle starts counting fresh from today.
 const DAILY_MS = 24 * 3600_000
 const MAX_DAILY_CATCHUP_DAYS = 7
 
-// Computes how many whole daily periods have elapsed since last claim,
-// capped at MAX_DAILY_CATCHUP_DAYS. Returns 0 if less than one full day
-// has passed yet (nothing to claim).
 function _daysSinceLastClaim(): number {
-  if (!S.lastClaim) return 1 // never claimed before — first claim is always 1 day's worth
+  if (!S.lastClaim) return 1 
   const elapsedMs = Date.now() - new Date(S.lastClaim).getTime()
   const fullDays = Math.floor(elapsedMs / DAILY_MS)
   return Math.min(fullDays, MAX_DAILY_CATCHUP_DAYS)
@@ -927,9 +834,6 @@ function _perDayReward(): number {
   return S.plan === 'pro' ? 25 : 2
 }
 
-// Silently runs at app init (and can be re-checked any time, e.g. on
-// visibility change) — claims whatever is owed without any UI prompt.
-// Safe to call often: it's a no-op whenever _daysSinceLastClaim() is 0.
 function autoClaimDaily(): void {
   if (isOwner() || isAdmin()) return
   const days = _daysSinceLastClaim()
@@ -947,12 +851,6 @@ function autoClaimDaily(): void {
   checkDailyOnLoad()
 }
 
-// Reflects current claim status in the Settings panel. Since claiming is
-// now automatic, the button mostly serves as a visible confirmation /
-// manual nudge for the rare case the background claim hasn't run yet in
-// this session (e.g. right after opening Settings before the next
-// scheduled check) — clicking it runs the exact same logic as the
-// automatic path rather than a separate "manual only" reward.
 function checkDailyOnLoad(): void {
   if (isOwner() || isAdmin()) return
   const ce = document.getElementById('lastClaimInfo'), cb = document.getElementById('claimDailyBtn') as HTMLButtonElement | null
@@ -1120,10 +1018,6 @@ async function checkStudio(): Promise<void> {
 
 async function retryStudio(): Promise<void> { _pollFailCount = 0; toast(UI.reconnectToast); await checkStudio() }
 
-// ══════════════════════════════════════════════════════════════════════════════
-// PART 4 — ACTION PARSING (24 official NEXUS AI Studio plugin actions)
-// ══════════════════════════════════════════════════════════════════════════════
-
 const NEXUS_ACTIONS = [
   'create_instance', 'create_script', 'edit_script', 'read_script',
   'set_properties', 'rename', 'delete', 'parent', 'list',
@@ -1254,16 +1148,6 @@ function parseAllCommands(text: string): ActionCmd[] {
 }
 
 // ── AI CLARIFICATION QUESTIONS ───────────────────────────────────────────────
-// Lets the AI ask the person to pick from a short list of options instead
-// of guessing or writing a paragraph of "did you mean A or B?" — mirrors
-// the button-choice pattern used elsewhere in this app's own UI. The AI
-// emits a fenced ```clarify block containing either a single question:
-//   {"question": "...", "options": ["A", "B", "C"]}
-// or several in one block:
-//   {"questions": [{"question": "...", "options": [...]}, ...]}
-// `chats.ts` renders these as clickable buttons; clicking one sends that
-// option's text as the next user message automatically, the same way
-// suggestion chips already work.
 interface ClarifyQuestion { question: string; options: string[] }
 
 function _normalizeClarifyQuestion(obj: unknown): ClarifyQuestion | null {
@@ -1275,14 +1159,11 @@ function _normalizeClarifyQuestion(obj: unknown): ClarifyQuestion | null {
   const options = rawOptions
     .map((x) => (typeof x === 'string' ? x.trim() : String(x ?? '').trim()))
     .filter((x) => x.length > 0)
-    .slice(0, 6) // sane upper bound — this is a button row, not a menu
-  if (options.length < 2) return null // need at least 2 choices for buttons to make sense
+    .slice(0, 6) 
+  if (options.length < 2) return null 
   return { question, options }
 }
 
-// Parses every ```clarify fenced block in the AI's reply. Tolerant of the
-// same kind of minor JSON sloppiness _tryParseJson() already handles for
-// action blocks (unquoted keys, trailing commas, single quotes, etc).
 function parseClarifyBlocks(text: string): ClarifyQuestion[] {
   const out: ClarifyQuestion[] = []
   const re = /```(?:clarify|Clarify|CLARIFY)\s*\n?([\s\S]*?)```/g
@@ -1300,7 +1181,7 @@ function parseClarifyBlocks(text: string): ClarifyQuestion[] {
       if (norm) out.push(norm)
     }
   }
-  return out.slice(0, 3) // cap how many clarification prompts render per message
+  return out.slice(0, 3) 
 }
 
 function makeStepLabel(cmd: ActionCmd): string | null {
@@ -1336,10 +1217,6 @@ function makeStepLabel(cmd: ActionCmd): string | null {
   }
 }
 
-// ══════════════════════════════════════════════════════════════════════════════
-// PART 5 — FETCH HELPERS + AUTO INJECT PIPELINE
-// ══════════════════════════════════════════════════════════════════════════════
-
 function _isNexusBackendUrl(url: string): boolean {
   return NEXUS_API_URLS.some((base) => base && url.startsWith(base))
 }
@@ -1350,10 +1227,6 @@ async function fetchRetry(url: string, opts: RequestInit, tries = 3): Promise<Re
   if (headers && isNexus && (isAdmin() || isOwner())) headers['X-Admin-Token'] = _adminToken || generateAdminToken()
   for (let i = 0; i < tries; i++) {
     try {
-      // FIX: a fresh nonce per attempt (not just per call) — generating it
-      // once outside this loop meant a retried attempt reused the same
-      // nonce as the failed first attempt, which the backend's replay
-      // guard would itself reject as a duplicate.
       if (headers && isNexus) headers['X-Nexus-Nonce'] = generateFreshNonce()
       const ctrl = new AbortController(); const tid = setTimeout(() => ctrl.abort(), 12000)
       const r = await fetch(url, { ...opts, signal: ctrl.signal }); clearTimeout(tid)
@@ -1375,9 +1248,6 @@ async function safeFetch(bodyData: Record<string, unknown>, signal?: AbortSignal
     let bd = bodyData
     if (bd.command && typeof (bd.command as Record<string, unknown>).source === 'string' && ((bd.command as Record<string, unknown>).source as string).length > 80000)
       bd = { ...bd, command: { ...(bd.command as Record<string, unknown>), source: ((bd.command as Record<string, unknown>).source as string).slice(0, 80000) + '\n-- [TRUNCATED]' } }
-    // FIX: a fresh nonce per request — see generateFreshNonce() above for
-    // why reusing _csrfNonce here broke every action after the first one
-    // in a multi-action batch.
     const opts: RequestInit = { method: 'POST', headers: { 'Content-Type': 'application/json', 'X-Nexus-Nonce': generateFreshNonce() }, body: JSON.stringify(bd) }
     if (signal && !signal.aborted) opts.signal = signal
     return await fetch(API_URL + '/', opts)
@@ -1405,31 +1275,6 @@ async function _injectCommand(cmdToSend: ActionCmd, user: string, signal?: Abort
   return { ok: false, error: rd.error ? rd.error.slice(0, 120) : ('HTTP ' + r.status) }
 }
 
-// Fetches the most recent read_script report snapshot from the server.
-// FIX (root cause of "AI says check Explorer instead of showing source"):
-// dispatch_command (used by _injectCommand) only enqueues the action for
-// the Studio plugin to pick up on its next poll — it does NOT wait for the
-// plugin to actually execute it and return the script source synchronously.
-// The real result (source code) only shows up later, when the plugin
-// reports it back via the separate "read_script" report endpoint in
-// control.ts, which control.ts saves via saveData() under the "read_script"
-// key. Previously, read_script (along with list/get_output/resolve_mention)
-// was treated purely as an "info" step with no summary entry, so after a
-// short delay autoInjectToStudio() returned an empty summary — and send()
-// then fell back to the generic "Done. Check Explorer in Studio." message,
-// even though the actual script source was sitting right there on the
-// server the whole time. This fetches that snapshot directly.
-// FIX (root cause of "read_script works but source is empty"): this used
-// to be a single fetch taken ~800ms after the action was dispatched. But
-// dispatch only enqueues the action — the Studio plugin picks it up on its
-// own poll cycle (every ~3s per the plugin's Activity Log), executes it,
-// and only THEN reports the result back to the server via a separate
-// request. 800ms is nowhere near enough time for that full round trip, so
-// the fetch was almost always landing before the real report arrived and
-// reading back the server's empty placeholder ({name:"", source:"", ...})
-// instead. This now polls the snapshot endpoint repeatedly (every 700ms,
-// up to ~6s total) until a report matching the requested script name
-// actually shows up, or the deadline passes.
 async function fetchReadScriptResult(scriptName: string, maxWaitMs = 6000): Promise<{ name: string; source: string; class: string; lineCount: number } | null> {
   if (!SESSION) return null
   const user = (SESSION.user.username || '').toLowerCase()
@@ -1443,10 +1288,6 @@ async function fetchReadScriptResult(scriptName: string, maxWaitMs = 6000): Prom
       clearTimeout(tid)
       if (r.ok) {
         const d = await r.json() as { name?: string; source?: string; class?: string; lineCount?: number; ts?: number }
-        // A real report has a non-empty name (the empty-default placeholder
-        // from the server always has name === ""). Also guard against a
-        // stale snapshot from a different, unrelated earlier read_script
-        // call by requiring the name to match what we actually asked for.
         if (d?.name && (!scriptName || d.name.toLowerCase() === scriptName.toLowerCase())) {
           return { name: d.name, source: d.source || '', class: d.class || 'Script', lineCount: d.lineCount || 0 }
         }
@@ -1460,6 +1301,85 @@ async function fetchReadScriptResult(scriptName: string, maxWaitMs = 6000): Prom
 interface InjectResult {
   summary: string[] | null
   readResults: { name: string; source: string; class: string; lineCount: number }[]
+}
+
+// ── AUTO-PUBLISH AFTER PLAY TEST ─────────────────────────────────────────
+async function _tryAutoPublish(lastPrompt: string): Promise<void> {
+  if (!SESSION) return
+  // Cek flag di localStorage
+  try {
+    if (localStorage.getItem(LS_AUTO_PUBLISH) !== 'true') return
+  } catch { return }
+
+  const user = (SESSION.user.username || '').toLowerCase()
+  if (!user || !lastPrompt || lastPrompt.trim().length < 5) return
+
+  try {
+    // 1. Ambil GIF terbaru dari https://fine-setter-131.convex.site/storage (hasil capture play test Studio)
+    //    Tunggu sebentar dulu agar plugin sempat upload GIF-nya
+    await _sleep(2500)
+
+    let gifUrl: string | null = null
+    const deadline = Date.now() + MAX_GIF_WAIT_MS
+    while (Date.now() < deadline) {
+      try {
+        const ctrl = new AbortController()
+        const tid  = setTimeout(() => ctrl.abort(), 5000)
+        const r    = await fetch(
+          `https://fine-setter-131.convex.site/storage?user=${encodeURIComponent(user)}&limit=1`,
+          { signal: ctrl.signal }
+        )
+        clearTimeout(tid)
+        if (r.ok) {
+          const d = await r.json() as { gifs?: { url?: string; createdAt?: number }[] }
+          const latest = d?.gifs?.[0]
+          // Hanya pakai GIF yang diupload dalam 3 menit terakhir
+          if (latest?.url && Date.now() - (latest.createdAt || 0) < 3 * 60_000) {
+            gifUrl = latest.url
+            break
+          }
+        }
+      } catch { /* network hiccup, coba lagi */ }
+      await _sleep(1000)
+    }
+
+    // 2. Publish ke /api/explore
+    const title   = lastPrompt.trim().slice(0, 80)
+    const content = lastPrompt.trim()
+
+    const ctrl2 = new AbortController()
+    const tid2  = setTimeout(() => ctrl2.abort(), 10000)
+    const resp  = await fetch('/api/explore', {
+      method:  'POST',
+      headers: { 'Content-Type': 'application/json' },
+      signal:  ctrl2.signal,
+      body: JSON.stringify({
+        user,
+        robloxId: SESSION.user.robloxId || '',
+        title,
+        content,
+        gifUrl,
+        auto: true,   // flag agar backend tahu ini auto-publish (rate limit lebih longgar)
+      }),
+    })
+    clearTimeout(tid2)
+
+    if (resp.ok) {
+      const d = await resp.json() as { success?: boolean; prompt?: Record<string, unknown> }
+      if (d.success) {
+        toast('Prompt published to Explore!', 'var(--green)', 4000)
+        // Dispatch event agar halaman explore bisa update live (jika terbuka di tab yg sama)
+        try {
+          window.dispatchEvent(
+            new CustomEvent('nexus:prompt-published', { detail: d.prompt })
+          )
+        } catch { /* CustomEvent tidak tersedia di semua env */ }
+      }
+    }
+  } catch (e) {
+    // Non-critical — jangan sampai error di sini break alur chat utama
+    console.warn('[NEXUS auto-publish] failed (non-fatal):', (e as Error)?.message || e)
+  }
 }
 
 async function autoInjectToStudio(aiResponse: string, _userPrompt: string): Promise<InjectResult> {
@@ -1494,16 +1414,6 @@ async function autoInjectToStudio(aiResponse: string, _userPrompt: string): Prom
     updateStep(step.sid, 'running'); await _sleep(120)
 
     const cmd = step.cmd, a = cmd.action || ''
-    // Strictly sequential by construction: this is a plain for-loop with
-    // _injectCommand awaited on every iteration before moving to the next
-    // step — there is no Promise.all/concurrent dispatch here, so action N
-    // is never sent until action N-1's response has actually been
-    // received. The delays below are what happens AFTER that response
-    // comes back and BEFORE the next action is sent, since Studio itself
-    // needs a moment to actually finish applying the change (e.g. an
-    // instance to actually exist in the DataModel) — a fast "queued OK"
-    // response from the relay server doesn't mean Studio has finished
-    // processing it yet.
     const res = await _injectCommand(cmd, user, sig)
 
     if (res.ok) {
@@ -1512,17 +1422,6 @@ async function autoInjectToStudio(aiResponse: string, _userPrompt: string): Prom
       } else if (a === 'stop_test') {
         updateStep(step.sid, 'done'); _playTestActive = false
       } else if (a === 'read_script') {
-        // FIX: actually retrieve and surface the script source instead of
-        // just marking this step "info" and moving on — see
-        // fetchReadScriptResult() above for why a generic "sent to
-        // Studio" message was showing instead of the real content.
-        // NOTE: the result is NOT pushed into `summary` — studioSummary
-        // entries render as flat, escaped, single-line list items (see
-        // appendMsg()'s renderSumItems()), which would mangle multi-line
-        // Lua source. Instead it's collected into readResults below and
-        // returned separately so send() can append it to the main
-        // message body, where the existing markdown/code-block pipeline
-        // renders it correctly.
         updateStep(step.sid, 'info', undefined, 'Waiting for Studio to report the script...')
         const scriptName = String(cmd.name || cmd.target || '')
         const readResult = await fetchReadScriptResult(scriptName)
@@ -1533,21 +1432,10 @@ async function autoInjectToStudio(aiResponse: string, _userPrompt: string): Prom
           updateStep(step.sid, 'info', undefined, 'Source not available yet — check Explorer in Studio.')
         }
       } else if (a === 'list' || a === 'get_output' || a === 'resolve_mention') {
-        // FIX: read-type actions — was 300ms, now ~800ms. A read issued
-        // right after a create/edit in the same batch (e.g. create_script
-        // then immediately read_script to verify it) was frequently
-        // landing before Studio had actually finished writing the new
-        // instance into the DataModel, surfacing as a false "not found".
         updateStep(step.sid, 'info'); await _sleep(800)
       } else {
         updateStep(step.sid, 'done')
         const lbl2 = makeStepLabel(cmd); if (lbl2) summary.push(lbl2)
-        // FIX: write/create-type actions — these mutate the DataModel and
-        // need real time to settle before whatever comes next (often a
-        // read, reparent, or another create that depends on this one)
-        // is safe to send. Was 750ms for create_instance/create_script/
-        // RunCode/run_code; bumped to 1200-1500ms per the reported
-        // "read right after create fails intermittently" symptom.
         let postDelay = 400
         if (a === 'create_script' || a === 'RunCode' || a === 'run_code') postDelay = 1500
         else if (a === 'create_instance' || a === 'edit_script') postDelay = 1200
@@ -1560,6 +1448,15 @@ async function autoInjectToStudio(aiResponse: string, _userPrompt: string): Prom
     }
 
     doneCount++; if (cntEl) cntEl.textContent = '(' + doneCount + '/' + planSteps.length + ')'
+  }
+
+  // ── AUTO-PUBLISH setelah play test ────────────────────────────────────
+  // Dipanggil hanya jika ada play_test/run_test di antara command yang dijalankan
+  // dan flag nexus_auto_publish aktif.
+  const _hadPlayTest = cmds.some((c) => c.action === 'play_test' || c.action === 'run_test')
+  if (_hadPlayTest) {
+    // Tidak perlu await — biarkan jalan di background agar tidak delay respons chat
+    _tryAutoPublish(_userPrompt).catch(() => { /* sudah di-handle di dalam fungsi */ })
   }
 
   return { summary: summary.length > 0 ? summary : null, readResults }
@@ -1585,10 +1482,6 @@ function detectType(txt: string): string {
   if (/test|play|run/i.test(txt)) return 'test'
   return 'normal'
 }
-
-// ══════════════════════════════════════════════════════════════════════════════
-// PART 6 — SEND FUNCTION
-// ══════════════════════════════════════════════════════════════════════════════
 
 function _resetGenState(): void {
   if (S.cancelCtrl) { try { S.cancelCtrl.abort() } catch { } S.cancelCtrl = null }
@@ -1649,49 +1542,23 @@ function _truncateMsgsForApi(msgs: { role: string; content: string | unknown[] }
 }
 
 // ── RAW LUA INPUT HANDLING ───────────────────────────────────────────────────
-// Detects when the person pasted a raw Lua/Luau script directly into the
-// chat box (no ```lua fence) so we can:
-//   1. Make it render properly (syntax-highlighted code block) instead of
-//      as a wall of plain text in the bubble.
-//   2. Keep it from silently inflating every future request's cost — long
-//      pasted scripts that stay inline as plain message text get resent in
-//      full every time buildApiMsgs() replays the last 28 messages as
-//      context, even on turns that have nothing to do with that script.
-//      Converting it into a file attachment fixes this for free: this
-//      codebase's buildApiMsgs() already only includes attachments on the
-//      *current* outgoing message (see the `lastM.content = ca` line in
-//      send()), never on replayed history, so a script attached this way
-//      is sent once and never dragged along again afterward.
 const LUA_PATTERN_RE = /\b(local\s+\w+\s*=|function\s+\w*\s*\(|game:GetService\(|:Connect\(|:WaitForChild\(|workspace\.|script\.Parent|end\s*$)/m
 const LUA_KEYWORD_RE = /\b(local|function|elseif|then|end|repeat|until|nil)\b/g
 
-// Heuristic only — good enough to catch "someone pasted real code" without
-// false-positives on ordinary English sentences that happen to contain a
-// word like "function" or "local" once or twice.
 function looksLikeRawLua(txt: string): boolean {
   if (!txt || txt.length < 20) return false
-  if (/```/.test(txt)) return false // already fenced, nothing to do
+  if (/```/.test(txt)) return false 
   const keywordHits = (txt.match(LUA_KEYWORD_RE) || []).length
   const hasStructuralPattern = LUA_PATTERN_RE.test(txt)
-  // Require both a structural Lua pattern AND a reasonable density of Lua
-  // keywords — avoids matching short natural-language requests that merely
-  // mention "make a local script" without containing actual code.
   return hasStructuralPattern && keywordHits >= 3
 }
 
-// Below this size, wrapping it as ```lua...``` inline is harmless — it's
-// small enough that resending it a few more times as the conversation
-// continues costs nothing meaningful in tokens/credits.
 const RAW_LUA_INLINE_WRAP_THRESHOLD = 150
 
 function countLines(s: string): number {
   return s.split('\n').length
 }
 
-// Returns the (possibly modified) message text and an optional extra file
-// attachment, applying the rule above: short raw Lua just gets fenced
-// inline, long raw Lua gets pulled out into a .lua file attachment so it
-// isn't dragged into every subsequent request's context.
 function processRawLuaInput(txt: string, existingAttachmentCount: number): { text: string; extraAttachment: AttachItem | null } {
   if (!looksLikeRawLua(txt)) return { text: txt, extraAttachment: null }
 
@@ -1699,13 +1566,6 @@ function processRawLuaInput(txt: string, existingAttachmentCount: number): { tex
     return { text: '```lua\n' + txt + '\n```', extraAttachment: null }
   }
 
-  // Long raw script: pull it out into an attachment instead of inlining it.
-  // If the person also typed an instruction either before/after the code
-  // (rare for a pure paste, but possible), we have no reliable way to
-  // separate "instruction" from "code" in a single blob, so the whole
-  // pasted text becomes the attachment and the visible message becomes a
-  // short marker — the AI still receives the full script via the
-  // attachment on this turn, just not the wall of text in the bubble.
   const lines = countLines(txt)
   const fileName = `pasted_script_${Date.now().toString(36)}.lua`
   const extraAttachment: AttachItem = { type: 'file', name: fileName, text: txt }
@@ -1722,20 +1582,12 @@ async function _sendInner(): Promise<void> {
   if (!txt && !attachments.length) return
   if (!checkClientRateLimit('send', 20)) return
 
-  // Detect a raw (unfenced) Lua/Luau paste and either wrap it inline
-  // (short) or pull it into a one-off file attachment (long) — see
-  // processRawLuaInput() above for why this keeps long pastes from
-  // inflating the cost of every future turn in the conversation.
   if (txt) {
     const { text: processedTxt, extraAttachment } = processRawLuaInput(txt, attachments.length)
     txt = processedTxt
     if (extraAttachment) attachments.push(extraAttachment)
   }
 
-  // Defense-in-depth: handleFile/paste already prevent queuing images for
-  // a model that doesn't support them, but if the user queued images then
-  // switched models through some other path, block here rather than
-  // silently sending image blocks a provider will reject.
   const imageCount = attachments.filter((a) => a.type === 'image').length
   if (imageCount > 0 && !modelSupportsImages(S.model)) {
     toast(`${S.model.label || S.model.id} doesn't support image input. Remove the image(s) or switch model.`, 'var(--pink)', 3800)
@@ -1771,16 +1623,6 @@ async function _sendInner(): Promise<void> {
   const showThinking = !isPureGreeting(txt)
 
   // ── THINKING CARD ────────────────────────────────────────────────────────
-  // FIX (flicker bug): the steps card is created once here and is only ever
-  // removed in exactly two places for the success path: right before
-  // appendMsg(aiMsg) at the very end, or inside one of the early-return
-  // branches below. There is no longer any intermediate
-  // "finalizeSteps(); await _sleep(...); removeStepsCard()" pattern with a
-  // gap before the bubble is appended — that gap was the empty/flicker
-  // window users were seeing between "thinking disappears" and "AI message
-  // appears". Now finalizeSteps() (success checkmark sweep) and
-  // removeStepsCard() + appendMsg() happen back-to-back with no awaits
-  // between them.
   if (showThinking) {
     createStepsCard(); const rtype = detectType(txt)
     if (rtype === 'debug') { addStep(UI.readingScript, 'running'); await _sleep(500); updateStep(1, 'done'); addStep(UI.analyzingError, 'running'); await _sleep(350); updateStep(2, 'done'); addStep(UI.designingFix, 'running') }
@@ -1793,11 +1635,6 @@ async function _sendInner(): Promise<void> {
   if (!S.gen || S.cancelCtrl?.signal.aborted) { _resetGenState(); return }
 
   // ── AI FEED CHECK ────────────────────────────────────────────────────────
-  // Pulls unread Studio-reported events (read_script results, output_log
-  // captures, runcode results, plugin errors) from the durable Convex feed
-  // and folds them into the system prompt as extra context — but only when
-  // it's actually likely to matter (Studio connected + relevant message),
-  // so a plain "hi" doesn't spend a round trip on this.
   let aiFeedCtx = ''
   if (_shouldCheckAiFeed(txt)) {
     const feedStep = showThinking ? addStep(UI.checkingFeed, 'running') : null
@@ -1833,14 +1670,6 @@ async function _sendInner(): Promise<void> {
       if (a.type === 'image') {
         ca.push({ type: 'image', source: { type: 'base64', media_type: a.mime, data: a.data } })
       } else if (a.type === 'file' && a.text) {
-        // FIX: file attachments (manual .lua/.txt uploads, and the new
-        // auto-extracted long Lua pastes from processRawLuaInput()) were
-        // previously rendered in the UI but never actually included in
-        // the outgoing API payload — only images were appended above.
-        // The AI was receiving an attach row it could see in chat history
-        // but never the actual file content. Each file's text is appended
-        // as its own clearly-labeled text block so the model can tell
-        // multiple attached files apart.
         ca.push({ type: 'text', text: `--- Attached file: ${a.name} ---\n${a.text}` })
       }
     })
@@ -1861,11 +1690,6 @@ async function _sendInner(): Promise<void> {
   const hasError = aiText && (aiText.startsWith('**Failed') || aiText.startsWith('**Error'))
 
   // ── CREDIT DEDUCTION (server-authoritative) ─────────────────────────
-  // Total cost = base model cost (skipped/min'd for pure greetings) +
-  // extra per additional action beyond the first + per-image surcharge
-  // (proportional to the model's base cost — see costPerImageForModel()).
-  // Credits can be fractional (e.g. "3.45 CR"), matching the server side
-  // which already stores/returns credits as a float.
   if (!isOwner() && !isAdmin() && aiText && !hasError) {
     const _baseCost = S.model.cost || 0
     const _imageCost = imageCount * costPerImageForModel(S.model)
@@ -1889,15 +1713,6 @@ async function _sendInner(): Promise<void> {
       if (!S.gen || _localCancelSignal?.aborted) { _resetGenState(); const cancelMsg: ConvMsg = { role: 'ai', content: 'Process cancelled.', time: Date.now() }; cv.msgs.push(cancelMsg); appendMsg(cancelMsg); saveS(); return }
 
       displayText = stripAllCode(aiText)
-      // FIX (root cause of the reported bug): previously, when the only
-      // action was read_script (or read_script alongside other actions
-      // that don't add a build-summary entry), studioSummary came back
-      // empty/null and the fallback text "Done. Check Explorer in
-      // Studio." was shown — even though the actual script source was
-      // already sitting on the server. Now any fetched read results are
-      // rendered as proper ```lua code blocks appended to the message
-      // body, where the existing markdown pipeline displays them
-      // correctly, regardless of whether any other build actions ran.
       if (injectResult.readResults.length > 0) {
         const readBlocks = injectResult.readResults.map((r) =>
           `**${r.name}** (${r.class}, ${r.lineCount} line${r.lineCount === 1 ? '' : 's'}):\n\`\`\`lua\n${r.source}\n\`\`\``
@@ -1910,11 +1725,7 @@ async function _sendInner(): Promise<void> {
           : 'Done. Check Explorer in Studio.'
       }
     } else {
-      // Studio is connected but this reply legitimately has no actions to
-      // run (e.g. the AI is just answering a question) — display it as a
-      // normal message with no extra annotation. Finalize + remove the
-      // card and append the message immediately afterward, with no
-      // awaited gap between them (keeps the no-flicker behavior).
+ 
       if (showThinking) finalizeSteps()
       displayText = cleanAIResponse(aiText)
       const aiMsg0: ConvMsg & { _rawContent: string } = { role: 'ai', content: displayText, time: Date.now(), _rawContent: aiText }
@@ -1930,29 +1741,10 @@ async function _sendInner(): Promise<void> {
   cv = S.convs.find((x) => x.id === S.curConv); if (!cv) { removeStepsCard(); _resetGenState(); saveS(); return }
   const aiMsg: ConvMsg & { _rawContent: string; studioSummary?: string[] } = { role: 'ai', content: displayText, time: Date.now(), _rawContent: aiText }
   if (studioSummary) aiMsg.studioSummary = studioSummary
-  // Remove the steps card and append the real message back-to-back — this
-  // is the core of the flicker fix: there is no "removeStepsCard() ...
-  // (gap) ... appendMsg()" anymore. Whatever delay existed (network,
-  // injection) already happened *before* this point, while the steps card
-  // was still visibly progressing.
   removeStepsCard()
   cv.msgs.push(aiMsg); appendMsg(aiMsg); _resetGenState(); saveS()
 }
 
-// FIX (root cause of "thinking disappears / no response at all"): the
-// entire body above had no top-level error handling. If literally
-// anything unexpected threw — a network failure that slipped past
-// callAiApi()'s own retry logic, a null conversation reference after a
-// race with newChat()/loadConv(), an exception inside buildSysPrompt(),
-// etc. — the exception became an unhandled promise rejection: S.gen
-// stayed stuck at true forever (so "if (S.gen) return" silently blocked
-// every future send attempt), any thinking card already on screen was
-// never removed, and the person was left looking at a chat that simply
-// stopped responding with no visible error at all. This wrapper guarantees
-// that no matter what fails inside _sendInner(), the UI always recovers:
-// generation state is reset, the steps card is cleaned up, and a visible
-// error message is appended to the conversation so the person knows what
-// happened and can retry.
 async function send(): Promise<void> {
   try {
     await _sendInner()
@@ -1973,10 +1765,6 @@ async function send(): Promise<void> {
     }
   }
 }
-
-// ══════════════════════════════════════════════════════════════════════════════
-// PART 7 — CONVERSATIONS, RENDER MESSAGES, STEPS CARD, MENTION, MODEL UI
-// ══════════════════════════════════════════════════════════════════════════════
 
 function renderSuggestions(): void {
   const grid = document.getElementById('suggGrid'); if (!grid) return
@@ -2085,10 +1873,6 @@ function updateModelUI(): void {
 }
 
 // ── MODEL DROPDOWN — REDESIGNED MARKUP ────────────────────────────────────────
-// Cleaner structure: explicit per-row layout, badge classes mapped to the
-// `.mb-badge` rules injected in _injectUiFixStyles() above (f = free,
-// p = premium/best, s = standard/fast). Group headers get a small icon-less
-// divider rhythm via CSS only — markup just needs the right classes/text.
 function buildMDDHtml(): string {
   const curId = S.model.id; let html = ''
   MODEL_LIST.forEach((m) => {
@@ -2134,15 +1918,6 @@ function _injectSuggChipStyles(): void {
   document.head.appendChild(s)
 }
 
-// Renders one block of buttons per clarification question the AI asked.
-// Clicking a button immediately sends that option's text as if the
-// person had typed and submitted it — same one-click "answer and go"
-// pattern as suggestion chips, but visually distinguished (question
-// label + button group) so it reads as "the AI is waiting on you" rather
-// than "here's an idea you could try". A free-text "other" field sits
-// below the buttons for whenever none of the offered options match what
-// the person actually wants — they can type their own answer and submit
-// it the same way, without being boxed into the AI's suggested choices.
 function renderClarifyButtons(bubble: HTMLElement, questions: ClarifyQuestion[]): void {
   questions.forEach((q) => {
     const block = document.createElement('div'); block.className = 'clarify-block'
@@ -2150,9 +1925,6 @@ function renderClarifyButtons(bubble: HTMLElement, questions: ClarifyQuestion[])
     block.appendChild(qEl)
     const row = document.createElement('div'); row.className = 'clarify-options'
 
-    // Disables every button + the "other" field/submit for this question
-    // once any one path has been used to answer, so clicking a button
-    // and then also submitting free text (or vice versa) can't both fire.
     const lockQuestion = () => {
       row.querySelectorAll('.clarify-btn').forEach((b) => { (b as HTMLButtonElement).disabled = true })
       const oi = otherInput as HTMLInputElement | null; if (oi) oi.disabled = true
@@ -2482,10 +2254,6 @@ function selectCurrentMention(): boolean {
   const sel = list.querySelectorAll('.mention-item')[_mentionSelIdx] as HTMLElement | undefined
   if (!sel) return false; sel.click(); return true
 }
-
-// ══════════════════════════════════════════════════════════════════════════════
-// PART 8 — FILE HANDLING, UI ACTIONS, INIT, EVENTS
-// ══════════════════════════════════════════════════════════════════════════════
 
 function handleFile(e: Event): void {
   const files = Array.from((e.target as HTMLInputElement).files || [])

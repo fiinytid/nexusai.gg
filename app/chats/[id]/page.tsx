@@ -4,17 +4,20 @@ import React, { useEffect, useRef } from 'react'
 import Script from 'next/script'
 
 /* ─────────────────────────────────────────────────────────────────────────────
-   CSS — NEXUS AI · v13
-   Fixes in this version:
-   1. BETA badge in sidebar header (next to "NEXUS AI" brand text)
-   2. Attach <label> & buttons all use same base style — no more misalignment
-   3. Model dropdown fully redesigned: better spacing, badges, group headers
-   4. Thinking/steps card — z-index & timing fix so it never disappears early
-   5. All text English — Language picker removed (English only, no toggle)
-   6. Safe area insets for notch devices
-   7. No backdrop-filter/blur (mobile GPU fix)
-   8. Full responsive pass: phone, small phone, tablet, landscape — every
-      interactive control kept at a real, comfortable tap target size
+   CSS — NEXUS AI · v14
+   Changes in this version:
+   1. Storage endpoint: https://fine-setter-131.convex.site/storage
+   2. Responsive overhaul — phone (≤768), small phone (≤480), tiny (≤360),
+      tablet portrait (769–1024), tablet landscape, landscape phone
+   3. Sidebar overlay: smoother cubic-bezier slide, backdrop blur on mobile
+   4. Input bar: larger tap targets on all touch breakpoints (min 44 px)
+   5. Message bubbles: better max-width scaling on ultra-narrow viewports
+   6. Modal: max-height + overflow-y so tall modals stay scrollable on phone
+   7. Welcome grid: single-column on ≤480, 2-col on 481–768, original above
+   8. Code preview modal: 100% wide on mobile, scrollable pre block
+   9. Steps card: always visible; cancel button always reachable on mobile
+  10. Safe-area insets applied everywhere (notch / home-bar devices)
+  11. coarse-pointer safety net expanded to ALL interactive controls
 ─────────────────────────────────────────────────────────────────────────────── */
 const PAGE_CSS = `
 /* ══════════════════════════════════════════════
@@ -123,8 +126,10 @@ body::before {
 
 #sbOverlay {
   display: none; position: fixed; inset: 0;
-  background: rgba(0, 0, 0, 0.72); z-index: 90;
-  opacity: 0; transition: opacity .25s ease; will-change: opacity;
+  background: rgba(0, 0, 0, 0.76); z-index: 90;
+  opacity: 0; transition: opacity .28s ease;
+  will-change: opacity;
+  -webkit-tap-highlight-color: transparent;
 }
 #sbOverlay.show { display: block; opacity: 1; }
 
@@ -141,7 +146,6 @@ body::before {
   -webkit-overflow-scrolling: touch;
 }
 
-/* ── Sidebar header: logo + brand name + BETA badge ── */
 .sb-head {
   padding: 11px 14px 10px; border-bottom: 1px solid var(--b);
   display: flex; align-items: center; gap: 9px;
@@ -156,7 +160,6 @@ body::before {
   -webkit-background-clip: text; -webkit-text-fill-color: transparent; background-clip: text;
   display: flex; align-items: center; gap: 6px;
 }
-/* BETA badge — sits inline next to "NEXUS AI" text in sidebar */
 .sb-beta-badge {
   display: inline-flex; align-items: center; justify-content: center;
   padding: 0 5px; height: 14px; border-radius: 6px;
@@ -192,6 +195,18 @@ body::before {
 }
 .sb-gear:hover { color: var(--cyan); border-color: var(--b); background: var(--hover); }
 .sb-gear svg { width: 15px; height: 15px; stroke: currentColor; fill: none; stroke-width: 2; }
+
+/* Project chip in sidebar */
+.sb-proj-chip {
+  display: none; margin: 0 12px 4px;
+  align-items: center; gap: 5px;
+  padding: 4px 9px; border-radius: 6px;
+  background: rgba(255,170,50,.06); border: 1px solid rgba(255,170,50,.18);
+  font-size: var(--fs-2xs); color: rgba(255,170,50,.8);
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+}
+.sb-proj-chip.show { display: flex; }
+.sb-proj-chip-dot { width: 5px; height: 5px; border-radius: 50%; background: rgba(255,170,50,.7); flex-shrink: 0; }
 
 .creds {
   margin: 8px 12px 2px; padding: 8px 12px; border-radius: var(--r);
@@ -287,12 +302,12 @@ body::before {
   padding-right: calc(14px + var(--safe-right));
 }
 .plug-banner svg { width: 11px; height: 11px; stroke: currentColor; fill: none; stroke-width: 2; flex-shrink: 0; }
-.plug-banner a   { color: var(--cyan); cursor: pointer; text-decoration: none; }
+.plug-banner a   { color: var(--cyan); cursor: pointer; text-decoration: none; white-space: nowrap; }
 .plug-banner.connected { background: rgba(0,255,170,.05); border-color: rgba(0,255,170,.2); color: var(--green); }
 
 
 /* ══════════════════════════════════════════════
-   HEADER — simplified (no ver-badge here, moved to sidebar)
+   HEADER
 ══════════════════════════════════════════════ */
 .chat-hdr {
   padding: 0 12px 0 14px; border-bottom: 1px solid var(--b); background: var(--bg2);
@@ -388,13 +403,14 @@ body::before {
 
 .code-block-wrap   { position: relative; margin: 8px 0; border-radius: 7px; overflow: hidden; border: 1px solid rgba(0,229,255,.1); }
 .code-lang-bar     { display: flex; align-items: center; justify-content: space-between; padding: 4px 10px; background: rgba(0,229,255,.06); border-bottom: 1px solid rgba(0,229,255,.1); font-size: var(--fs-2xs); color: var(--cyan); height: 28px; }
-.code-block-wrap pre { margin: 0; }
+.code-block-wrap pre { margin: 0; overflow-x: auto; }
 .code-block-wrap pre code.hljs { font-size: 11px; line-height: 1.55; padding: 12px 14px; border-radius: 0; border: none; }
 .code-btns { display: flex; gap: 4px; align-items: center; }
 .cbtn {
   background: rgba(10,11,34,.9); border: 1px solid rgba(0,229,255,.25); border-radius: 5px;
   color: var(--cyan); font-size: var(--fs-2xs); padding: 0 8px; cursor: pointer;
   display: flex; align-items: center; gap: 3px; transition: .12s; height: var(--h-xs);
+  min-height: 28px;
   -webkit-tap-highlight-color: transparent;
 }
 .cbtn:hover { background: rgba(0,229,255,.15); }
@@ -407,8 +423,8 @@ body::before {
 .bubble ul, .bubble ol { padding-left: 18px; margin-bottom: 6px; }
 .bubble li  { margin-bottom: 3px; line-height: 1.65; }
 .bubble strong { color: white; }
-.bubble table { width: 100%; border-collapse: collapse; margin: 7px 0; font-size: 11px; }
-.bubble th, .bubble td { padding: 5px 9px; border: 1px solid var(--b); }
+.bubble table { width: 100%; border-collapse: collapse; margin: 7px 0; font-size: 11px; overflow-x: auto; display: block; }
+.bubble th, .bubble td { padding: 5px 9px; border: 1px solid var(--b); white-space: nowrap; }
 .bubble th  { background: rgba(0,229,255,.06); color: var(--cyan); }
 
 .msg-acts { display: flex; gap: 2px; padding: 2px; flex-wrap: wrap; }
@@ -445,10 +461,6 @@ body::before {
 
 /* ══════════════════════════════════════════════
    INPUT AREA
-   FIX: All action buttons in the input bar use
-   the SAME base .ib class, including the <label>
-   for the file input. We force it to display as
-   flex so it behaves identically to <button>.
 ══════════════════════════════════════════════ */
 .inp-area {
   padding: 10px 14px 14px;
@@ -487,9 +499,7 @@ body::before {
   gap: 4px; flex: 1; min-width: 0; overflow: hidden;
 }
 
-/* ── Universal icon button — works for BOTH <button> and <label> ── */
-/* Key fix: box-sizing, vertical-align, and forced display:inline-flex
-   so <label htmlFor="fi"> renders identically to <button> in all browsers */
+/* Universal icon button — works for <button> AND <label> */
 .ib {
   width: 32px; height: 32px; min-width: 32px;
   display: inline-flex !important;
@@ -502,7 +512,6 @@ body::before {
   user-select: none; outline: none;
   -webkit-tap-highlight-color: transparent;
   position: relative;
-  /* Remove any label default styling */
   font-size: 0;
   text-align: center;
 }
@@ -523,7 +532,7 @@ body::before {
 
 .inp-divider { width: 1px; height: 16px; background: rgba(0,229,255,.1); flex-shrink: 0; border-radius: 1px; margin: 0 2px; }
 
-/* ── Model selector pill ── */
+/* Model selector pill */
 .inp-model {
   display: flex; align-items: center; gap: 5px;
   height: 28px; padding: 0 8px; border-radius: 8px;
@@ -546,7 +555,7 @@ body::before {
 .inp-model-badge[data-tier="think"] { color: var(--yellow); border-color: rgba(255,214,0,.3);   background: rgba(255,214,0,.06); }
 .inp-model-badge[data-tier="free"]  { color: var(--green);  border-color: rgba(0,255,170,.3);   background: rgba(0,255,170,.06); }
 
-/* ── Send / Cancel buttons ── */
+/* Send / Cancel buttons */
 .btn-send {
   width: 36px; height: 36px; border-radius: 50%; border: none;
   background: linear-gradient(135deg, var(--cyan), var(--purple));
@@ -571,9 +580,7 @@ body::before {
 
 
 /* ══════════════════════════════════════════════
-   MODEL DROPDOWN — REDESIGNED
-   Cleaner group headers, bigger icons, proper
-   spacing, badge alignment, hover states
+   MODEL DROPDOWN
 ══════════════════════════════════════════════ */
 .model-dd {
   position: fixed; background: var(--bg3);
@@ -587,19 +594,15 @@ body::before {
 .model-dd::-webkit-scrollbar-thumb { background: var(--b); border-radius: 2px; }
 .model-dd.open { display: block; }
 
-/* Group header: "GOOGLE", "CHATGPT", "DEEPSEEK" */
 .mg {
   padding: 8px 10px 4px; margin-top: 2px;
   font-size: 7.5px; font-weight: 700; letter-spacing: 2px;
   color: var(--dim); text-transform: uppercase;
   display: flex; align-items: center; gap: 6px;
 }
-.mg::after {
-  content: ''; flex: 1; height: 1px; background: var(--b); border-radius: 1px;
-}
+.mg::after { content: ''; flex: 1; height: 1px; background: var(--b); border-radius: 1px; }
 .mg:first-child { margin-top: 0; padding-top: 4px; }
 
-/* Model option row */
 .mo {
   padding: 8px 10px; display: flex; align-items: center; gap: 10px;
   cursor: pointer; transition: background .1s; min-height: 48px;
@@ -634,20 +637,16 @@ body::before {
 
 
 /* ══════════════════════════════════════════════
-   THINKING / STEPS
-   FIX: Always stays visible while S.gen is true.
-   Added min-height so it can't collapse to 0.
+   THINKING / STEPS CARD
 ══════════════════════════════════════════════ */
 .steps-wrap {
   display: flex; gap: 9px; animation: mi .22s ease;
-  /* Ensure it's always on top of messages */
   position: relative; z-index: 3;
 }
 .steps-box  {
   background: var(--bg2); border: 1px solid var(--b);
   border-radius: 2px 10px 10px 10px;
   overflow: hidden; min-width: 280px; max-width: min(520px, 88vw);
-  /* Prevent collapsing */
   min-height: 52px;
 }
 .steps-hdr  {
@@ -684,7 +683,8 @@ body::before {
   background: rgba(255,45,107,.08); border: 1px solid rgba(255,45,107,.25);
   border-radius: 5px; color: var(--pink); font-size: var(--fs-2xs); cursor: pointer; transition: .1s;
   font-family: 'JetBrains Mono', monospace; display: inline-flex; align-items: center;
-  min-height: 32px;
+  min-height: 36px;
+  -webkit-tap-highlight-color: transparent;
 }
 .steps-cancel-btn:hover { background: rgba(255,45,107,.16); }
 @keyframes spin { to{transform:rotate(360deg)} }
@@ -744,7 +744,7 @@ body::before {
 
 
 /* ══════════════════════════════════════════════
-   MODAL
+   MODALS
 ══════════════════════════════════════════════ */
 .ov {
   position: fixed; inset: 0; background: rgba(3,3,18,.93); z-index: 500;
@@ -825,30 +825,29 @@ body::before {
 .share-modal-ta { width: 100%; background: var(--bg3); border: 1px solid var(--b); border-radius: 6px; padding: 8px 10px; color: var(--text); font-family: 'JetBrains Mono', monospace; font-size: var(--fs-sm); outline: none; resize: none; height: 200px; margin-top: 8px; }
 
 
-/* ══════════════════════════════════════════════════════════════
+/* ══════════════════════════════════════════════
    RESPONSIVE — full pass
-   Breakpoints: ≤1100px (narrow desktop/small laptop),
-   ≤1024px and 769–1024px (tablet landscape/portrait),
-   ≤768px (phone / tablet-portrait threshold — sidebar becomes
-   an overlay drawer here), ≤480px (small phone), ≤360px
-   (very small phone), plus a landscape-phone override.
-   Every interactive control is kept at >=40px tap target on
-   touch breakpoints (44px for primary actions).
-══════════════════════════════════════════════════════════════ */
+   ≤1100px narrow desktop
+   ≤1024px tablet landscape
+   ≤900px  tablet portrait (sidebar stays docked)
+   ≤768px  mobile — sidebar becomes overlay drawer
+   ≤480px  small phone
+   ≤360px  very small phone
+   landscape + short viewport override
+   (pointer:coarse) safety net
+══════════════════════════════════════════════ */
 
-/* ── Narrow desktop / small laptop ── */
+/* ── Narrow desktop ── */
 @media (max-width: 1100px) { :root { --sb-w: 230px; } }
 
-/* ── Tablet landscape (e.g. iPad landscape ~1024-1100px and below) ── */
+/* ── Tablet landscape ── */
 @media (max-width: 1024px) {
   :root { --sb-w: 220px; }
   .inp-model { max-width: 150px; }
   .mb-wrap { max-width: 86%; }
 }
 
-/* ── Tablet portrait / small laptop window (769–1024px) ──
-   Sidebar stays docked (not yet an overlay) but is narrower and
-   chat content gets a touch more breathing room than desktop. */
+/* ── Tablet portrait ── */
 @media (max-width: 900px) and (min-width: 769px) {
   :root { --sb-w: 200px; }
   .inp-model { max-width: 130px; }
@@ -858,7 +857,7 @@ body::before {
 }
 
 /* ══════════════════════════════════════════════
-   MOBILE (≤768px) — sidebar becomes an overlay drawer
+   MOBILE ≤768px — sidebar overlay drawer
 ══════════════════════════════════════════════ */
 @media (max-width: 768px) {
   #app {
@@ -867,32 +866,37 @@ body::before {
     grid-template-columns: none !important; overflow: hidden !important;
   }
   #app.sb-hidden { grid-template-columns: none !important; }
+
+  /* Sidebar: fixed overlay drawer */
   #sb {
     position: fixed !important; left: 0 !important; top: 0 !important;
     width: min(290px, 85vw) !important; height: 100% !important; height: 100dvh !important;
     max-height: none !important; z-index: 100 !important;
     border-right: 1px solid var(--b) !important; border-bottom: none !important;
-    overflow-y: auto !important; box-shadow: 4px 0 30px rgba(0,0,0,.7) !important;
+    overflow-y: auto !important;
+    box-shadow: 6px 0 40px rgba(0,0,0,.8) !important;
     transform: translateX(-105%) !important;
     transition: transform .28s cubic-bezier(.4,0,.2,1) !important;
     will-change: transform; -webkit-overflow-scrolling: touch;
     padding-top: var(--safe-top) !important;
   }
   #sb.mobile-open { transform: translateX(0) !important; }
+
   #menuBtn { display: inline-flex !important; }
   .collapse-sb { display: none !important; }
   #chat { flex: 1 !important; min-height: 0 !important; width: 100% !important; overflow: hidden !important; }
 
-  /* Sidebar internals — bigger tap targets now that it's a touch drawer */
+  /* Sidebar internals — bigger tap targets */
   .sb-head { height: 56px !important; }
   .sb-user { height: 56px !important; }
-  .sb-av { width: 40px !important; height: 40px !important; }
+  .sb-av   { width: 40px !important; height: 40px !important; }
   .sb-gear { width: 40px !important; height: 40px !important; }
-  .creds { height: 56px !important; }
-  .sb-nav-btn { height: 44px !important; }
+  .creds   { height: 56px !important; }
+  .sb-nav-btn { height: 44px !important; font-size: 11px !important; }
   .ci { min-height: 44px !important; padding: 9px 10px !important; }
-  .ci-del { min-width: 32px !important; min-height: 32px !important; opacity: 1 !important; }
+  .ci-del { min-width: 36px !important; min-height: 36px !important; opacity: 1 !important; }
 
+  /* Header */
   .chat-hdr {
     height: 48px !important; padding: 0 10px !important;
     padding-left: calc(10px + var(--safe-left)) !important;
@@ -902,14 +906,33 @@ body::before {
   .chat-title { font-size: 11px !important; }
   .proj-name-pill { max-width: 130px !important; }
   .status-badge { max-width: 90px !important; font-size: 8px !important; padding: 0 6px !important; height: 22px !important; }
-  #msgs { padding: 12px 10px 6px !important; gap: 8px !important; }
-  .mb-wrap { max-width: 90% !important; }
-  .bubble  { font-size: 13px !important; padding: 9px 11px !important; }
-  .suggs { grid-template-columns: 1fr !important; }
-  .wt { font-size: 20px !important; }
-  .ws { font-size: var(--fs-md) !important; }
-  .av { width: 28px !important; height: 28px !important; }
 
+  /* Plugin banner — single line on mobile */
+  .plug-banner {
+    font-size: 9px !important; height: 28px !important;
+    padding: 0 10px !important;
+    padding-left: calc(10px + var(--safe-left)) !important;
+    gap: 5px !important;
+    overflow: hidden !important;
+  }
+  .plug-banner > *:not(:first-child):not(:nth-child(2)):not(:nth-child(3)) {
+    display: none !important;
+  }
+
+  /* Messages */
+  #msgs { padding: 10px 10px 6px !important; gap: 8px !important; }
+  .mb-wrap { max-width: 91% !important; }
+  .bubble  { font-size: 13px !important; padding: 9px 11px !important; }
+  .av { width: 28px !important; height: 28px !important; }
+  .msg { gap: 7px !important; }
+  .msg-img { max-width: 130px !important; max-height: 110px !important; }
+
+  /* Suggestions welcome grid — 1 column on small phones, 2 otherwise */
+  .suggs { grid-template-columns: 1fr 1fr !important; max-width: 100% !important; }
+  .wt { font-size: 20px !important; }
+  .ws { font-size: var(--fs-md) !important; max-width: 280px !important; }
+
+  /* Input area */
   .inp-area {
     padding: 8px 10px 12px !important;
     padding-left: calc(10px + var(--safe-left)) !important;
@@ -925,83 +948,128 @@ body::before {
   .inp-bar { padding: 4px 8px 8px !important; gap: 5px !important; }
   .ib { width: 40px !important; height: 40px !important; min-width: 40px !important; }
   .ib svg { width: 18px !important; height: 18px !important; }
-  .btn-send { width: 42px !important; height: 42px !important; }
+  .btn-send { width: 44px !important; height: 44px !important; }
   .btn-send svg { width: 17px !important; height: 17px !important; }
-  .btn-cancel { width: 38px !important; height: 38px !important; }
+  .btn-cancel { width: 40px !important; height: 40px !important; }
   .inp-model { max-width: 110px !important; height: 30px !important; }
-  .plug-banner {
-    font-size: 9px !important; padding: 0 10px !important;
-    padding-left: calc(10px + var(--safe-left)) !important;
-    gap: 5px !important; height: 28px !important;
-  }
-  .ov { padding: 12px 10px !important; padding-bottom: calc(12px + var(--safe-bottom)) !important; }
-  .modal { padding: 16px !important; border-radius: 12px !important; max-height: calc(100dvh - 24px - var(--safe-top) - var(--safe-bottom)) !important; overflow-y: auto !important; }
-  .modal-t { font-size: 12px !important; }
-  .btn-modal { height: 44px !important; }
-  .steps-box { max-width: calc(100vw - 60px) !important; min-width: 240px !important; }
 
-  /* Settings: stack label/control vertically when the row's too tight */
-  .settings-row { gap: 6px !important; }
-  .settings-btn { height: 40px !important; }
+  /* Steps card */
+  .steps-box { max-width: calc(100vw - 52px) !important; min-width: 220px !important; }
+  .steps-cancel-btn { min-height: 40px !important; }
+
+  /* Modals */
+  .ov { padding: 10px 10px !important; padding-top: calc(10px + var(--safe-top)) !important; padding-bottom: calc(10px + var(--safe-bottom)) !important; }
+  .modal {
+    padding: 16px !important; border-radius: 12px !important;
+    max-height: calc(100dvh - 20px - var(--safe-top) - var(--safe-bottom)) !important;
+    overflow-y: auto !important;
+  }
+  .modal-t { font-size: 12px !important; }
+  .btn-modal { height: 44px !important; min-height: 44px !important; }
+
+  /* Settings */
+  .settings-row { gap: 6px !important; min-height: 44px !important; }
+  .settings-btn { height: 40px !important; min-height: 40px !important; }
   .settings-select { height: 40px !important; font-size: 13px !important; }
   .toggle-sw { width: 48px !important; height: 27px !important; }
   .toggle-sw::after { width: 21px !important; height: 21px !important; }
   .toggle-sw.on::after { left: 24px !important; }
 
-  /* Mention dropdown — full-width-ish on phone for easier tapping */
+  /* Mention dropdown */
   .mention-dd { min-width: 0 !important; width: calc(100vw - 20px) !important; max-width: 360px !important; }
   .mention-item { min-height: 48px !important; }
+
+  /* Model dropdown */
+  .model-dd { min-width: 0 !important; width: calc(100vw - 24px) !important; max-width: 340px !important; }
+  .mo { min-height: 52px !important; }
+
+  /* Code block — scrollable on mobile */
+  .code-block-wrap pre { overflow-x: auto !important; -webkit-overflow-scrolling: touch; }
+  .code-block-wrap pre code.hljs { font-size: 10px !important; padding: 10px 12px !important; }
+
+  /* Message actions — bigger tap area */
+  .mab { height: 34px !important; min-width: 34px !important; }
 }
 
+/* ══════════════════════════════════════════════
+   SMALL PHONE ≤480px
+══════════════════════════════════════════════ */
 @media (max-width: 480px) {
+  .suggs { grid-template-columns: 1fr !important; }
   .inp-model { max-width: 95px !important; }
   .chat-title { font-size: 10px !important; }
   .status-badge { max-width: 78px !important; font-size: 7.5px !important; }
   .wt { font-size: 18px !important; }
+  .ws { font-size: 10.5px !important; }
   .modal { padding: 14px !important; }
-  .mb-wrap { max-width: 93% !important; }
+  .mb-wrap { max-width: 94% !important; }
   .bubble { font-size: 12.5px !important; }
   .sugg { padding: 8px 10px !important; }
   .sb-footer { font-size: 7.5px !important; }
-  .settings-row { flex-direction: column !important; align-items: flex-start !important; }
+  .settings-row { flex-direction: column !important; align-items: flex-start !important; gap: 8px !important; }
   .settings-row > span:first-child,
   .settings-row > div:first-child { width: 100% !important; }
   .modal-footer { flex-direction: column !important; align-items: stretch !important; }
-  .modal-footer .btn-modal { width: 100% !important; }
+  .modal-footer .btn-modal { width: 100% !important; justify-content: center !important; }
+  /* Code preview modal: full width, taller scrollable area */
+  #codePreviewModal .modal { width: 100% !important; }
+  #codePreviewCode { font-size: 10px !important; padding: 10px !important; }
+  /* Report textarea: easier to type */
+  .report-ta { font-size: 16px !important; }
+  /* Attach/attach row smaller */
+  .attach-item img { width: 44px !important; height: 44px !important; }
 }
 
+/* ══════════════════════════════════════════════
+   VERY SMALL ≤360px
+══════════════════════════════════════════════ */
 @media (max-width: 360px) {
   .status-badge { display: none !important; }
   .proj-name-pill { display: none !important; }
   .inp-model { max-width: 80px !important; }
   .sb-logo-text { font-size: 11px !important; }
   .cred-v { font-size: 18px !important; }
+  .plug-banner a:last-child { display: none !important; }
+  .sugg-title { font-size: 9px !important; }
+  .steps-box { min-width: 180px !important; }
 }
 
-/* ── Landscape phone: shorter viewport, tighten vertical paddings ── */
+/* ══════════════════════════════════════════════
+   LANDSCAPE PHONE — short viewport
+══════════════════════════════════════════════ */
 @media (max-width: 900px) and (orientation: landscape) and (max-height: 500px) {
   .chat-hdr { height: 40px !important; }
-  #inp { max-height: 90px !important; min-height: 42px !important; }
-  .inp-area { padding-top: 6px !important; padding-bottom: calc(6px + var(--safe-bottom)) !important; }
-  #msgs { padding: 8px 10px 4px !important; }
-  .welcome { padding: 14px 16px !important; gap: 8px !important; }
+  .plug-banner { height: 24px !important; }
+  #inp { max-height: 80px !important; min-height: 40px !important; }
+  .inp-area { padding-top: 5px !important; padding-bottom: calc(5px + var(--safe-bottom)) !important; }
+  #msgs { padding: 7px 10px 4px !important; gap: 6px !important; }
+  .welcome { padding: 10px 16px !important; gap: 7px !important; }
   .wt { font-size: 17px !important; }
   .ws { line-height: 1.5 !important; }
   .suggs { grid-template-columns: 1fr 1fr !important; }
-  .ov { padding-top: calc(8px + var(--safe-top)) !important; padding-bottom: calc(8px + var(--safe-bottom)) !important; }
-  .modal { max-height: calc(100dvh - 16px - var(--safe-top) - var(--safe-bottom)) !important; }
+  .ov { padding-top: calc(6px + var(--safe-top)) !important; padding-bottom: calc(6px + var(--safe-bottom)) !important; }
+  .modal { max-height: calc(100dvh - 12px - var(--safe-top) - var(--safe-bottom)) !important; }
+  /* Sidebar: narrower in landscape */
+  #sb { width: min(260px, 75vw) !important; }
 }
 
-/* ── Coarse-pointer safety net: anywhere a touch input is detected,
-   guarantee no interactive control collapses below a comfortable
-   tap size, even on breakpoints not explicitly covered above
-   (e.g. an unusual tablet width). ── */
+/* ══════════════════════════════════════════════
+   COARSE POINTER — safety net for all touch devices
+   Ensures every interactive control ≥ 40×40 px
+══════════════════════════════════════════════ */
 @media (pointer: coarse) {
-  .ib, .btn-cancel { min-width: 38px; min-height: 38px; }
-  .btn-send { min-width: 40px; min-height: 40px; }
-  .sb-gear, .sb-av { min-width: 36px; min-height: 36px; }
-  .ci-del { min-width: 30px; min-height: 30px; }
-  .settings-btn, .btn-modal { min-height: 40px; }
+  .ib, .btn-cancel { min-width: 40px !important; min-height: 40px !important; }
+  .btn-send { min-width: 44px !important; min-height: 44px !important; }
+  .sb-gear, .sb-av { min-width: 40px !important; min-height: 40px !important; }
+  .ci-del { min-width: 36px !important; min-height: 36px !important; opacity: 1 !important; }
+  .settings-btn, .btn-modal { min-height: 44px !important; }
+  .mab { min-height: 36px !important; min-width: 36px !important; }
+  .cbtn { min-height: 32px !important; }
+  .attach-rm { width: 24px !important; height: 24px !important; }
+  .steps-cancel-btn { min-height: 44px !important; }
+  .mo { min-height: 52px !important; }
+  .mention-item { min-height: 48px !important; }
+  .suggestion-chip { min-height: 44px !important; }
 }
 `
 
@@ -1045,21 +1113,21 @@ const Icon: Record<string, React.ReactElement> = {
       <path d="M19.4 15a1.65 1.65 0 00.33 1.82l.06.06a2 2 0 010 2.83 2 2 0 01-2.83 0l-.06-.06a1.65 1.65 0 00-1.82-.33 1.65 1.65 0 00-1 1.51V21a2 2 0 01-4 0v-.09A1.65 1.65 0 009 19.4a1.65 1.65 0 00-1.82.33l-.06.06a2 2 0 01-2.83-2.83l.06-.06A1.65 1.65 0 004.68 15a1.65 1.65 0 00-1.51-1H3a2 2 0 010-4h.09A1.65 1.65 0 004.6 9a1.65 1.65 0 00-.33-1.82l-.06-.06a2 2 0 012.83-2.83l.06.06A1.65 1.65 0 009 4.68a1.65 1.65 0 001-1.51V3a2 2 0 014 0v.09a1.65 1.65 0 001 1.51 1.65 1.65 0 001.82-.33l.06-.06a2 2 0 012.83 2.83l-.06.06A1.65 1.65 0 0019.4 9a1.65 1.65 0 001.51 1H21a2 2 0 010 4h-.09a1.65 1.65 0 00-1.51 1z"/>
     </svg>
   ),
-  menu: (<svg viewBox="0 0 24 24" width={18} height={18} stroke="currentColor" fill="none" strokeWidth={2}><line x1="3" y1="6" x2="21" y2="6"/><line x1="3" y1="12" x2="21" y2="12"/><line x1="3" y1="18" x2="21" y2="18"/></svg>),
-  send: (<svg viewBox="0 0 24 24" width={14} height={14} stroke="currentColor" fill="none" strokeWidth={2.2}><line x1="12" y1="19" x2="12" y2="5"/><polyline points="5 12 12 5 19 12"/></svg>),
-  x:    (<svg viewBox="0 0 24 24" width={14} height={14} stroke="currentColor" fill="none" strokeWidth={2}><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>),
+  menu:     (<svg viewBox="0 0 24 24" width={18} height={18} stroke="currentColor" fill="none" strokeWidth={2}><line x1="3" y1="6" x2="21" y2="6"/><line x1="3" y1="12" x2="21" y2="12"/><line x1="3" y1="18" x2="21" y2="18"/></svg>),
+  send:     (<svg viewBox="0 0 24 24" width={14} height={14} stroke="currentColor" fill="none" strokeWidth={2.2}><line x1="12" y1="19" x2="12" y2="5"/><polyline points="5 12 12 5 19 12"/></svg>),
+  x:        (<svg viewBox="0 0 24 24" width={14} height={14} stroke="currentColor" fill="none" strokeWidth={2}><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>),
   chevronDown: (<svg width={8} height={8} viewBox="0 0 24 24" stroke="currentColor" fill="none" strokeWidth={2} style={{ color: 'var(--dim)', flexShrink: 0 }}><polyline points="6 9 12 15 18 9"/></svg>),
-  attach: (<svg viewBox="0 0 24 24" width={16} height={16} stroke="currentColor" fill="none" strokeWidth={1.6}><path d="M21.44 11.05l-9.19 9.19a6 6 0 01-8.49-8.49l9.19-9.19a4 4 0 015.66 5.66l-9.2 9.19a2 2 0 01-2.83-2.83l8.49-8.48"/></svg>),
-  trash: (<svg viewBox="0 0 24 24" width={16} height={16} stroke="currentColor" fill="none" strokeWidth={1.6}><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 01-2 2H7a2 2 0 01-2-2V6m3 0V4a2 2 0 012-2h4a2 2 0 012 2v2"/></svg>),
+  attach:   (<svg viewBox="0 0 24 24" width={16} height={16} stroke="currentColor" fill="none" strokeWidth={1.6}><path d="M21.44 11.05l-9.19 9.19a6 6 0 01-8.49-8.49l9.19-9.19a4 4 0 015.66 5.66l-9.2 9.19a2 2 0 01-2.83-2.83l8.49-8.48"/></svg>),
+  trash:    (<svg viewBox="0 0 24 24" width={16} height={16} stroke="currentColor" fill="none" strokeWidth={1.6}><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 01-2 2H7a2 2 0 01-2-2V6m3 0V4a2 2 0 012-2h4a2 2 0 012 2v2"/></svg>),
   download: (<svg viewBox="0 0 24 24" width={16} height={16} stroke="currentColor" fill="none" strokeWidth={2}><path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>),
-  share: (<svg viewBox="0 0 24 24" width={16} height={16} stroke="currentColor" fill="none" strokeWidth={2}><circle cx="18" cy="5" r="3"/><circle cx="6" cy="12" r="3"/><circle cx="18" cy="19" r="3"/><line x1="8.59" y1="13.51" x2="15.42" y2="17.49"/><line x1="15.41" y1="6.51" x2="8.59" y2="10.49"/></svg>),
-  info: (<svg viewBox="0 0 24 24" width={11} height={11} stroke="currentColor" fill="none" strokeWidth={2}><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>),
-  copy: (<svg viewBox="0 0 24 24" width={11} height={11} stroke="currentColor" fill="none" strokeWidth={2}><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 01-2-2V4a2 2 0 012-2h9a2 2 0 012 2v1"/></svg>),
-  home: (<svg viewBox="0 0 24 24" width={13} height={13} stroke="currentColor" fill="none" strokeWidth={2}><path d="M3 9l9-7 9 7v11a2 2 0 01-2 2H5a2 2 0 01-2-2z"/><polyline points="9 22 9 12 15 12 15 22"/></svg>),
-  plus: (<svg viewBox="0 0 24 24" width={13} height={13} stroke="currentColor" fill="none" strokeWidth={2}><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>),
-  help: (<svg viewBox="0 0 24 24" width={13} height={13} stroke="currentColor" fill="none" strokeWidth={2}><circle cx="12" cy="12" r="10"/><path d="M9.09 9a3 3 0 015.83 1c0 2-3 3-3 3"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>),
-  inbox: (<svg viewBox="0 0 24 24" width={13} height={13} stroke="currentColor" fill="none" strokeWidth={2}><polyline points="22 12 16 12 14 15 10 15 8 12 2 12"/><path d="M5.45 5.11L2 12v6a2 2 0 002 2h16a2 2 0 002-2v-6l-3.45-6.89A2 2 0 0016.76 4H7.24a2 2 0 00-1.79 1.11z"/></svg>),
-  code: (<svg viewBox="0 0 24 24" width={11} height={11} stroke="currentColor" fill="none" strokeWidth={2}><polyline points="16 18 22 12 16 6"/><polyline points="8 6 2 12 8 18"/></svg>),
+  share:    (<svg viewBox="0 0 24 24" width={16} height={16} stroke="currentColor" fill="none" strokeWidth={2}><circle cx="18" cy="5" r="3"/><circle cx="6" cy="12" r="3"/><circle cx="18" cy="19" r="3"/><line x1="8.59" y1="13.51" x2="15.42" y2="17.49"/><line x1="15.41" y1="6.51" x2="8.59" y2="10.49"/></svg>),
+  info:     (<svg viewBox="0 0 24 24" width={11} height={11} stroke="currentColor" fill="none" strokeWidth={2}><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>),
+  copy:     (<svg viewBox="0 0 24 24" width={11} height={11} stroke="currentColor" fill="none" strokeWidth={2}><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 01-2-2V4a2 2 0 012-2h9a2 2 0 012 2v1"/></svg>),
+  home:     (<svg viewBox="0 0 24 24" width={13} height={13} stroke="currentColor" fill="none" strokeWidth={2}><path d="M3 9l9-7 9 7v11a2 2 0 01-2 2H5a2 2 0 01-2-2z"/><polyline points="9 22 9 12 15 12 15 22"/></svg>),
+  plus:     (<svg viewBox="0 0 24 24" width={13} height={13} stroke="currentColor" fill="none" strokeWidth={2}><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>),
+  help:     (<svg viewBox="0 0 24 24" width={13} height={13} stroke="currentColor" fill="none" strokeWidth={2}><circle cx="12" cy="12" r="10"/><path d="M9.09 9a3 3 0 015.83 1c0 2-3 3-3 3"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>),
+  inbox:    (<svg viewBox="0 0 24 24" width={13} height={13} stroke="currentColor" fill="none" strokeWidth={2}><polyline points="22 12 16 12 14 15 10 15 8 12 2 12"/><path d="M5.45 5.11L2 12v6a2 2 0 002 2h16a2 2 0 002-2v-6l-3.45-6.89A2 2 0 0016.76 4H7.24a2 2 0 00-1.79 1.11z"/></svg>),
+  code:     (<svg viewBox="0 0 24 24" width={11} height={11} stroke="currentColor" fill="none" strokeWidth={2}><polyline points="16 18 22 12 16 6"/><polyline points="8 6 2 12 8 18"/></svg>),
 }
 
 /* ─────────────────────────────────────────────────────────────────────────────
@@ -1094,7 +1162,9 @@ export default function ChatsPage() {
     document.body.style.overflow            = 'hidden'
 
     const preventBodyScroll = (e: TouchEvent) => {
-      if ((e.target as HTMLElement).closest('#msgs, #sb, .convs, .ov, .model-dd, .mention-dd')) return
+      if ((e.target as HTMLElement).closest(
+        '#msgs, #sb, .convs, .ov, .model-dd, .mention-dd, .modal'
+      )) return
       e.preventDefault()
     }
     document.addEventListener('touchmove', preventBodyScroll, { passive: false })
@@ -1132,16 +1202,14 @@ export default function ChatsPage() {
   const handleClickWithEvent = (fn: string, ...args: unknown[]) =>
     (e: React.MouseEvent<HTMLElement>): void => { e.stopPropagation(); wCall(fn, e, ...args) }
 
-  const handleImgErr = (e: React.SyntheticEvent<HTMLImageElement>): void => {
-    e.currentTarget.style.display = 'none'
-  }
+  const handleImgErr  = (e: React.SyntheticEvent<HTMLImageElement>): void => { e.currentTarget.style.display = 'none' }
   const handleLogoErr = (e: React.SyntheticEvent<HTMLImageElement>): void => {
     const p = e.currentTarget.parentElement
     if (p) p.style.background = 'linear-gradient(135deg,#00e5ff,#8800ff)'
     e.currentTarget.style.display = 'none'
   }
-  const handleFileChange        = (e: React.ChangeEvent<HTMLInputElement>): void  => wCall('handleFile', e)
-  const handlePlayTestDurChange = (e: React.ChangeEvent<HTMLInputElement>): void  => wCall('setPlayTestDur', e.target.value)
+  const handleFileChange        = (e: React.ChangeEvent<HTMLInputElement>): void => wCall('handleFile', e)
+  const handlePlayTestDurChange = (e: React.ChangeEvent<HTMLInputElement>): void => wCall('setPlayTestDur', e.target.value)
 
   return (
     <>
@@ -1187,13 +1255,13 @@ export default function ChatsPage() {
             SIDEBAR
         ═══════════════════════════════ */}
         <div id="sb">
-          {/* Logo + Brand + BETA badge (all in sidebar header) */}
+
+          {/* Logo + Brand + BETA */}
           <div className="sb-head">
             <div className="sb-logo">
               <img src="/images/nexusai.png" alt="N" onError={handleLogoErr}/>
             </div>
             <div className="sb-brand">
-              {/* NEXUS AI text + BETA badge inline */}
               <div className="sb-logo-text">
                 NEXUS AI
                 <span className="sb-beta-badge" id="verBadge">BETA</span>
@@ -1214,13 +1282,15 @@ export default function ChatsPage() {
               <div className="sb-un"   id="sbUn">—</div>
               <div className="sb-role" id="sbRole">Roblox Developer</div>
             </div>
-            <button
-              className="sb-gear" type="button"
-              onClick={handleClick('openSettings')}
-              aria-label="Settings"
-            >
+            <button className="sb-gear" type="button" onClick={handleClick('openSettings')} aria-label="Settings">
               {Icon.settings}
             </button>
+          </div>
+
+          {/* Project chip (shown by JS when in a project) */}
+          <div className="sb-proj-chip" id="sbProjChip">
+            <span className="sb-proj-chip-dot"/>
+            <span id="sbProjName"/>
           </div>
 
           {/* Credits */}
@@ -1240,7 +1310,7 @@ export default function ChatsPage() {
             </div>
           </div>
 
-          {/* Nav buttons */}
+          {/* Nav */}
           <div className="sb-btn-group">
             <button className="sb-nav-btn cyan"   type="button" onClick={() => { window.location.href = '/dashboard' }}>
               {Icon.home}<span id="dashLbl">Dashboard</span>
@@ -1307,7 +1377,7 @@ export default function ChatsPage() {
             </a>
           </div>
 
-          {/* HEADER — chat title only (BETA badge is now in sidebar) */}
+          {/* HEADER */}
           <div className="chat-hdr">
             {/* Hamburger — mobile only */}
             <button
@@ -1319,12 +1389,11 @@ export default function ChatsPage() {
               {Icon.menu}
             </button>
 
-            {/* Title group */}
+            {/* Title */}
             <div className="chat-title-group">
               <div className="chat-title-row">
                 <div className="chat-title" id="chatTitle">NEXUS AI</div>
               </div>
-              {/* Project name — shown by JS */}
               <div className="proj-name-pill" id="projNamePill">
                 <span className="proj-name-dot"/>
                 <span id="projNameText"/>
@@ -1367,21 +1436,15 @@ export default function ChatsPage() {
               <div className="attach-row" id="attachRow"/>
 
               <div className="inp-box" id="inpBox">
-                {/* Textarea */}
                 <textarea
                   id="inp"
                   placeholder="Ask NEXUS AI about Roblox... (type @ to mention)"
                   rows={1}
                 />
 
-                {/* Bottom bar */}
                 <div className="inp-bar">
                   <div className="inp-l">
-                    {/*
-                      FIX: Use <label> with className="ib" — contains the SVG icon directly.
-                      The .ib CSS forces display:inline-flex so it renders identically
-                      to the <button className="ib"> elements beside it.
-                    */}
+                    {/* Attach label — matches .ib button visually */}
                     <label
                       htmlFor="fi"
                       className="ib"
@@ -1439,7 +1502,7 @@ export default function ChatsPage() {
                     </div>
                   </div>
 
-                  {/* Right: cancel / send */}
+                  {/* Cancel / Send */}
                   <button
                     className="btn-cancel hidden" id="cancelBtn"
                     type="button"
@@ -1646,7 +1709,7 @@ export default function ChatsPage() {
                   </button>
                 </div>
               </div>
-              <pre style={{ maxHeight: 440, overflowY: 'auto', margin: 0 }}>
+              <pre style={{ maxHeight: 440, overflowY: 'auto', overflowX: 'auto', margin: 0 }}>
                 <code id="codePreviewCode" className="language-lua" style={{ fontSize: 11, lineHeight: 1.5, padding: 14, display: 'block' }}/>
               </pre>
             </div>
@@ -1666,8 +1729,8 @@ export default function ChatsPage() {
             <textarea className="share-modal-ta" id="shareModalTa" readOnly/>
           </div>
           <div className="modal-footer">
-            <button className="btn-modal primary"   type="button" onClick={handleClick('copyShareText')}           id="shareModalCopyBtn">Copy Text</button>
-            <button className="btn-modal secondary" type="button" onClick={handleClick('closeModal', 'shareModal')} id="shareModalCloseBtn">Close</button>
+            <button className="btn-modal primary"   type="button" onClick={handleClick('copyShareText')}            id="shareModalCopyBtn">Copy Text</button>
+            <button className="btn-modal secondary" type="button" onClick={handleClick('closeModal', 'shareModal')}  id="shareModalCloseBtn">Close</button>
           </div>
         </div>
       </div>

@@ -1,6 +1,6 @@
 'use client'
 
-import React, { useEffect, useState, useCallback, useRef, useMemo } from 'react'
+import React, { useEffect, useState, useCallback, useRef } from 'react'
 import { useRouter } from 'next/navigation'
 import Link from 'next/link'
 
@@ -22,21 +22,12 @@ interface Prompt {
   featured?: boolean
 }
 
-interface CapturedGif {
-  id:        string
-  url:       string | null
-  mime:      string
-  name:      string
-  seen:      boolean
-  createdAt: number
-}
-
 interface NexusSession {
   loginTime?: number
   user: {
-    username:    string
-    avatar?:     string
-    robloxId?:   string
+    username:     string
+    avatar?:      string
+    robloxId?:    string
     displayName?: string
   }
   data?: Record<string, unknown>
@@ -46,34 +37,40 @@ interface NexusSession {
 // CONSTANTS
 // ═══════════════════════════════════════════════════════════════════════════
 
-const SESSION_KEY        = 'nexus_session'   // FIX: was reading "nexus_user", which is never written anywhere — that's why logged-in users got bounced to "/"
+const SESSION_KEY        = 'nexus_session'
 const SESSION_MAX_AGE_MS = 86_400_000 * 7
 const SEARCH_DEBOUNCE_MS = 350
-const MAX_TITLE_LEN      = 80
-const MIN_CONTENT_LEN    = 10
+const MAX_LIST_LIMIT     = 60
+
+// localStorage keys (shared dengan chats.ts)
+const LS_PLAY_TEST       = 'nexus_play_test'        // 'true' | 'false'
+const LS_PLAY_TEST_DUR   = 'nexus_play_test_dur'    // number string, max 30 di sini
+const LS_AUTO_PUBLISH    = 'nexus_auto_publish'     // 'true' | 'false'
+
+const MAX_PLAY_TEST_DUR_EXPLORE = 30 // explore membatasi max 30 detik
 
 // ═══════════════════════════════════════════════════════════════════════════
-// ICONS — inline SVG, no emoji, matches dashboard's icon set
+// ICONS
 // ═══════════════════════════════════════════════════════════════════════════
 
 const I = {
-  sparkle:  () => <svg viewBox="0 0 24 24"><path d="M12 3l1.8 5.2L19 10l-5.2 1.8L12 17l-1.8-5.2L5 10l5.2-1.8L12 3z" /><path d="M19 14l.7 2 2 .7-2 .7-.7 2-.7-2-2-.7 2-.7.7-2z" /></svg>,
-  search:   () => <svg viewBox="0 0 24 24"><circle cx="11" cy="11" r="8" /><path d="m21 21-4.35-4.35" /></svg>,
-  plus:     () => <svg viewBox="0 0 24 24"><line x1="12" y1="5" x2="12" y2="19" /><line x1="5" y1="12" x2="19" y2="12" /></svg>,
-  star:     () => <svg viewBox="0 0 24 24"><polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2" /></svg>,
-  play:     () => <svg viewBox="0 0 24 24"><polygon points="5 3 19 12 5 21 5 3" /></svg>,
-  copy:     () => <svg viewBox="0 0 24 24"><rect x="9" y="9" width="13" height="13" rx="2" /><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1" /></svg>,
-  check:    () => <svg viewBox="0 0 24 24"><polyline points="20 6 9 17 4 12" /></svg>,
-  cross:    () => <svg viewBox="0 0 24 24"><line x1="18" y1="6" x2="6" y2="18" /><line x1="6" y1="6" x2="18" y2="18" /></svg>,
-  image:    () => <svg viewBox="0 0 24 24"><rect x="3" y="3" width="18" height="18" rx="2" /><circle cx="8.5" cy="8.5" r="1.5" /><path d="M21 15l-5-5L5 21" /></svg>,
-  film:     () => <svg viewBox="0 0 24 24"><rect x="2" y="3" width="20" height="18" rx="2" /><path d="M7 3v18M17 3v18M2 9h5M2 15h5M17 9h5M17 15h5" /></svg>,
-  loader:   () => <svg viewBox="0 0 24 24"><path d="M12 2v4m0 12v4m10-10h-4M6 12H2m15.36-6.36l-2.83 2.83M9.47 14.53l-2.83 2.83m12.72 0l-2.83-2.83M9.47 9.47L6.64 6.64" /></svg>,
-  inbox:    () => <svg viewBox="0 0 24 24"><polyline points="22 12 16 12 14 15 10 15 8 12 2 12" /><path d="M5.45 5.11L2 12v6a2 2 0 002 2h16a2 2 0 002-2v-6l-3.45-6.89A2 2 0 0016.76 4H7.24a2 2 0 00-1.79 1.11z" /></svg>,
-  empty:    () => <svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="10" /><line x1="9" y1="9" x2="9.01" y2="9" /><line x1="15" y1="9" x2="15.01" y2="9" /><path d="M8 16s1.5-2 4-2 4 2 4 2" /></svg>,
-  user:     () => <svg viewBox="0 0 24 24"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2" /><circle cx="12" cy="7" r="4" /></svg>,
-  trending: () => <svg viewBox="0 0 24 24"><polyline points="23 6 13.5 15.5 8.5 10.5 1 18" /><polyline points="17 6 23 6 23 12" /></svg>,
-  arrow:    () => <svg viewBox="0 0 24 24"><path d="M5 12h14M12 5l7 7-7 7" /></svg>,
-  refresh:  () => <svg viewBox="0 0 24 24"><polyline points="23 4 23 10 17 10" /><polyline points="1 20 1 14 7 14" /><path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15" /></svg>,
+  sparkle:  () => <svg viewBox="0 0 24 24" width="20" height="20" stroke="currentColor" fill="none" strokeWidth="1.8"><path d="M12 3l1.8 5.2L19 10l-5.2 1.8L12 17l-1.8-5.2L5 10l5.2-1.8L12 3z"/><path d="M19 14l.7 2 2 .7-2 .7-.7 2-.7-2-2-.7 2-.7.7-2z"/></svg>,
+  search:   () => <svg viewBox="0 0 24 24" width="15" height="15" stroke="currentColor" fill="none" strokeWidth="2"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.35-4.35"/></svg>,
+  play:     () => <svg viewBox="0 0 24 24" width="13" height="13" stroke="currentColor" fill="none" strokeWidth="2"><polygon points="5 3 19 12 5 21 5 3"/></svg>,
+  copy:     () => <svg viewBox="0 0 24 24" width="13" height="13" stroke="currentColor" fill="none" strokeWidth="2"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>,
+  check:    () => <svg viewBox="0 0 24 24" width="13" height="13" stroke="currentColor" fill="none" strokeWidth="2"><polyline points="20 6 9 17 4 12"/></svg>,
+  cross:    () => <svg viewBox="0 0 24 24" width="15" height="15" stroke="currentColor" fill="none" strokeWidth="2"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>,
+  image:    () => <svg viewBox="0 0 24 24" width="28" height="28" stroke="currentColor" fill="none" strokeWidth="1.5"><rect x="3" y="3" width="18" height="18" rx="2"/><circle cx="8.5" cy="8.5" r="1.5"/><path d="M21 15l-5-5L5 21"/></svg>,
+  film:     () => <svg viewBox="0 0 24 24" width="10" height="10" stroke="currentColor" fill="none" strokeWidth="2"><rect x="2" y="3" width="20" height="18" rx="2"/><path d="M7 3v18M17 3v18M2 9h5M2 15h5M17 9h5M17 15h5"/></svg>,
+  loader:   () => <svg viewBox="0 0 24 24" width="22" height="22" stroke="currentColor" fill="none" strokeWidth="2"><path d="M12 2v4m0 12v4m10-10h-4M6 12H2m15.36-6.36l-2.83 2.83M9.47 14.53l-2.83 2.83m12.72 0l-2.83-2.83M9.47 9.47L6.64 6.64"/></svg>,
+  star:     () => <svg viewBox="0 0 24 24" width="11" height="11" stroke="currentColor" fill="none" strokeWidth="2"><polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"/></svg>,
+  empty:    () => <svg viewBox="0 0 24 24" width="24" height="24" stroke="currentColor" fill="none" strokeWidth="1.5"><circle cx="12" cy="12" r="10"/><line x1="9" y1="9" x2="9.01" y2="9"/><line x1="15" y1="9" x2="15.01" y2="9"/><path d="M8 16s1.5-2 4-2 4 2 4 2"/></svg>,
+  user:     () => <svg viewBox="0 0 24 24" width="11" height="11" stroke="currentColor" fill="none" strokeWidth="2"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg>,
+  arrow:    () => <svg viewBox="0 0 24 24" width="13" height="13" stroke="currentColor" fill="none" strokeWidth="2"><path d="M5 12h14M12 5l7 7-7 7"/></svg>,
+  gamepad:  () => <svg viewBox="0 0 24 24" width="13" height="13" stroke="currentColor" fill="none" strokeWidth="2"><line x1="6" y1="12" x2="10" y2="12"/><line x1="8" y1="10" x2="8" y2="14"/><circle cx="15" cy="12" r="1"/><circle cx="17" cy="10" r="1"/><rect x="2" y="6" width="20" height="12" rx="2"/></svg>,
+  globe:    () => <svg viewBox="0 0 24 24" width="13" height="13" stroke="currentColor" fill="none" strokeWidth="2"><circle cx="12" cy="12" r="10"/><line x1="2" y1="12" x2="22" y2="12"/><path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z"/></svg>,
+  timer:    () => <svg viewBox="0 0 24 24" width="12" height="12" stroke="currentColor" fill="none" strokeWidth="2"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>,
+  zap:      () => <svg viewBox="0 0 24 24" width="11" height="11" stroke="currentColor" fill="none" strokeWidth="2"><polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"/></svg>,
 }
 
 // ═══════════════════════════════════════════════════════════════════════════
@@ -83,349 +80,316 @@ const I = {
 const EXPLORE_CSS = `
 @import url('https://fonts.googleapis.com/css2?family=Orbitron:wght@400;700;900&family=JetBrains+Mono:wght@300;400;500;600&display=swap');
 
-* { margin: 0; padding: 0; box-sizing: border-box; }
+*{margin:0;padding:0;box-sizing:border-box}
 
-:root {
-  --bg:      #050514;
-  --bg2:     #09091f;
-  --bg3:     #0e0e28;
-  --card:    rgba(0, 212, 255, 0.04);
-  --hover:   rgba(0, 212, 255, 0.08);
-  --cyan:    #00d4ff;
-  --purple:  #7c3aed;
-  --pink:    #f43f5e;
-  --green:   #10b981;
-  --yellow:  #f59e0b;
-  --text:    #e2e8f0;
-  --text2:   #94a3b8;
-  --dim:     #334155;
-  --dim2:    #475569;
-  --b:       rgba(0, 212, 255, 0.12);
-  --r:       10px;
-  --r2:      14px;
+:root{
+  --bg:#050514;--bg2:#09091f;--bg3:#0e0e28;
+  --card:rgba(0,212,255,.04);--hover:rgba(0,212,255,.08);
+  --cyan:#00d4ff;--purple:#7c3aed;--pink:#f43f5e;
+  --green:#10b981;--yellow:#f59e0b;
+  --text:#e2e8f0;--text2:#94a3b8;--dim:#334155;--dim2:#475569;
+  --b:rgba(0,212,255,.12);--r:10px;--r2:14px;
 }
 
-html, body {
-  background: var(--bg);
-  color: var(--text);
-  font-family: 'JetBrains Mono', monospace;
-  overflow-x: hidden;
-}
-body { line-height: 1.6; -webkit-tap-highlight-color: transparent; }
+html,body{background:var(--bg);color:var(--text);font-family:'JetBrains Mono',monospace;overflow-x:hidden}
+body{line-height:1.6;-webkit-tap-highlight-color:transparent}
 
-::-webkit-scrollbar { width: 5px; height: 5px; }
-::-webkit-scrollbar-thumb { background: rgba(255,255,255,.10); border-radius: 4px; }
-::-webkit-scrollbar-track { background: transparent; }
+::-webkit-scrollbar{width:5px;height:5px}
+::-webkit-scrollbar-thumb{background:rgba(255,255,255,.10);border-radius:4px}
+::-webkit-scrollbar-track{background:transparent}
 
-@keyframes spin    { to { transform: rotate(360deg); } }
-@keyframes fadeUp  { from { opacity:0; transform: translateY(14px); } to { opacity:1; transform:none; } }
-@keyframes fadeIn  { from { opacity:0; } to { opacity:1; } }
-@keyframes scaleIn { from { opacity:0; transform: scale(.96) translateY(8px); } to { opacity:1; transform:none; } }
-@keyframes cardIn  { from { opacity:0; transform: translateY(16px); } to { opacity:1; transform:none; } }
-@keyframes slideUp { from { transform: translateY(20px); opacity:0; } to { transform:none; opacity:1; } }
-@keyframes toastIn { from { opacity:0; transform: translateY(12px) scale(.97); } to { opacity:1; transform:none; } }
-@keyframes toastOut{ from { opacity:1; } to { opacity:0; transform: translateY(12px) scale(.97); } }
+@keyframes spin{to{transform:rotate(360deg)}}
+@keyframes fadeIn{from{opacity:0}to{opacity:1}}
+@keyframes cardIn{from{opacity:0;transform:translateY(16px)}to{opacity:1;transform:none}}
+@keyframes slideUp{from{transform:translateY(20px);opacity:0}to{transform:none;opacity:1}}
+@keyframes toastIn{from{opacity:0;transform:translateY(12px) scale(.97)}to{opacity:1;transform:none}}
+@keyframes toastOut{from{opacity:1}to{opacity:0;transform:translateY(12px) scale(.97)}}
+@keyframes pulse{0%,100%{opacity:1}50%{opacity:.5}}
 
-.explore-container { min-height: 100vh; background: var(--bg); position: relative; z-index: 1; }
+.explore-container{min-height:100vh;background:var(--bg);position:relative;z-index:1}
 
-body::before {
-  content: ""; position: fixed; inset: 0; pointer-events: none; z-index: 0;
+body::before{
+  content:"";position:fixed;inset:0;pointer-events:none;z-index:0;
   background:
-    radial-gradient(ellipse 70% 50% at 85% -10%, rgba(124,58,237,.16) 0%, transparent 100%),
-    radial-gradient(ellipse 60% 40% at -10% 90%, rgba(0,212,255,.08) 0%, transparent 100%);
+    radial-gradient(ellipse 70% 50% at 85% -10%,rgba(124,58,237,.16) 0%,transparent 100%),
+    radial-gradient(ellipse 60% 40% at -10% 90%,rgba(0,212,255,.08) 0%,transparent 100%);
 }
 
-/* ─── Header ─────────────────────────────────────────────────────────── */
-.explore-header {
-  background: linear-gradient(135deg, rgba(0,212,255,.08), rgba(124,58,237,.08));
-  border-bottom: 1px solid var(--b);
-  padding: 22px 24px;
-  position: sticky; top: 0; z-index: 100;
-  backdrop-filter: blur(20px);
+/* ── Header ── */
+.explore-header{
+  background:linear-gradient(135deg,rgba(0,212,255,.08),rgba(124,58,237,.08));
+  border-bottom:1px solid var(--b);padding:22px 24px;
+  position:sticky;top:0;z-index:100;backdrop-filter:blur(20px);
 }
-.header-content {
-  max-width: 1320px; margin: 0 auto;
-  display: flex; align-items: center; justify-content: space-between; gap: 16px; flex-wrap: wrap;
+.header-content{
+  max-width:1320px;margin:0 auto;
+  display:flex;align-items:center;justify-content:space-between;gap:16px;flex-wrap:wrap;
 }
-.header-left { display: flex; align-items: center; gap: 14px; min-width: 0; }
-.header-icon {
-  width: 42px; height: 42px; border-radius: 12px; flex-shrink: 0;
-  background: linear-gradient(135deg, rgba(0,212,255,.12), rgba(124,58,237,.12));
-  border: 1px solid rgba(0,212,255,.18);
-  display: flex; align-items: center; justify-content: center;
+.header-left{display:flex;align-items:center;gap:14px;min-width:0}
+.header-icon{
+  width:42px;height:42px;border-radius:12px;flex-shrink:0;
+  background:linear-gradient(135deg,rgba(0,212,255,.12),rgba(124,58,237,.12));
+  border:1px solid rgba(0,212,255,.18);
+  display:flex;align-items:center;justify-content:center;
 }
-.header-icon svg { width: 20px; height: 20px; stroke: var(--cyan); fill: none; stroke-width: 1.8; }
-.header-title {
-  font-size: 22px; font-weight: 900;
-  background: linear-gradient(135deg, var(--cyan), var(--purple));
-  -webkit-background-clip: text; -webkit-text-fill-color: transparent; background-clip: text;
-  font-family: 'Orbitron', sans-serif; line-height: 1.2;
+.header-title{
+  font-size:22px;font-weight:900;
+  background:linear-gradient(135deg,var(--cyan),var(--purple));
+  -webkit-background-clip:text;-webkit-text-fill-color:transparent;background-clip:text;
+  font-family:'Orbitron',sans-serif;line-height:1.2;
 }
-.header-subtitle { font-size: 11px; color: var(--dim2); margin-top: 2px; }
-.header-right { display: flex; align-items: center; gap: 10px; flex-shrink: 0; }
+.header-subtitle{font-size:11px;color:var(--dim2);margin-top:2px}
+.header-right{display:flex;align-items:center;gap:10px;flex-shrink:0;flex-wrap:wrap}
 
-.btn {
-  display: inline-flex; align-items: center; justify-content: center; gap: 8px;
-  padding: 0 18px; height: 42px; border-radius: var(--r);
-  border: 1px solid rgba(0,212,255,.2); background: rgba(0,212,255,.04);
-  color: var(--cyan); font-size: 12px; font-weight: 700; cursor: pointer;
-  transition: all .2s; font-family: 'JetBrains Mono', monospace; white-space: nowrap;
+/* ── Buttons ── */
+.btn{
+  display:inline-flex;align-items:center;justify-content:center;gap:8px;
+  padding:0 18px;height:40px;border-radius:var(--r);
+  border:1px solid rgba(0,212,255,.2);background:rgba(0,212,255,.04);
+  color:var(--cyan);font-size:12px;font-weight:700;cursor:pointer;
+  transition:all .2s;font-family:'JetBrains Mono',monospace;white-space:nowrap;
 }
-.btn:hover  { background: rgba(0,212,255,.12); border-color: var(--cyan); transform: translateY(-1px); }
-.btn:active { transform: translateY(0); opacity: .85; }
-.btn svg { width: 14px; height: 14px; stroke: currentColor; fill: none; stroke-width: 2.2; }
-.btn.primary {
-  background: linear-gradient(135deg, var(--cyan), var(--purple)); color: #030314; border: none;
-}
-.btn.primary:hover { filter: brightness(1.08); }
-.btn.ghost { border-color: var(--dim); color: var(--text2); background: transparent; }
-.btn.ghost:hover { border-color: rgba(0,212,255,.3); color: var(--cyan); background: rgba(0,212,255,.04); }
-.btn:disabled { opacity: .35; cursor: not-allowed; transform: none; }
+.btn:hover{background:rgba(0,212,255,.12);border-color:var(--cyan);transform:translateY(-1px)}
+.btn:active{transform:translateY(0);opacity:.85}
+.btn svg{flex-shrink:0}
+.btn.ghost{border-color:var(--dim);color:var(--text2);background:transparent}
+.btn.ghost:hover{border-color:rgba(0,212,255,.3);color:var(--cyan);background:rgba(0,212,255,.04)}
+.btn:disabled{opacity:.35;cursor:not-allowed;transform:none;pointer-events:none}
 
-/* ─── Search & Filter Bar ───────────────────────────────────────────── */
-.search-bar-wrapper {
-  max-width: 1320px; margin: 0 auto; padding: 22px 24px 0;
-  display: flex; gap: 12px; align-items: center; flex-wrap: wrap;
+/* ── Toggle Chips ── */
+.toggle-chip{
+  display:inline-flex;align-items:center;gap:7px;
+  padding:0 14px;height:40px;border-radius:20px;
+  border:1px solid var(--dim);color:var(--dim2);
+  font-size:11.5px;font-weight:700;cursor:pointer;
+  transition:all .22s;font-family:'JetBrains Mono',monospace;
+  background:rgba(255,255,255,.02);white-space:nowrap;position:relative;
 }
-.search-box {
-  flex: 1; min-width: 240px; display: flex; align-items: center;
-  background: var(--bg2); border: 1.5px solid rgba(0,212,255,.16);
-  border-radius: 20px; padding: 0 16px; transition: all .2s; height: 46px;
+.toggle-chip:hover:not(:disabled){border-color:rgba(0,212,255,.3);color:var(--text2)}
+.toggle-chip.on{
+  border-color:rgba(0,212,255,.45);color:var(--cyan);
+  background:rgba(0,212,255,.08);
+  box-shadow:0 0 14px rgba(0,212,255,.12);
 }
-.search-box:focus-within { border-color: var(--cyan); box-shadow: 0 0 0 3px rgba(0,212,255,.08); }
-.search-box svg { width: 15px; height: 15px; stroke: var(--dim2); fill: none; stroke-width: 2; flex-shrink: 0; }
-.search-box input {
-  flex: 1; background: transparent; border: none; outline: none; color: #fff;
-  font-size: 13px; padding: 0 10px; font-family: 'JetBrains Mono', monospace;
+.toggle-chip.on-green{
+  border-color:rgba(16,185,129,.5);color:var(--green);
+  background:rgba(16,185,129,.08);
+  box-shadow:0 0 14px rgba(16,185,129,.12);
 }
-.search-box input::placeholder { color: var(--dim2); }
-.search-spinner {
-  width: 13px; height: 13px; border: 2px solid rgba(0,212,255,.2);
-  border-top-color: var(--cyan); border-radius: 50%; animation: spin .6s linear infinite; flex-shrink: 0;
+.toggle-chip:disabled{opacity:.3;cursor:not-allowed}
+.toggle-chip .chip-dot{
+  width:7px;height:7px;border-radius:50%;background:var(--dim2);
+  transition:background .22s;flex-shrink:0;
 }
-.search-clear {
-  width: 20px; height: 20px; border-radius: 50%; border: none; background: rgba(255,255,255,.06);
-  color: var(--dim2); display: flex; align-items: center; justify-content: center; cursor: pointer;
-  flex-shrink: 0; transition: all .15s;
-}
-.search-clear:hover { background: rgba(244,63,94,.15); color: var(--pink); }
-.search-clear svg { width: 10px; height: 10px; stroke: currentColor; fill: none; stroke-width: 2.5; }
+.toggle-chip.on .chip-dot{background:var(--cyan);box-shadow:0 0 6px var(--cyan)}
+.toggle-chip.on-green .chip-dot{background:var(--green);box-shadow:0 0 6px var(--green)}
 
-.result-count { font-size: 11px; color: var(--dim2); padding: 0 14px; white-space: nowrap; }
+/* duration input inside chip */
+.dur-input-wrap{
+  display:inline-flex;align-items:center;gap:4px;
+  padding:0 8px 0 6px;height:26px;border-radius:8px;
+  border:1px solid rgba(0,212,255,.22);background:rgba(0,212,255,.06);
+  margin-left:2px;
+}
+.dur-input-wrap input{
+  width:28px;background:transparent;border:none;outline:none;
+  color:var(--cyan);font-size:11px;font-weight:700;
+  font-family:'JetBrains Mono',monospace;text-align:center;
+  -moz-appearance:textfield;
+}
+.dur-input-wrap input::-webkit-outer-spin-button,
+.dur-input-wrap input::-webkit-inner-spin-button{-webkit-appearance:none;margin:0}
+.dur-input-wrap span{font-size:9px;color:var(--dim2)}
 
-/* ─── Prompts Grid ──────────────────────────────────────────────────── */
-.prompts-wrapper { max-width: 1320px; margin: 0 auto; padding: 22px 24px 80px; }
-.prompts-grid {
-  display: grid; grid-template-columns: repeat(auto-fill, minmax(300px, 1fr)); gap: 16px;
+/* ── Search ── */
+.search-bar-wrapper{
+  max-width:1320px;margin:0 auto;padding:22px 24px 0;
+  display:flex;gap:12px;align-items:center;flex-wrap:wrap;
 }
+.search-box{
+  flex:1;min-width:240px;display:flex;align-items:center;
+  background:var(--bg2);border:1.5px solid rgba(0,212,255,.16);
+  border-radius:20px;padding:0 16px;transition:all .2s;height:46px;
+}
+.search-box:focus-within{border-color:var(--cyan);box-shadow:0 0 0 3px rgba(0,212,255,.08)}
+.search-box input{
+  flex:1;background:transparent;border:none;outline:none;color:#fff;
+  font-size:13px;padding:0 10px;font-family:'JetBrains Mono',monospace;
+}
+.search-box input::placeholder{color:var(--dim2)}
+.search-spinner{
+  width:13px;height:13px;border:2px solid rgba(0,212,255,.2);
+  border-top-color:var(--cyan);border-radius:50%;animation:spin .6s linear infinite;flex-shrink:0;
+}
+.search-clear{
+  width:20px;height:20px;border-radius:50%;border:none;background:rgba(255,255,255,.06);
+  color:var(--dim2);display:flex;align-items:center;justify-content:center;cursor:pointer;
+  flex-shrink:0;transition:all .15s;
+}
+.search-clear:hover{background:rgba(244,63,94,.15);color:var(--pink)}
+.result-count{font-size:11px;color:var(--dim2);padding:0 14px;white-space:nowrap}
 
-.prompt-card {
-  background: var(--bg2); border: 1px solid var(--b); border-radius: var(--r2);
-  cursor: pointer; transition: all .22s; position: relative; overflow: hidden;
-  display: flex; flex-direction: column; animation: cardIn .35s ease both;
+/* ── auto-publish info bar ── */
+.autopub-bar{
+  max-width:1320px;margin:12px auto 0;padding:0 24px;
 }
-.prompt-card:hover { border-color: rgba(0,212,255,.32); transform: translateY(-3px); box-shadow: 0 16px 40px rgba(0,0,0,.45); }
+.autopub-notice{
+  display:flex;align-items:center;gap:9px;padding:10px 16px;
+  border-radius:10px;border:1px solid rgba(16,185,129,.22);
+  background:rgba(16,185,129,.06);font-size:11px;color:var(--green);
+  line-height:1.5;
+}
+.autopub-notice svg{flex-shrink:0;width:13px;height:13px;stroke:currentColor;fill:none;stroke-width:2}
+.autopub-notice span{color:var(--text2)}
 
-.prompt-media {
-  width: 100%; aspect-ratio: 16/9; background: var(--bg3); position: relative; overflow: hidden;
-  border-bottom: 1px solid rgba(0,212,255,.08);
-}
-.prompt-media img { width: 100%; height: 100%; object-fit: cover; display: block; }
-.prompt-media .media-placeholder {
-  width: 100%; height: 100%; display: flex; align-items: center; justify-content: center;
-  background: linear-gradient(135deg, rgba(0,212,255,.05), rgba(124,58,237,.05));
-}
-.prompt-media .media-placeholder svg { width: 28px; height: 28px; stroke: var(--dim); fill: none; stroke-width: 1.5; }
-.media-badge {
-  position: absolute; bottom: 8px; right: 8px;
-  display: inline-flex; align-items: center; gap: 4px;
-  font-size: 9px; font-weight: 700; color: #fff;
-  padding: 3px 8px; background: rgba(0,0,0,.55); border-radius: 6px;
-  backdrop-filter: blur(4px);
-}
-.media-badge svg { width: 10px; height: 10px; stroke: currentColor; fill: none; stroke-width: 2; }
+/* ── Grid ── */
+.prompts-wrapper{max-width:1320px;margin:0 auto;padding:22px 24px 80px}
+.prompts-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(300px,1fr));gap:16px}
 
-.prompt-body { padding: 16px; display: flex; flex-direction: column; flex: 1; gap: 10px; }
-.prompt-header { display: flex; align-items: flex-start; justify-content: space-between; gap: 8px; }
-.prompt-title {
-  font-size: 14px; font-weight: 700; color: #fff;
-  overflow: hidden; text-overflow: ellipsis; display: -webkit-box;
-  -webkit-line-clamp: 2; -webkit-box-orient: vertical; line-height: 1.4;
+.prompt-card{
+  background:var(--bg2);border:1px solid var(--b);border-radius:var(--r2);
+  cursor:pointer;transition:all .22s;position:relative;overflow:hidden;
+  display:flex;flex-direction:column;animation:cardIn .35s ease both;
 }
-.prompt-featured {
-  display: inline-flex; align-items: center; gap: 3px; font-size: 9px; color: var(--yellow);
-  padding: 3px 8px; background: rgba(245,158,11,.1); border: 1px solid rgba(245,158,11,.2);
-  border-radius: 5px; font-weight: 700; flex-shrink: 0; white-space: nowrap;
-}
-.prompt-featured svg { width: 9px; height: 9px; stroke: currentColor; fill: var(--yellow); stroke-width: 1; }
+.prompt-card:hover{border-color:rgba(0,212,255,.32);transform:translateY(-3px);box-shadow:0 16px 40px rgba(0,0,0,.45)}
 
-.prompt-author { display: flex; align-items: center; gap: 6px; font-size: 11px; color: var(--dim2); }
-.prompt-author svg { width: 11px; height: 11px; stroke: currentColor; fill: none; stroke-width: 2; }
-
-.prompt-preview {
-  font-size: 11px; color: var(--text2); line-height: 1.6; flex: 1;
-  overflow: hidden; display: -webkit-box; -webkit-line-clamp: 3; -webkit-box-orient: vertical;
-  font-family: 'JetBrains Mono', monospace;
+.prompt-media{
+  width:100%;aspect-ratio:16/9;background:var(--bg3);position:relative;overflow:hidden;
+  border-bottom:1px solid rgba(0,212,255,.08);
 }
-
-.prompt-meta {
-  display: flex; justify-content: space-between; align-items: center;
-  font-size: 10px; color: var(--dim2); padding-top: 10px; border-top: 1px solid rgba(0,212,255,.06);
+.prompt-media img{width:100%;height:100%;object-fit:cover;display:block}
+.prompt-media .media-placeholder{
+  width:100%;height:100%;display:flex;align-items:center;justify-content:center;
+  background:linear-gradient(135deg,rgba(0,212,255,.05),rgba(124,58,237,.05));
 }
-.meta-item { display: flex; align-items: center; gap: 4px; }
-.meta-item svg { width: 11px; height: 11px; stroke: currentColor; fill: none; stroke-width: 2; }
-
-/* ─── Empty / Loading State ──────────────────────────────────────────── */
-.empty-state, .loading-state { grid-column: 1 / -1; text-align: center; padding: 70px 24px; }
-.empty-icon, .loading-icon {
-  width: 56px; height: 56px; border-radius: 16px; background: var(--bg2);
-  border: 1px solid var(--b); display: flex; align-items: center; justify-content: center;
-  margin: 0 auto 18px;
-}
-.empty-icon svg { width: 24px; height: 24px; stroke: var(--dim2); fill: none; stroke-width: 1.5; }
-.loading-icon svg { width: 22px; height: 22px; stroke: var(--cyan); fill: none; stroke-width: 2; animation: spin 1s linear infinite; }
-.empty-title { font-family: 'Orbitron', sans-serif; font-size: 13px; color: #fff; margin-bottom: 8px; letter-spacing: .3px; }
-.empty-text { font-size: 12px; color: var(--dim2); line-height: 1.7; max-width: 380px; margin: 0 auto; }
-
-/* ─── Modal ───────────────────────────────────────────────────────────── */
-.modal-overlay {
-  position: fixed; inset: 0; background: rgba(0,0,0,.78); backdrop-filter: blur(10px);
-  z-index: 1000; display: flex; align-items: flex-end; justify-content: center;
-  opacity: 0; pointer-events: none; transition: opacity .25s; overflow-y: auto;
-}
-.modal-overlay.show { opacity: 1; pointer-events: auto; animation: fadeIn .2s ease; }
-
-.modal-content {
-  background: var(--bg2); border: 1px solid var(--b); border-radius: 20px 20px 0 0;
-  max-width: 620px; width: 100%; max-height: 92vh; overflow-y: auto;
-  box-shadow: 0 -24px 64px rgba(0,0,0,.7); animation: slideUp .3s cubic-bezier(.32,1,.6,1);
-  position: relative;
-}
-.modal-content::before {
-  content: ""; position: absolute; top: 0; left: 0; right: 0; height: 2px;
-  background: linear-gradient(90deg, transparent 5%, var(--cyan) 35%, var(--purple) 65%, transparent 95%);
+.media-badge{
+  position:absolute;bottom:8px;right:8px;
+  display:inline-flex;align-items:center;gap:4px;
+  font-size:9px;font-weight:700;color:#fff;
+  padding:3px 8px;background:rgba(0,0,0,.55);border-radius:6px;
+  backdrop-filter:blur(4px);
 }
 
-.modal-header {
-  padding: 20px 22px; border-bottom: 1px solid var(--b);
-  display: flex; align-items: center; justify-content: space-between; gap: 12px;
+.prompt-body{padding:16px;display:flex;flex-direction:column;flex:1;gap:10px}
+.prompt-header{display:flex;align-items:flex-start;justify-content:space-between;gap:8px}
+.prompt-title{
+  font-size:14px;font-weight:700;color:#fff;
+  overflow:hidden;text-overflow:ellipsis;display:-webkit-box;
+  -webkit-line-clamp:2;-webkit-box-orient:vertical;line-height:1.4;
 }
-.modal-title { font-size: 15px; font-weight: 700; color: var(--cyan); font-family: 'Orbitron', sans-serif; }
-.modal-close {
-  width: 34px; height: 34px; border-radius: 9px; background: var(--bg3); border: 1px solid var(--b);
-  color: var(--dim2); cursor: pointer; display: flex; align-items: center; justify-content: center;
-  transition: .15s; flex-shrink: 0;
+.prompt-featured{
+  display:inline-flex;align-items:center;gap:3px;font-size:9px;color:var(--yellow);
+  padding:3px 8px;background:rgba(245,158,11,.1);border:1px solid rgba(245,158,11,.2);
+  border-radius:5px;font-weight:700;flex-shrink:0;white-space:nowrap;
 }
-.modal-close:hover { color: var(--pink); border-color: rgba(244,63,94,.3); background: rgba(244,63,94,.06); }
-.modal-close svg { width: 15px; height: 15px; stroke: currentColor; fill: none; stroke-width: 2; }
-.modal-body { padding: 22px; }
-.modal-footer { padding: 18px 22px; border-top: 1px solid var(--b); display: flex; gap: 10px; justify-content: flex-end; }
+.prompt-author{display:flex;align-items:center;gap:6px;font-size:11px;color:var(--dim2)}
+.prompt-preview{
+  font-size:11px;color:var(--text2);line-height:1.6;flex:1;
+  overflow:hidden;display:-webkit-box;-webkit-line-clamp:3;-webkit-box-orient:vertical;
+}
+.prompt-meta{
+  display:flex;justify-content:space-between;align-items:center;
+  font-size:10px;color:var(--dim2);padding-top:10px;border-top:1px solid rgba(0,212,255,.06);
+}
+.meta-item{display:flex;align-items:center;gap:4px}
 
-/* ─── Detail view ───────────────────────────────────────────────────── */
-.detail-media {
-  width: 100%; max-height: 320px; border-radius: var(--r); overflow: hidden;
-  background: var(--bg3); margin-bottom: 18px; border: 1px solid var(--b);
-}
-.detail-media img { width: 100%; height: 100%; object-fit: contain; display: block; max-height: 320px; }
-.detail-title { font-size: 18px; font-weight: 900; color: #fff; margin-bottom: 6px; font-family: 'Orbitron', sans-serif; line-height: 1.4; }
-.detail-author { font-size: 11px; color: var(--dim2); margin-bottom: 16px; display: flex; align-items: center; gap: 6px; }
-.detail-author svg { width: 12px; height: 12px; stroke: currentColor; fill: none; stroke-width: 2; }
-.detail-label {
-  font-size: 10px; color: var(--cyan); font-weight: 700; margin-bottom: 8px;
-  text-transform: uppercase; letter-spacing: 1.5px;
-}
-.detail-content {
-  background: rgba(0,212,255,.04); border: 1px solid rgba(0,212,255,.08); border-radius: var(--r);
-  padding: 14px; font-size: 12px; line-height: 1.7; word-break: break-word; color: var(--text);
-  white-space: pre-wrap; max-height: 280px; overflow-y: auto;
-}
-.detail-stats { display: flex; gap: 16px; margin-top: 14px; font-size: 11px; color: var(--text2); }
-.detail-stat { display: flex; align-items: center; gap: 5px; }
-.detail-stat svg { width: 13px; height: 13px; stroke: currentColor; fill: none; stroke-width: 2; }
-
-/* ─── Publish Form ───────────────────────────────────────────────────── */
-.form-group { margin-bottom: 18px; }
-.form-label {
-  display: block; font-size: 11px; font-weight: 700; color: var(--cyan); margin-bottom: 8px;
-  text-transform: uppercase; letter-spacing: 1px;
-}
-.form-input, .form-textarea {
-  width: 100%; background: var(--bg3); border: 1.5px solid rgba(0,212,255,.16);
-  border-radius: var(--r); padding: 11px 14px; color: #fff; font-size: 13px;
-  font-family: 'JetBrains Mono', monospace; outline: none; transition: all .2s;
-}
-.form-input:focus, .form-textarea:focus { border-color: var(--cyan); box-shadow: 0 0 0 3px rgba(0,212,255,.08); }
-.form-textarea { resize: vertical; min-height: 140px; line-height: 1.6; }
-.form-hint { font-size: 10px; color: var(--dim2); margin-top: 6px; }
-.char-count { font-size: 10px; color: var(--dim2); margin-top: 6px; text-align: right; }
-.char-count.warn { color: var(--yellow); }
-.char-count.over { color: var(--pink); }
-
-/* ─── GIF picker ─────────────────────────────────────────────────────── */
-.gif-picker { display: flex; flex-direction: column; gap: 10px; }
-.gif-picker-grid {
-  display: grid; grid-template-columns: repeat(auto-fill, minmax(96px, 1fr)); gap: 8px;
-  max-height: 220px; overflow-y: auto; padding: 2px;
-}
-.gif-option {
-  position: relative; aspect-ratio: 1; border-radius: 8px; overflow: hidden; cursor: pointer;
-  border: 2px solid transparent; background: var(--bg3); transition: all .15s;
-}
-.gif-option img { width: 100%; height: 100%; object-fit: cover; display: block; }
-.gif-option:hover { border-color: rgba(0,212,255,.4); }
-.gif-option.selected { border-color: var(--cyan); box-shadow: 0 0 0 2px rgba(0,212,255,.2); }
-.gif-option.selected::after {
-  content: ""; position: absolute; top: 4px; right: 4px; width: 16px; height: 16px;
-  border-radius: 50%; background: var(--cyan);
-  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23030314' stroke-width='3'%3e%3cpolyline points='20 6 9 17 4 12'/%3e%3c/svg%3e");
-  background-repeat: no-repeat; background-position: center; background-size: 10px;
-}
-.gif-empty {
-  text-align: center; padding: 24px 12px; font-size: 11px; color: var(--dim2);
-  border: 1px dashed var(--b); border-radius: var(--r); line-height: 1.7;
-}
-.gif-empty svg { width: 22px; height: 22px; stroke: var(--dim2); fill: none; stroke-width: 1.5; margin-bottom: 8px; }
-.gif-clear-btn {
-  font-size: 10px; color: var(--pink); background: none; border: none; cursor: pointer;
-  text-decoration: underline; align-self: flex-start; padding: 0;
+/* ── auto-published badge on card ── */
+.auto-badge{
+  position:absolute;top:8px;left:8px;
+  display:inline-flex;align-items:center;gap:3px;
+  font-size:8px;font-weight:800;color:var(--green);
+  padding:2px 7px;background:rgba(16,185,129,.12);
+  border:1px solid rgba(16,185,129,.28);border-radius:5px;
+  letter-spacing:.3px;
 }
 
-.form-error {
-  padding: 11px 14px; background: rgba(244,63,94,.08); border: 1px solid rgba(244,63,94,.2);
-  border-radius: var(--r); color: var(--pink); font-size: 12px; margin-bottom: 14px;
+/* ── Empty / Loading ── */
+.empty-state,.loading-state{grid-column:1/-1;text-align:center;padding:70px 24px}
+.empty-icon,.loading-icon{
+  width:56px;height:56px;border-radius:16px;background:var(--bg2);
+  border:1px solid var(--b);display:flex;align-items:center;justify-content:center;
+  margin:0 auto 18px;
 }
+.loading-icon svg{animation:spin 1s linear infinite}
+.empty-title{font-family:'Orbitron',sans-serif;font-size:13px;color:#fff;margin-bottom:8px;letter-spacing:.3px}
+.empty-text{font-size:12px;color:var(--dim2);line-height:1.7;max-width:380px;margin:0 auto}
 
-/* ─── Toast ──────────────────────────────────────────────────────────── */
-.nx-toast {
-  position: fixed; bottom: 20px; right: 16px; z-index: 99999;
-  padding: 12px 16px; border-radius: 10px; font-size: 12px;
-  font-family: 'JetBrains Mono', monospace; background: var(--bg3); border: 1px solid var(--b);
-  box-shadow: 0 12px 40px rgba(0,0,0,.8); pointer-events: none;
-  max-width: min(320px, calc(100vw - 32px)); display: flex; align-items: center; gap: 9px; font-weight: 500;
+/* ── Modal ── */
+.modal-overlay{
+  position:fixed;inset:0;background:rgba(0,0,0,.78);backdrop-filter:blur(10px);
+  z-index:1000;display:flex;align-items:flex-end;justify-content:center;
+  opacity:0;pointer-events:none;transition:opacity .25s;overflow-y:auto;
 }
-.nx-toast.in  { animation: toastIn  .22s ease; }
-.nx-toast.out { animation: toastOut .22s ease forwards; }
-.nx-toast svg { width: 13px; height: 13px; stroke: currentColor; fill: none; stroke-width: 2; flex-shrink: 0; }
-
-/* ─── Responsive ─────────────────────────────────────────────────────── */
-@media (max-width: 768px) {
-  .explore-header { padding: 16px 16px; }
-  .header-title { font-size: 18px; }
-  .header-content { gap: 12px; }
-  .search-bar-wrapper { padding: 18px 16px 0; }
-  .prompts-wrapper { padding: 18px 16px 70px; }
-  .prompts-grid { grid-template-columns: 1fr; }
-  .modal-content { max-width: 100%; }
-  .header-right .btn span.btn-text-full { display: none; }
+.modal-overlay.show{opacity:1;pointer-events:auto;animation:fadeIn .2s ease}
+.modal-content{
+  background:var(--bg2);border:1px solid var(--b);border-radius:20px 20px 0 0;
+  max-width:620px;width:100%;max-height:92vh;overflow-y:auto;
+  box-shadow:0 -24px 64px rgba(0,0,0,.7);animation:slideUp .3s cubic-bezier(.32,1,.6,1);
+  position:relative;
 }
-
-@media (min-width: 769px) {
-  .modal-overlay { align-items: center; padding: 24px; }
-  .modal-content { border-radius: var(--r2); max-height: 88vh; }
+.modal-content::before{
+  content:"";position:absolute;top:0;left:0;right:0;height:2px;
+  background:linear-gradient(90deg,transparent 5%,var(--cyan) 35%,var(--purple) 65%,transparent 95%);
 }
+.modal-header{
+  padding:20px 22px;border-bottom:1px solid var(--b);
+  display:flex;align-items:center;justify-content:space-between;gap:12px;
+}
+.modal-title{font-size:15px;font-weight:700;color:var(--cyan);font-family:'Orbitron',sans-serif}
+.modal-close{
+  width:34px;height:34px;border-radius:9px;background:var(--bg3);border:1px solid var(--b);
+  color:var(--dim2);cursor:pointer;display:flex;align-items:center;justify-content:center;
+  transition:.15s;flex-shrink:0;
+}
+.modal-close:hover{color:var(--pink);border-color:rgba(244,63,94,.3);background:rgba(244,63,94,.06)}
+.modal-body{padding:22px}
+.modal-footer{padding:18px 22px;border-top:1px solid var(--b);display:flex;gap:10px;justify-content:flex-end}
 
-@media (prefers-reduced-motion: reduce) {
-  *, *::before, *::after { animation-duration: .01ms !important; transition-duration: .01ms !important; }
+/* ── Detail ── */
+.detail-media{
+  width:100%;max-height:320px;border-radius:var(--r);overflow:hidden;
+  background:var(--bg3);margin-bottom:18px;border:1px solid var(--b);
+}
+.detail-media img{width:100%;height:100%;object-fit:contain;display:block;max-height:320px}
+.detail-title{font-size:18px;font-weight:900;color:#fff;margin-bottom:6px;font-family:'Orbitron',sans-serif;line-height:1.4}
+.detail-author{font-size:11px;color:var(--dim2);margin-bottom:16px;display:flex;align-items:center;gap:6px}
+.detail-label{font-size:10px;color:var(--cyan);font-weight:700;margin-bottom:8px;text-transform:uppercase;letter-spacing:1.5px}
+.detail-content{
+  background:rgba(0,212,255,.04);border:1px solid rgba(0,212,255,.08);border-radius:var(--r);
+  padding:14px;font-size:12px;line-height:1.7;word-break:break-word;color:var(--text);
+  white-space:pre-wrap;max-height:280px;overflow-y:auto;
+}
+.detail-stats{display:flex;gap:16px;margin-top:14px;font-size:11px;color:var(--text2)}
+.detail-stat{display:flex;align-items:center;gap:5px}
+
+/* ── Toast ── */
+.nx-toast{
+  position:fixed;bottom:20px;right:16px;z-index:99999;
+  padding:12px 16px;border-radius:10px;font-size:12px;
+  font-family:'JetBrains Mono',monospace;background:var(--bg3);border:1px solid var(--b);
+  box-shadow:0 12px 40px rgba(0,0,0,.8);pointer-events:none;
+  max-width:min(320px,calc(100vw - 32px));display:flex;align-items:center;gap:9px;font-weight:500;
+}
+.nx-toast.in{animation:toastIn .22s ease}
+.nx-toast.out{animation:toastOut .22s ease forwards}
+
+/* ── Responsive ── */
+@media(max-width:768px){
+  .explore-header{padding:16px}
+  .header-title{font-size:18px}
+  .search-bar-wrapper{padding:18px 16px 0}
+  .prompts-wrapper{padding:18px 16px 70px}
+  .prompts-grid{grid-template-columns:1fr}
+  .header-right{gap:7px}
+  .toggle-chip{padding:0 11px;font-size:11px;height:37px}
+  .btn{height:37px;padding:0 14px}
+}
+@media(min-width:769px){
+  .modal-overlay{align-items:center;padding:24px}
+  .modal-content{border-radius:var(--r2);max-height:88vh}
+}
+@media(prefers-reduced-motion:reduce){
+  *,*::before,*::after{animation-duration:.01ms !important;transition-duration:.01ms !important}
 }
 `
 
@@ -434,15 +398,33 @@ body::before {
 // ═══════════════════════════════════════════════════════════════════════════
 
 function timeAgo(iso: string): string {
-  const diffMs = Date.now() - new Date(iso).getTime()
-  const mins   = Math.floor(diffMs / 60_000)
-  if (mins < 1)     return 'just now'
-  if (mins < 60)    return `${mins}m ago`
-  const hours = Math.floor(mins / 60)
-  if (hours < 24)   return `${hours}h ago`
-  const days = Math.floor(hours / 24)
-  if (days < 30)    return `${days}d ago`
+  const diff = Date.now() - new Date(iso).getTime()
+  const m = Math.floor(diff / 60_000)
+  if (m < 1)  return 'just now'
+  if (m < 60) return `${m}m ago`
+  const h = Math.floor(m / 60)
+  if (h < 24) return `${h}h ago`
+  const d = Math.floor(h / 24)
+  if (d < 30) return `${d}d ago`
   return new Date(iso).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })
+}
+
+function showToast(msg: string, color?: string) {
+  document.querySelectorAll('.nx-toast').forEach(t => t.remove())
+  const t = document.createElement('div')
+  t.className   = 'nx-toast in'
+  t.style.color = color || 'var(--cyan)'
+  t.innerHTML   = `<svg viewBox="0 0 24 24" width="13" height="13" stroke="currentColor" fill="none" stroke-width="2"><polyline points="20 6 9 17 4 12"/></svg><span>${msg.replace(/</g, '&lt;')}</span>`
+  document.body.appendChild(t)
+  setTimeout(() => { t.classList.remove('in'); t.classList.add('out'); setTimeout(() => t.remove(), 250) }, 2400)
+}
+
+// baca localStorage dengan fallback aman
+function lsGet(key: string, fallback: string): string {
+  try { return localStorage.getItem(key) ?? fallback } catch { return fallback }
+}
+function lsSet(key: string, value: string) {
+  try { localStorage.setItem(key, value) } catch { /* kuota penuh / SSR */ }
 }
 
 // ═══════════════════════════════════════════════════════════════════════════
@@ -452,39 +434,40 @@ function timeAgo(iso: string): string {
 export default function ExplorePage() {
   const router = useRouter()
 
-  // ─── State ─────────────────────────────────────────────────────────────
-  const [session,        setSession]        = useState<NexusSession | null>(null)
-  const [loading,         setLoading]         = useState(true)
-  const [prompts,         setPrompts]         = useState<Prompt[]>([])
-  const [loadingPrompts,  setLoadingPrompts]  = useState(false)
-  const [searchInput,     setSearchInput]     = useState('')   // raw input, updates instantly
-  const [searchTerm,      setSearchTerm]      = useState('')   // debounced value actually used to query
-  const [searching,       setSearching]       = useState(false)
+  // ── Auth ────────────────────────────────────────────────────────────────
+  const [session,       setSession]       = useState<NexusSession | null>(null)
+  const [loading,       setLoading]       = useState(true)
 
-  const [showPublish,     setShowPublish]     = useState(false)
+  // ── Prompts ─────────────────────────────────────────────────────────────
+  const [prompts,        setPrompts]        = useState<Prompt[]>([])
+  const [loadingPrompts, setLoadingPrompts] = useState(false)
+  const [searchInput,    setSearchInput]    = useState('')
+  const [searchTerm,     setSearchTerm]     = useState('')
+  const [searching,      setSearching]      = useState(false)
+
+  // ── Detail modal ────────────────────────────────────────────────────────
   const [showDetail,      setShowDetail]      = useState(false)
   const [selectedPrompt,  setSelectedPrompt]  = useState<Prompt | null>(null)
-  const [publishing,      setPublishing]      = useState(false)
-  const [publishError,    setPublishError]    = useState('')
-
-  const [title,           setTitle]           = useState('')
-  const [content,         setContent]         = useState('')
-  const [selectedGif,     setSelectedGif]     = useState<CapturedGif | null>(null)
-  const [capturedGifs,    setCapturedGifs]    = useState<CapturedGif[]>([])
-  const [loadingGifs,     setLoadingGifs]     = useState(false)
   const [copiedId,        setCopiedId]        = useState<string | null>(null)
+
+  // ── Play Test toggle (shared dengan chats.ts via localStorage) ──────────
+  const [playTestOn,  setPlayTestOn]  = useState(false)
+  const [playTestDur, setPlayTestDur] = useState(15)  // detik, max 30 di sini
+
+  // ── Auto-Publish toggle ─────────────────────────────────────────────────
+  // Hanya aktif jika playTestOn = true
+  const [autoPublish, setAutoPublish] = useState(false)
 
   const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null)
 
-  // ─── Auth check — FIX: read the session key that actually gets written ──
+  // ── Auth check ───────────────────────────────────────────────────────────
   useEffect(() => {
     const raw = localStorage.getItem(SESSION_KEY)
     if (!raw) { router.push('/'); return }
-
     try {
       const sess = JSON.parse(raw) as NexusSession
       if (!sess?.user?.username) throw new Error('no user')
-      if (Date.now() - (sess.loginTime || 0) > SESSION_MAX_AGE_MS) throw new Error('session expired')
+      if (Date.now() - (sess.loginTime || 0) > SESSION_MAX_AGE_MS) throw new Error('expired')
       setSession(sess)
     } catch {
       localStorage.removeItem(SESSION_KEY)
@@ -494,18 +477,61 @@ export default function ExplorePage() {
     setLoading(false)
   }, [router])
 
-  // ─── Fetch prompts ───────────────────────────────────────────────────────
+  // ── Baca state toggles dari localStorage saat mount ─────────────────────
+  useEffect(() => {
+    const pt  = lsGet(LS_PLAY_TEST, 'false') === 'true'
+    const dur = Math.max(5, Math.min(MAX_PLAY_TEST_DUR_EXPLORE, parseInt(lsGet(LS_PLAY_TEST_DUR, '15')) || 15))
+    const ap  = lsGet(LS_AUTO_PUBLISH, 'false') === 'true'
+
+    setPlayTestOn(pt)
+    setPlayTestDur(dur)
+    // Auto-publish hanya bisa ON jika play test ON
+    setAutoPublish(pt ? ap : false)
+  }, [])
+
+  // ── Toggle Play Test ─────────────────────────────────────────────────────
+  function togglePlayTest() {
+    const next = !playTestOn
+    setPlayTestOn(next)
+    lsSet(LS_PLAY_TEST, next ? 'true' : 'false')
+    // Jika play test dimatikan → otomatis matikan auto-publish
+    if (!next) {
+      setAutoPublish(false)
+      lsSet(LS_AUTO_PUBLISH, 'false')
+    }
+    showToast(next ? 'Play Test enabled' : 'Play Test disabled — Auto Publish turned off', next ? 'var(--cyan)' : 'var(--yellow)')
+  }
+
+  // ── Toggle Auto Publish ──────────────────────────────────────────────────
+  function toggleAutoPublish() {
+    if (!playTestOn) return // guard: tidak bisa toggle jika play test mati
+    const next = !autoPublish
+    setAutoPublish(next)
+    lsSet(LS_AUTO_PUBLISH, next ? 'true' : 'false')
+    showToast(next ? 'Auto Publish enabled — prompts will publish after play test!' : 'Auto Publish disabled', next ? 'var(--green)' : 'var(--yellow)')
+  }
+
+  // ── Set durasi play test ─────────────────────────────────────────────────
+  function handleDurChange(raw: string) {
+    const parsed = parseInt(raw) || 15
+    const clamped = Math.max(5, Math.min(MAX_PLAY_TEST_DUR_EXPLORE, parsed))
+    setPlayTestDur(clamped)
+    lsSet(LS_PLAY_TEST_DUR, String(clamped))
+  }
+
+  // ── Fetch prompts ────────────────────────────────────────────────────────
   const fetchPrompts = useCallback(async (q: string) => {
     setLoadingPrompts(true)
     try {
       const params = new URLSearchParams()
       if (q.trim()) params.set('q', q.trim())
-      const response = await fetch(`/api/explore?${params.toString()}`)
-      if (!response.ok) throw new Error('Failed to fetch prompts')
-      const data = await response.json()
+      params.set('limit', String(MAX_LIST_LIMIT))
+      const res = await fetch(`/api/explore?${params.toString()}`)
+      if (!res.ok) throw new Error('fetch failed')
+      const data = await res.json()
       setPrompts(data.prompts || [])
-    } catch (err) {
-      console.error('Error fetching prompts:', err)
+    } catch (e) {
+      console.error('fetchPrompts error:', e)
       setPrompts([])
     } finally {
       setLoadingPrompts(false)
@@ -517,97 +543,42 @@ export default function ExplorePage() {
     if (!loading) fetchPrompts(searchTerm)
   }, [loading, searchTerm, fetchPrompts])
 
-  // ─── Debounced search — updates searchTerm 350ms after typing stops ─────
+  // ── Debounced search ─────────────────────────────────────────────────────
   function handleSearchChange(value: string) {
     setSearchInput(value)
     setSearching(true)
     if (debounceRef.current) clearTimeout(debounceRef.current)
-    debounceRef.current = setTimeout(() => {
-      setSearchTerm(value)
-    }, SEARCH_DEBOUNCE_MS)
+    debounceRef.current = setTimeout(() => setSearchTerm(value), SEARCH_DEBOUNCE_MS)
   }
-
   function clearSearch() {
-    setSearchInput('')
-    setSearchTerm('')
-    setSearching(false)
+    setSearchInput(''); setSearchTerm(''); setSearching(false)
     if (debounceRef.current) clearTimeout(debounceRef.current)
   }
+  useEffect(() => () => { if (debounceRef.current) clearTimeout(debounceRef.current) }, [])
 
+  // ── Listen event dari chats.ts: saat prompt baru di-publish otomatis ─────
+  // chats.ts akan dispatch CustomEvent('nexus:prompt-published', { detail: prompt })
   useEffect(() => {
-    return () => { if (debounceRef.current) clearTimeout(debounceRef.current) }
+    function onPromptPublished(e: Event) {
+      const detail = (e as CustomEvent<Prompt>).detail
+      if (!detail?.id) return
+      setPrompts(prev => [detail, ...prev.filter(p => p.id !== detail.id)])
+      showToast('Your prompt was auto-published to Explore!', 'var(--green)')
+    }
+    window.addEventListener('nexus:prompt-published', onPromptPublished)
+    return () => window.removeEventListener('nexus:prompt-published', onPromptPublished)
   }, [])
 
-  // ─── Fetch this user's Studio play-test captures ────────────────────────
-  const fetchCapturedGifs = useCallback(async () => {
-    if (!session?.user?.username) return
-    setLoadingGifs(true)
-    try {
-      const res = await fetch(`/api/storage?user=${encodeURIComponent(session.user.username.toLowerCase())}&limit=24`)
-      if (!res.ok) throw new Error('Failed to fetch captures')
-      const data = await res.json()
-      setCapturedGifs(Array.isArray(data.gifs) ? data.gifs : [])
-    } catch (err) {
-      console.error('Error fetching captures:', err)
-      setCapturedGifs([])
-    } finally {
-      setLoadingGifs(false)
-    }
-  }, [session])
-
-  useEffect(() => {
-    if (showPublish) fetchCapturedGifs()
-  }, [showPublish, fetchCapturedGifs])
-
-  // ─── Publish ──────────────────────────────────────────────────────────────
-  async function handlePublish() {
-    if (!session) return
-    if (title.trim().length < 3) { setPublishError('Give your prompt a title (at least 3 characters).'); return }
-    if (content.trim().length < MIN_CONTENT_LEN) { setPublishError('Write the actual prompt text before publishing.'); return }
-
-    setPublishing(true)
-    setPublishError('')
-    try {
-      const res = await fetch('/api/explore', {
-        method:  'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          user:     session.user.username.toLowerCase(),
-          robloxId: session.user.robloxId || '',
-          title:    title.trim(),
-          content:  content.trim(),
-          gifUrl:   selectedGif?.url || null,
-        }),
-      })
-      const data = await res.json()
-      if (!res.ok) throw new Error(data.error || 'Failed to publish prompt')
-
-      setPrompts(prev => [data.prompt, ...prev])
-      closePublish()
-      showToast('Prompt published', 'var(--green)')
-    } catch (err) {
-      setPublishError(err instanceof Error ? err.message : 'An error occurred')
-    } finally {
-      setPublishing(false)
-    }
-  }
-
-  function closePublish() {
-    setShowPublish(false)
-    setTitle('')
-    setContent('')
-    setSelectedGif(null)
-    setPublishError('')
-  }
-
+  // ── Detail modal ─────────────────────────────────────────────────────────
   function openDetail(prompt: Prompt) {
     setSelectedPrompt(prompt)
     setShowDetail(true)
+    // increment use count (non-critical)
     fetch('/api/explore', {
-      method:  'PATCH',
+      method: 'PATCH',
       headers: { 'Content-Type': 'application/json' },
-      body:    JSON.stringify({ id: prompt.id }),
-    }).catch(() => { /* non-critical */ })
+      body: JSON.stringify({ id: prompt.id }),
+    }).catch(() => {})
   }
 
   async function copyPrompt(prompt: Prompt) {
@@ -617,30 +588,11 @@ export default function ExplorePage() {
       showToast('Copied to clipboard', 'var(--green)')
       setTimeout(() => setCopiedId(null), 1800)
     } catch {
-      showToast('Copy failed — select the text manually', 'var(--pink)')
+      showToast('Copy failed', 'var(--pink)')
     }
   }
 
-  function showToast(msg: string, color?: string) {
-    document.querySelectorAll('.nx-toast').forEach(t => t.remove())
-    const t = document.createElement('div')
-    t.className   = 'nx-toast in'
-    t.style.color = color || 'var(--cyan)'
-    t.innerHTML = `<svg viewBox="0 0 24 24" width="13" height="13" stroke="currentColor" fill="none" stroke-width="2"><polyline points="20 6 9 17 4 12"/></svg><span>${msg.replace(/</g, '&lt;')}</span>`
-    document.body.appendChild(t)
-    setTimeout(() => {
-      t.classList.remove('in')
-      t.classList.add('out')
-      setTimeout(() => t.remove(), 250)
-    }, 2400)
-  }
-
-  const charLen = title.length
-  const charCls = charLen >= MAX_TITLE_LEN ? 'over' : charLen >= MAX_TITLE_LEN - 10 ? 'warn' : ''
-
-  const hasQuery = searchTerm.trim().length > 0
-
-  // ─── Render ────────────────────────────────────────────────────────────
+  // ── Loading screen ───────────────────────────────────────────────────────
   if (loading) {
     return (
       <>
@@ -648,32 +600,84 @@ export default function ExplorePage() {
         <div className="explore-container">
           <div className="loading-state" style={{ paddingTop: 120 }}>
             <div className="loading-icon"><I.loader /></div>
-            <div className="empty-text">Loading explore...</div>
+            <div className="empty-text">Loading Explore...</div>
           </div>
         </div>
       </>
     )
   }
 
+  const hasQuery = searchTerm.trim().length > 0
+
+  // ── Render ───────────────────────────────────────────────────────────────
   return (
     <>
       <style dangerouslySetInnerHTML={{ __html: EXPLORE_CSS }} />
 
       <div className="explore-container">
-        {/* ─── HEADER ───────────────────────────────────────────────────── */}
+
+        {/* ── HEADER ── */}
         <div className="explore-header">
           <div className="header-content">
+
             <div className="header-left">
               <div className="header-icon"><I.sparkle /></div>
               <div>
                 <div className="header-title">EXPLORE</div>
-                <div className="header-subtitle">Discover & share community prompts</div>
+                <div className="header-subtitle">Community prompts — auto-published after play test</div>
               </div>
             </div>
+
             <div className="header-right">
-              <button className="btn primary" onClick={() => setShowPublish(true)}>
-                <I.plus /><span className="btn-text-full">Publish Prompt</span>
+
+              {/* Play Test toggle + durasi */}
+              <button
+                className={`toggle-chip${playTestOn ? ' on' : ''}`}
+                onClick={togglePlayTest}
+                title={playTestOn ? 'Click to disable Play Test' : 'Click to enable Play Test (required for Auto Publish)'}
+              >
+                <span className="chip-dot" />
+                <I.gamepad />
+                Play Test
+                {/* durasi input hanya tampil saat ON */}
+                {playTestOn && (
+                  <div
+                    className="dur-input-wrap"
+                    onClick={e => e.stopPropagation()} // jangan toggle saat klik input
+                  >
+                    <I.timer />
+                    <input
+                      type="number"
+                      min={5}
+                      max={MAX_PLAY_TEST_DUR_EXPLORE}
+                      value={playTestDur}
+                      onChange={e => handleDurChange(e.target.value)}
+                      onBlur={e => handleDurChange(e.target.value)}
+                    />
+                    <span>s</span>
+                  </div>
+                )}
               </button>
+
+              {/* Public Prompt toggle — disabled jika play test mati */}
+              <button
+                className={`toggle-chip${autoPublish ? ' on-green' : ''}`}
+                onClick={toggleAutoPublish}
+                disabled={!playTestOn}
+                title={
+                  !playTestOn
+                    ? 'Enable Play Test first to use Auto Publish'
+                    : autoPublish
+                    ? 'Auto Publish ON — prompts will publish after each play test'
+                    : 'Click to enable Auto Publish'
+                }
+              >
+                <span className="chip-dot" />
+                <I.globe />
+                Public Prompt
+                {autoPublish && <I.zap />}
+              </button>
+
               <Link href="/dashboard">
                 <button className="btn ghost">Dashboard</button>
               </Link>
@@ -681,7 +685,21 @@ export default function ExplorePage() {
           </div>
         </div>
 
-        {/* ─── SEARCH ───────────────────────────────────────────────────── */}
+        {/* ── INFO BAR saat auto-publish aktif ── */}
+        {autoPublish && (
+          <div className="autopub-bar">
+            <div className="autopub-notice">
+              <I.zap />
+              <span>
+                <strong style={{ color: 'var(--green)' }}>Auto Publish is ON</strong>
+                <span> — after each play test in Studio, your prompt + gameplay GIF will be automatically published here. </span>
+                <span>Play test duration: <strong style={{ color: 'var(--cyan)' }}>{playTestDur}s</strong></span>
+              </span>
+            </div>
+          </div>
+        )}
+
+        {/* ── SEARCH ── */}
         <div className="search-bar-wrapper">
           <div className="search-box">
             <I.search />
@@ -700,11 +718,13 @@ export default function ExplorePage() {
             )}
           </div>
           {!loadingPrompts && (
-            <span className="result-count">{prompts.length} prompt{prompts.length !== 1 ? 's' : ''}</span>
+            <span className="result-count">
+              {prompts.length} prompt{prompts.length !== 1 ? 's' : ''}
+            </span>
           )}
         </div>
 
-        {/* ─── GRID ─────────────────────────────────────────────────────── */}
+        {/* ── GRID ── */}
         <div className="prompts-wrapper">
           <div className="prompts-grid">
             {loadingPrompts ? (
@@ -718,13 +738,24 @@ export default function ExplorePage() {
                 <div className="empty-title">No prompts found</div>
                 <div className="empty-text">
                   {hasQuery
-                    ? <>Nothing matches &quot;{searchTerm}&quot;. Try a different search term.</>
-                    : 'Be the first to publish a prompt — click "Publish Prompt" to get started.'}
+                    ? <>Nothing matches &quot;{searchTerm}&quot;. Try different keywords.</>
+                    : <>Enable <strong style={{ color: 'var(--cyan)' }}>Play Test</strong> + <strong style={{ color: 'var(--green)' }}>Public Prompt</strong> above, then run a prompt in Studio — it will auto-publish here after the play test finishes.</>
+                  }
                 </div>
               </div>
             ) : (
-              prompts.map(prompt => (
-                <div key={prompt.id} className="prompt-card" onClick={() => openDetail(prompt)}>
+              prompts.map((prompt, i) => (
+                <div
+                  key={prompt.id}
+                  className="prompt-card"
+                  onClick={() => openDetail(prompt)}
+                  style={{ animationDelay: `${Math.min(i * 40, 300)}ms` }}
+                >
+                  {/* auto-published badge (jika author = user saat ini & ada gif) */}
+                  {session && prompt.author === session.user.username.toLowerCase() && prompt.gifUrl && (
+                    <div className="auto-badge"><I.zap />Auto</div>
+                  )}
+
                   <div className="prompt-media">
                     {prompt.gifUrl ? (
                       <>
@@ -740,7 +771,9 @@ export default function ExplorePage() {
                     <div className="prompt-header">
                       <div className="prompt-title">{prompt.title}</div>
                       {prompt.featured && (
-                        <div className="prompt-featured"><I.star />Featured</div>
+                        <div className="prompt-featured">
+                          <I.star />Featured
+                        </div>
                       )}
                     </div>
 
@@ -759,8 +792,11 @@ export default function ExplorePage() {
           </div>
         </div>
 
-        {/* ─── DETAIL MODAL ─────────────────────────────────────────────── */}
-        <div className={`modal-overlay ${showDetail ? 'show' : ''}`} onClick={() => setShowDetail(false)}>
+        {/* ── DETAIL MODAL ── */}
+        <div
+          className={`modal-overlay${showDetail ? ' show' : ''}`}
+          onClick={() => setShowDetail(false)}
+        >
           <div className="modal-content" onClick={e => e.stopPropagation()}>
             {selectedPrompt && (
               <>
@@ -777,119 +813,30 @@ export default function ExplorePage() {
                       <img src={selectedPrompt.gifUrl} alt="" />
                     </div>
                   )}
-
                   <div className="detail-title">{selectedPrompt.title}</div>
                   <div className="detail-author"><I.user />@{selectedPrompt.author}</div>
-
                   <div className="detail-label">Prompt</div>
                   <div className="detail-content">{selectedPrompt.content}</div>
-
                   <div className="detail-stats">
                     <div className="detail-stat"><I.play />{selectedPrompt.uses} uses</div>
-                    <div className="detail-stat"><I.star />{selectedPrompt.rating.toFixed(1)} rating</div>
+                    <div className="detail-stat"><I.star />{selectedPrompt.rating.toFixed(1)}</div>
                     <div className="detail-stat">{timeAgo(selectedPrompt.createdAt)}</div>
                   </div>
                 </div>
 
                 <div className="modal-footer">
                   <button className="btn ghost" onClick={() => copyPrompt(selectedPrompt)}>
-                    {copiedId === selectedPrompt.id ? <><I.check />Copied</> : <><I.copy />Copy Prompt</>}
+                    {copiedId === selectedPrompt.id
+                      ? <><I.check />Copied</>
+                      : <><I.copy />Copy Prompt</>}
                   </button>
-                  <button className="btn primary" onClick={() => setShowDetail(false)}>Close</button>
+                  <button className="btn" onClick={() => setShowDetail(false)}>Close</button>
                 </div>
               </>
             )}
           </div>
         </div>
 
-        {/* ─── PUBLISH MODAL ─────────────────────────────────────────────── */}
-        <div className={`modal-overlay ${showPublish ? 'show' : ''}`} onClick={closePublish}>
-          <div className="modal-content" onClick={e => e.stopPropagation()}>
-            <div className="modal-header">
-              <div className="modal-title">Publish Your Prompt</div>
-              <button className="modal-close" onClick={closePublish} aria-label="Close">
-                <I.cross />
-              </button>
-            </div>
-
-            <div className="modal-body">
-              {publishError && <div className="form-error">{publishError}</div>}
-
-              <div className="form-group">
-                <label className="form-label">Title</label>
-                <input
-                  type="text"
-                  className="form-input"
-                  placeholder="e.g. Roblox GUI Generator"
-                  maxLength={MAX_TITLE_LEN}
-                  value={title}
-                  onChange={e => setTitle(e.target.value)}
-                  autoComplete="off"
-                />
-                <div className={`char-count ${charCls}`}>{charLen} / {MAX_TITLE_LEN}</div>
-              </div>
-
-              <div className="form-group">
-                <label className="form-label">Prompt for AI</label>
-                <textarea
-                  className="form-textarea"
-                  placeholder="Paste the exact prompt text you want to share..."
-                  value={content}
-                  onChange={e => setContent(e.target.value)}
-                />
-                <div className="form-hint">This is the only thing other users will see and copy.</div>
-              </div>
-
-              <div className="form-group">
-                <label className="form-label">GIF Preview</label>
-                <div className="gif-picker">
-                  {selectedGif && (
-                    <button className="gif-clear-btn" onClick={() => setSelectedGif(null)}>
-                      Remove selected GIF
-                    </button>
-                  )}
-
-                  {loadingGifs ? (
-                    <div className="gif-empty">
-                      <div className="loading-icon" style={{ margin: '0 auto 8px', width: 36, height: 36 }}>
-                        <I.loader />
-                      </div>
-                      Loading your captures...
-                    </div>
-                  ) : capturedGifs.length === 0 ? (
-                    <div className="gif-empty">
-                      <I.film />
-                      <div>
-                        No play-test captures yet. Run a play test in Roblox Studio with the
-                        NEXUS AI plugin — your gameplay GIF will show up here automatically.
-                      </div>
-                    </div>
-                  ) : (
-                    <div className="gif-picker-grid">
-                      {capturedGifs.map(gif => (
-                        <div
-                          key={gif.id}
-                          className={`gif-option${selectedGif?.id === gif.id ? ' selected' : ''}`}
-                          onClick={() => setSelectedGif(gif)}
-                          title={gif.name}
-                        >
-                          {gif.url && <img src={gif.url} alt={gif.name} loading="lazy" />}
-                        </div>
-                      ))}
-                    </div>
-                  )}
-                </div>
-              </div>
-            </div>
-
-            <div className="modal-footer">
-              <button className="btn ghost" onClick={closePublish}>Cancel</button>
-              <button className="btn primary" onClick={handlePublish} disabled={publishing}>
-                {publishing ? (<><I.loader />Publishing...</>) : (<><I.arrow />Publish</>)}
-              </button>
-            </div>
-          </div>
-        </div>
       </div>
     </>
   )

@@ -1,9 +1,13 @@
 // ts/explore.ts — NEXUS AI Explore / Community Prompts (TypeScript)
 //
-// Mirrors the storage conventions used in sync.ts: Supabase is the primary
-// store. Publishing is intentionally minimal — only `title`, `content`
-// (the actual prompt text) and an optional `gifUrl` (sourced from the
-// Studio plugin's /api/storage capture, never a raw file upload here).
+// Auto-publish flow:
+//   1. chats.ts mendeteksi nexus_auto_publish === 'true' di localStorage
+//   2. Setelah play_test / stop_test selesai, chats.ts call POST /api/explore
+//      dengan { user, robloxId, title, content, gifUrl }
+//   3. gifUrl diambil dari GET /storage?user=x&limit=1 (GIF terbaru)
+//   4. Prompt tersimpan di Supabase dan muncul di halaman Explore
+//
+// Storage conventions sama seperti sync.ts: Supabase sebagai primary store.
 
 import type { SupabaseClient }                             from '@supabase/supabase-js';
 import type { HandlerFn, AdaptedRequest, AdaptedResponse } from '../app/api/[...slug]/route';
@@ -33,6 +37,8 @@ interface PublishBody {
   title?:    unknown;
   content?:  unknown;
   gifUrl?:   unknown;
+  // auto_publish flag — dikirim oleh chats.ts saat auto-publish
+  auto?:     unknown;
   [key: string]: unknown;
 }
 
@@ -54,12 +60,17 @@ const TIMEOUT_OP         = 8_000;
 const MAX_RETRY          = 3;
 const SB_RETRY_COOLDOWN  = 30_000;
 
-const MAX_TITLE_LEN   = 80;
-const MIN_TITLE_LEN   = 3;
-const MAX_CONTENT_LEN = 12_000;
-const MIN_CONTENT_LEN = 10;
-const MAX_LIST_LIMIT  = 60;
-const DEFAULT_LIMIT   = 30;
+const MAX_TITLE_LEN      = 80;
+const MIN_TITLE_LEN      = 3;
+const MAX_CONTENT_LEN    = 12_000;
+const MIN_CONTENT_LEN    = 10;
+const MAX_LIST_LIMIT     = 60;
+const DEFAULT_LIMIT      = 30;
+
+// Rate limit: per user, max publish per menit
+// Auto-publish diberi sedikit lebih longgar karena dipicu sistem, bukan manual
+const RL_PUBLISH_MANUAL  = 10;  // per menit per user (manual)
+const RL_PUBLISH_AUTO    = 30;  // per menit per user (auto dari chats.ts)
 
 // ═══════════════════════════════════════════════════════════════════════════
 // UTILITIES
@@ -86,8 +97,7 @@ function generatePromptId(): string {
   return `pmt_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 10)}`;
 }
 
-// Only allow https URLs, so the gifUrl field can never be used to embed
-// arbitrary/unsafe content (e.g. javascript: URLs).
+// Hanya allow https URL agar tidak bisa embed URL berbahaya
 function sanitizeGifUrl(value: unknown): string | null {
   const s = String(value ?? '').trim();
   if (!s) return null;
@@ -110,7 +120,7 @@ function formatSBError(error: unknown): string {
 }
 
 // ═══════════════════════════════════════════════════════════════════════════
-// SUPABASE — lazy init (same pattern as sync.ts)
+// SUPABASE — lazy init (sama seperti sync.ts)
 // ═══════════════════════════════════════════════════════════════════════════
 
 interface SbState {
@@ -141,7 +151,7 @@ async function _doInitSB(): Promise<SupabaseClient | null> {
     const { createClient } = await import('@supabase/supabase-js');
     const client = createClient(url, key, {
       auth:   { persistSession: false, autoRefreshToken: false },
-      global: { headers: { 'X-Client-Info': 'nexus-explore/1' } },
+      global: { headers: { 'X-Client-Info': 'nexus-explore/2' } },
     });
 
     _sb.client = client;
@@ -179,12 +189,14 @@ async function getSB(): Promise<SupabaseClient | null> {
 // SUPABASE OPERATIONS
 // ═══════════════════════════════════════════════════════════════════════════
 
-async function sbListPrompts(): Promise<Record<string, unknown>[]> {
+async function sbListPrompts(authorFilter?: string): Promise<Record<string, unknown>[]> {
   const sb = await getSB();
   if (!sb) return [];
   try {
+    let q = sb.from(TABLE).select('*').order('created_at', { ascending: false });
+    if (authorFilter) q = (q as unknown as { eq: (col: string, val: string) => typeof q }).eq('author', authorFilter) as typeof q;
     const raw = await withTimeout(
-      (sb.from(TABLE).select('*').order('created_at', { ascending: false }) as unknown) as Promise<unknown>,
+      (q as unknown) as Promise<unknown>,
       TIMEOUT_OP * 2,
       'sbListPrompts',
     );
@@ -257,12 +269,12 @@ async function sbIncrementUses(id: string): Promise<void> {
       'sbIncrementUses',
     );
   } catch (e: unknown) {
-    // Non-critical — view count drift is acceptable, never blocks the response.
+    // Non-critical
     console.warn('[explore] sbIncrementUses failed (non-fatal):', e instanceof Error ? e.message : e);
   }
 }
 
-// Map a raw Supabase row (snake_case) back into our camelCase PromptRecord shape.
+// Map raw Supabase row (snake_case) → camelCase PromptRecord
 function rowToPrompt(row: Record<string, unknown>): PromptRecord {
   return {
     id:        String(row.id ?? ''),
@@ -290,15 +302,10 @@ function validatePublishBody(body: PublishBody): { error: string } | {
   const content = sanitizeStr(String(body.content ?? ''), MAX_CONTENT_LEN).trim();
   const gifUrl  = body.gifUrl ? sanitizeGifUrl(body.gifUrl) : null;
 
-  if (title.length < MIN_TITLE_LEN) {
-    return { error: `Title must be at least ${MIN_TITLE_LEN} characters.` };
-  }
-  if (content.length < MIN_CONTENT_LEN) {
-    return { error: `Prompt content must be at least ${MIN_CONTENT_LEN} characters.` };
-  }
-  if (body.gifUrl && !gifUrl) {
-    return { error: 'gifUrl must be a valid https URL.' };
-  }
+  if (title.length < MIN_TITLE_LEN)   return { error: `Title must be at least ${MIN_TITLE_LEN} characters.` };
+  if (content.length < MIN_CONTENT_LEN) return { error: `Prompt must be at least ${MIN_CONTENT_LEN} characters.` };
+  if (body.gifUrl && !gifUrl)          return { error: 'gifUrl must be a valid https URL.' };
+
   return { title, content, gifUrl };
 }
 
@@ -309,7 +316,7 @@ function validatePublishBody(body: PublishBody): { error: string } | {
 function setCors(res: AdaptedResponse): void {
   res.setHeader('Access-Control-Allow-Origin',  '*');
   res.setHeader('Access-Control-Allow-Methods', 'GET, POST, DELETE, PATCH, OPTIONS');
-  res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization');
+  res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization, X-Nexus-Nonce');
   res.setHeader('X-Content-Type-Options',       'nosniff');
   res.setHeader('Cache-Control',                'no-store');
 }
@@ -340,37 +347,35 @@ const handler: HandlerFn = async (req: AdaptedRequest, res: AdaptedResponse) => 
 
   // ══════════════════════════════════════════════════════════
   // GET — list / search / filter prompts
-  //   ?q=<search term>      matches title or content
+  //   ?q=<search>           filter by title or content
   //   ?author=<username>    only this author's prompts
-  //   ?limit=<n>             default 30, max 60
+  //   ?limit=<n>            default 30, max 60
   // ══════════════════════════════════════════════════════════
   if (req.method === 'GET') {
     try {
-      const all = await sbListPrompts();
-      let prompts = all.map(rowToPrompt);
-
-      const q      = normalizeKey(req.query['q'] ?? '');
       const author = normalizeKey(req.query['author'] ?? '');
-      const limit  = Math.min(
+      const all    = await sbListPrompts(author || undefined);
+      let prompts  = all.map(rowToPrompt);
+
+      const q     = normalizeKey(req.query['q'] ?? '');
+      const limit = Math.min(
         MAX_LIST_LIMIT,
         Math.max(1, parseInt(String(req.query['limit'] ?? DEFAULT_LIMIT), 10) || DEFAULT_LIMIT),
       );
 
       if (q) {
         prompts = prompts.filter(p =>
-          p.title.toLowerCase().includes(q) || p.content.toLowerCase().includes(q),
+          p.title.toLowerCase().includes(q) || p.content.toLowerCase().includes(q)
         );
       }
-      if (author) {
-        prompts = prompts.filter(p => p.author.toLowerCase() === author);
-      }
 
-      // Featured first, then highest rating, then most used.
+      // Featured first → highest rating → most used → newest
       prompts.sort((a, b) => {
         if (a.featured && !b.featured) return -1;
         if (!a.featured && b.featured) return 1;
         if (b.rating !== a.rating) return b.rating - a.rating;
-        return b.uses - a.uses;
+        if (b.uses !== a.uses) return b.uses - a.uses;
+        return new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime();
       });
 
       return res.status(200).json({
@@ -383,8 +388,11 @@ const handler: HandlerFn = async (req: AdaptedRequest, res: AdaptedResponse) => 
   }
 
   // ══════════════════════════════════════════════════════════
-  // POST — publish a new prompt
-  //   Body: { user, robloxId, title, content, gifUrl? }
+  // POST — publish prompt baru
+  //   Body: { user, robloxId, title, content, gifUrl?, auto? }
+  //
+  //   Field `auto: true` dikirim oleh chats.ts saat auto-publish
+  //   agar bisa dibedakan dari publish manual untuk rate limiting.
   // ══════════════════════════════════════════════════════════
   if (req.method === 'POST') {
     let body: PublishBody;
@@ -401,7 +409,11 @@ const handler: HandlerFn = async (req: AdaptedRequest, res: AdaptedResponse) => 
       return res.status(400).json({ error: 'A valid "user" is required.' });
     }
 
-    if (!checkRateLimit(`explore_publish:${username}`, 10)) {
+    // Rate limit berbeda untuk auto vs manual
+    const isAuto    = body.auto === true || body.auto === 'true';
+    const rlKey     = `explore_publish:${username}`;
+    const rlLimit   = isAuto ? RL_PUBLISH_AUTO : RL_PUBLISH_MANUAL;
+    if (!checkRateLimit(rlKey, rlLimit)) {
       return res.status(429).json({ error: 'Too many publish attempts. Please wait a moment.' });
     }
 
@@ -410,6 +422,7 @@ const handler: HandlerFn = async (req: AdaptedRequest, res: AdaptedResponse) => 
       return res.status(400).json({ error: validated.error });
     }
 
+    const now = new Date().toISOString();
     const record: PromptRecord = {
       id:        generatePromptId(),
       title:     validated.title,
@@ -419,21 +432,25 @@ const handler: HandlerFn = async (req: AdaptedRequest, res: AdaptedResponse) => 
       authorId:  sanitizeStr(String(body.robloxId ?? ''), 50),
       uses:      0,
       rating:    0,
-      createdAt: new Date().toISOString(),
-      updatedAt: new Date().toISOString(),
+      createdAt: now,
+      updatedAt: now,
       featured:  false,
     };
 
     try {
       await sbInsertPrompt(record);
-      return res.status(200).json({ success: true, prompt: record });
+      return res.status(200).json({
+        success: true,
+        prompt:  record,
+        auto:    isAuto,
+      });
     } catch (e: unknown) {
       return errResponse(res, e);
     }
   }
 
   // ══════════════════════════════════════════════════════════
-  // DELETE — remove a prompt the caller owns
+  // DELETE — hapus prompt milik caller
   //   ?id=<promptId>&authorId=<robloxId>
   // ══════════════════════════════════════════════════════════
   if (req.method === 'DELETE') {
@@ -452,7 +469,7 @@ const handler: HandlerFn = async (req: AdaptedRequest, res: AdaptedResponse) => 
   }
 
   // ══════════════════════════════════════════════════════════
-  // PATCH — increment use counter when a prompt is copied/used
+  // PATCH — increment use counter saat prompt di-copy/dipakai
   //   Body: { id }
   // ══════════════════════════════════════════════════════════
   if (req.method === 'PATCH') {
