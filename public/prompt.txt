@@ -1,0 +1,257 @@
+==================================================================
+TUGAS UNTUK AI AGENT: Implementasi Action "search_toolbox" di NEXUS AI
+==================================================================
+
+KONTEKS
+-------
+Ini adalah proyek Next.js + Convex bernama NEXUS AI (asisten AI untuk
+Roblox Studio). Model AI dapat mengeluarkan perintah "action" dalam
+format JSON di dalam respons chat (misalnya create_instance,
+read_script, edit_script, dll). Action-action ini diparsing di file
+chat frontend lalu:
+  (a) dikirim ke plugin Roblox Studio via Convex HTTP, atau
+  (b) dieksekusi langsung ke backend service (tanpa perlu Studio).
+
+TUJUAN
+------
+Menambahkan action baru bernama "search_toolbox" yang memungkinkan AI
+mencari aset di Roblox Toolbox (Creator Store) — seperti Model, Decal,
+Mesh, Audio, Plugin, Animation, dll — dengan memanggil endpoint resmi
+Open Cloud milik Roblox:
+
+  https://apis.roblox.com/toolbox-service/v2/assets:search?searchCategoryType={TYPE}&query={QUERY}
+
+Action ini TIDAK memerlukan koneksi plugin Roblox Studio. Ini adalah
+fetch murni dari sisi server, menggunakan environment variable yang
+sudah ada: ROBLOX_OPEN_CLOUD_KEY (sudah dikonfigurasi di Convex env).
+
+Sebuah file backend baru "convex_url/toolboxService.ts" SUDAH DIBUAT
+(lihat file terlampir, atau buat ulang sesuai spesifikasi di STEP 0 di
+bawah jika file tersebut belum ada). Tugas Anda adalah menghubungkan
+sisa sistem di sekitarnya.
+
+==================================================================
+STEP 0 — Verifikasi / Buat convex_url/toolboxService.ts (Convex backend)
+==================================================================
+Lokasi: convex_url/toolboxService.ts
+
+Pastikan file ini ada dan mengekspor:
+  - searchToolboxAssets(query, searchCategoryType, limit) -> fungsi async
+    Mengembalikan: { ok: true, results: ToolboxResultItem[] } | { ok: false, error: string }
+  - searchToolbox -> wrapper Convex `action` yang membungkus fungsi di atas,
+    dengan args: { query: string, searchCategoryType?: string, limit?: number }
+
+File ini harus:
+  - Membaca API key dari process.env.ROBLOX_OPEN_CLOUD_KEY
+  - Memanggil https://apis.roblox.com/toolbox-service/v2/assets:search
+    dengan header 'x-api-key': <key>
+  - Memvalidasi/menormalisasi searchCategoryType terhadap allow-list ini:
+    Model, Decal, Mesh, Audio, Plugin, Animation, Video, FontFamily,
+    EnvironmentEmote, Image  (default ke "Model" jika tidak valid/kosong)
+  - Memetakan setiap aset mentah ke bentuk yang bersih:
+    { id, name, description, category, creator, creatorVerified,
+      upVotes, downVotes, upVotePercent, thumbnailUrl, assetUrl }
+  - Membatasi hasil maksimal 10
+  - Menggunakan AbortController dengan timeout 10 detik
+  - Menangani response non-200 dan error jaringan secara baik, selalu
+    mengembalikan { ok:false, error: "..." } daripada melempar exception
+
+Jika file ini belum ada, buat dari awal sesuai spesifikasi di atas
+menggunakan TypeScript Convex yang bersih dan idiomatik (action +
+v.string/v.optional dari "convex/values", import { action } from
+"./_generated/server").
+
+PENTING — penamaan file: Convex TIDAK mengizinkan tanda hubung (-)
+pada nama file module di dalam folder convex/. Hanya huruf, angka,
+underscore (_), dan titik (.) yang diperbolehkan. Karena itu file
+backend ini dan file HTTP handler-nya WAJIB dinamai tanpa hyphen:
+  - convex_url/toolboxService.ts   (bukan toolbox-service.ts)
+  - convex_url/toolboxHttp.ts      (bukan toolbox-http.ts)
+Jika file-file ini sudah dibuat dengan hyphen, rename dulu dan
+perbaiki semua import yang merujuk ke keduanya sebelum lanjut,
+atau `npx convex deploy` akan gagal dengan error InvalidConfig.
+
+==================================================================
+STEP 1 — Hubungkan action ke HTTP endpoint dispatcher
+==================================================================
+Cari router/dispatcher HTTP Convex yang sudah menangani action seperti
+"search_docs" (digunakan untuk pencarian dokumentasi Roblox) — kemungkinan
+ada di convex_url/main.ts, convex_url/http.ts, atau convex_url/http.ts.
+File ini menerima POST request dengan body berbentuk:
+  { action: "search_docs", query, doc_type, limit, _user }
+
+Tambahkan cabang baru yang menangani:
+  { action: "search_toolbox", query, searchCategoryType, limit, _user }
+
+Cabang ini bisa langsung memakai handler terpisah convex_url/toolboxHttp.ts
+yang memanggil searchToolboxAssets(query, searchCategoryType, limit)
+dari convex_url/toolboxService.ts dan mengembalikan hasilnya sebagai JSON, contoh:
+  return new Response(JSON.stringify(result), { status: 200, headers: {...} })
+
+Samakan gaya/konvensi kode yang sudah dipakai pada cabang "search_docs"
+secara persis (error handling, bentuk response, headers).
+
+Jika Anda tidak menemukan dispatcher yang sesuai pola ini, cari string
+"search_docs" di seluruh codebase untuk menemukan file yang tepat dan
+sisipkan cabang baru tepat di sebelahnya.
+
+==================================================================
+STEP 2 — Frontend: Daftarkan nama action baru
+==================================================================
+File: file client chat utama (yang berisi NEXUS_ACTIONS_SET, mungkin
+bernama chats.ts, chat.ts, atau serupa di dalam folder app/ atau
+components/).
+
+Cari baris ini:
+  const NEXUS_ACTIONS_SET = new Set([...daftar panjang nama action..., 'none'])
+
+Tambahkan 'search_toolbox' ke dalam Set, diletakkan tepat sebelum 'none':
+  ...,'run_test','stop_test','search_toolbox','none'
+
+==================================================================
+STEP 3 — Frontend: Tambahkan label chip untuk action
+==================================================================
+Di file yang sama. Cari fungsi makeStepLabel(cmd) — fungsi ini memiliki
+switch statement yang memetakan nama action ke label chip yang mudah
+dibaca manusia (contoh: case 'read_script': return `Read script: ${nm}`).
+
+Tambahkan case baru tepat sebelum "case 'none':":
+
+  case 'search_toolbox':
+    return `Searching toolbox: ${String(cmd.query||nm||'?')} (${String(cmd.searchCategoryType||'Model')})`
+
+==================================================================
+STEP 4 — Frontend: Tambahkan fungsi helper fetch
+==================================================================
+Di file yang sama. Di dekat fungsi fetchReadScriptResult() yang sudah
+ada, tambahkan fungsi async baru bernama fetchToolboxSearchResult yang
+melakukan POST ke Convex API_URL (konstanta yang sama yang sudah
+dipakai di tempat lain dalam file ini untuk panggilan search_docs)
+dengan action "search_toolbox", lalu mem-parsing response JSON-nya.
+Fungsi ini TIDAK perlu polling — ini hanya satu kali request/response,
+berbeda dengan fetchReadScriptResult yang melakukan polling ke Studio.
+
+Signature:
+  async function fetchToolboxSearchResult(
+    query: string,
+    category: string,
+    limit = 6
+  ): Promise<{ ok: boolean; results?: unknown[]; error?: string }>
+
+Perilaku yang diharapkan:
+  - POST ke API_URL dengan body:
+    { action: 'search_toolbox', query, searchCategoryType: category,
+      limit, _user: SESSION?.user.username ?? 'web' }
+  - Timeout 12 detik via AbortController
+  - Jika berhasil (HTTP 200 + d.ok === true dengan results), kembalikan
+    { ok: true, results: d.results }
+  - Jika gagal, kembalikan { ok: false, error: <pesan error> }
+  - Gunakan kembali helper _isAbortError() yang sudah ada untuk
+    mendeteksi abort, sesuai gaya error-handling yang sudah ada di codebase.
+
+==================================================================
+STEP 5 — Frontend: Tangani action di dalam autoInjectToStudio()
+==================================================================
+Di file yang sama, di dalam fungsi autoInjectToStudio(). Fungsi ini
+melakukan loop terhadap setiap perintah action yang sudah diparsing,
+dan secara normal mengirim masing-masing action ke plugin Studio
+melalui _injectCommand(). Action search_toolbox harus DICEGAT SEBELUM
+panggilan jaringan tersebut, karena action ini sama sekali tidak
+memerlukan Studio.
+
+Di dalam for-loop, tepat setelah baris yang sudah ada ini:
+  const cmd=step.cmd, a=cmd.action||''
+
+Sisipkan blok baru ini:
+
+  if (a === 'search_toolbox') {
+    updateStep(step.sid, 'info', undefined, 'Searching Roblox Toolbox...')
+    const query = String(cmd.query || cmd.name || '')
+    const category = String(cmd.searchCategoryType || cmd.category || 'Model')
+    const searchRes = await fetchToolboxSearchResult(query, category, Number(cmd.limit) || 6)
+    if (searchRes.ok && searchRes.results?.length) {
+      updateStep(step.sid, 'done', `Found ${searchRes.results.length} asset(s): ${query}`)
+      readResults.push({
+        name: `toolbox_search:${query}`,
+        source: JSON.stringify(searchRes.results, null, 2),
+        class: 'ToolboxResult',
+        lineCount: searchRes.results.length,
+      })
+    } else {
+      updateStep(step.sid, 'info', undefined, searchRes.error || 'No matching assets found.')
+    }
+    doneCount++
+    continue
+  }
+
+PENTING: blok ini harus berada SEBELUM baris yang sudah ada:
+  const res=await _injectCommand(cmd,user,sig)
+...dan harus melakukan `continue` pada loop agar search_toolbox tidak
+pernah dikirim ke plugin Studio. Jangan mengubah logika action lain
+apa pun — hanya sisipkan blok kondisional baru ini.
+
+Catatan: blok ini menggunakan kembali array `readResults` yang sudah
+ada (sudah bertipe {name,source,class,lineCount}[]), sehingga hasil
+JSON-nya otomatis dirender ke user sebagai code block di chat, persis
+seperti hasil read_script. Tidak perlu kode UI render baru.
+
+==================================================================
+STEP 6 — System prompt: Ajarkan model AI tentang action baru
+=================================================================
+Cari file yang menyusun system prompt yang dikirim ke model AI
+(kemungkinan bernama system_prompt.ts, dirujuk melalui `import
+{ buildSysPrompt } from './system_prompt'` di file chat utama).
+
+Pada bagian yang mendokumentasikan action/skema JSON yang tersedia
+untuk model (tempat action seperti create_instance, read_script, dll
+didaftarkan beserta bentuk JSON-nya), tambahkan dokumentasi untuk
+action baru ini, contohnya:
+
+  search_toolbox — Mencari aset di Roblox Toolbox/Creator Store
+  berdasarkan nama dan kategori. Gunakan action ini saat pengguna ingin
+  mencari atau memasukkan aset jadi (model, decal, mesh, audio, plugin,
+  animation, dll) daripada membuatnya dari nol.
+
+  Bentuk JSON:
+  {"action":"search_toolbox","query":"coin","searchCategoryType":"Model","limit":6}
+
+  Nilai searchCategoryType yang valid: Model, Decal, Mesh, Audio,
+  Plugin, Animation, Video, FontFamily, EnvironmentEmote, Image.
+  Kategori default adalah "Model" jika tidak disebutkan.
+
+  Hasilnya dikembalikan kepada Anda sebagai array JSON berisi objek
+  dengan bentuk:
+  { id, name, description, category, creator, creatorVerified,
+    upVotes, downVotes, upVotePercent, thumbnailUrl, assetUrl }
+
+  Setelah menerima hasil, Anda dapat melanjutkan dengan action
+  insert_asset menggunakan field "id" dari hasil yang dipilih sebagai
+  asset_id, jika pengguna ingin benar-benar menambahkan aset tersebut
+  ke dalam game-nya.
+
+Samakan format/gaya penulisan yang sudah dipakai untuk mendokumentasikan
+action lain di file ini (misalnya bagaimana read_script atau
+insert_asset didokumentasikan).
+
+==================================================================
+STEP 7 — Checklist sanity sebelum selesai
+==================================================================
+[ ] convex_url/toolboxService.ts ada, mengekspor searchToolboxAssets + searchToolbox
+[ ] convex_url/toolboxHttp.ts ada, mengekspor toolboxServiceHandler
+[ ] Tidak ada nama file Convex yang memakai tanda hubung (-)
+[ ] HTTP dispatcher (main.ts/http.ts) merutekan action:"search_toolbox" ke file tersebut
+[ ] NEXUS_ACTIONS_SET sudah memuat 'search_toolbox'
+[ ] makeStepLabel() memiliki case untuk 'search_toolbox'
+[ ] Helper fetchToolboxSearchResult() sudah ditambahkan di dekat fetchReadScriptResult()
+[ ] autoInjectToStudio() mencegat 'search_toolbox' SEBELUM _injectCommand()
+    dan melakukan `continue` pada loop (tidak pernah dikirim ke plugin Studio)
+[ ] system_prompt.ts sudah mendokumentasikan bentuk JSON dan perilaku action baru
+[ ] Tidak ada perilaku action lain yang berubah atau rusak
+[ ] TypeScript berhasil di-compile tanpa error baru (jalankan `tsc --noEmit`
+    atau script typecheck bawaan proyek jika tersedia)
+
+Setelah selesai, ringkas dengan tepat file mana saja yang diubah dan
+tampilkan diff/potongan kode untuk setiap perubahan.
+==================================================================
+AKHIR TUGAS
+==================================================================

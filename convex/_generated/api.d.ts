@@ -12,6 +12,8 @@ import type * as control from "../control.js";
 import type * as http from "../http.js";
 import type * as storage from "../storage.js";
 import type * as store from "../store.js";
+import type * as toolboxHttp from "../toolboxHttp.js";
+import type * as toolboxService from "../toolboxService.js";
 
 import type {
   ApiFromModules,
@@ -24,6 +26,8 @@ declare const fullApi: ApiFromModules<{
   http: typeof http;
   storage: typeof storage;
   store: typeof store;
+  toolboxHttp: typeof toolboxHttp;
+  toolboxService: typeof toolboxService;
 }>;
 
 /**
