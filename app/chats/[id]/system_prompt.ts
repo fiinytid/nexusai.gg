@@ -18,18 +18,19 @@ export interface NexusSettings {
 }
 
 export interface SysPromptContext {
-  session?:       NexusSession | null;
-  settings?:      NexusSettings | null;
+  session?:         NexusSession | null;
+  settings?:        NexusSettings | null;
   studioConnected?: boolean;
-  isOwnerFn?:     () => boolean;
-  isAdminFn?:     () => boolean;
+  isOwnerFn?:       () => boolean;
+  isAdminFn?:       () => boolean;
   /** Include full icon table (default: true). Set false for small-context models. */
-  includeIcons?:  boolean;
+  includeIcons?:    boolean;
   /** Include full sound table (default: true). Set false for small-context models. */
-  includeSounds?: boolean;
+  includeSounds?:   boolean;
+
 }
 
-// ─── Icon & Sound Data ────────────────────────────────────────────────────────
+// ─── Icon, Sound & Model Data ─────────────────────────────────────────────────
 
 const ICONS = [
   "Heart 133958322179641",      "Star 112684829478873",
@@ -75,6 +76,15 @@ const SOUNDS = [
   "Night Wind 184351334",             "Campfire 308819543",
 ] as const;
 
+const MODEL_ASSETS = [
+  "Coin 13281820490",               "Modern House 16864783838",
+  "Sport Car 8684518373",           "Tree House 15761692261",
+  "380 Sword Pack 74460973127629",  "VFX Sword Pack 107069227552617",
+  "Classic Sword 2827036185",       "Sword Katana 1528354888",
+  "Drift Car Mobile 15244136642",   "Log House 2690222444",
+  "Obby 17253530672",
+] as const;
+
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
 function chunk<T>(arr: readonly T[], size: number): T[][] {
@@ -104,7 +114,6 @@ export function buildSysPrompt(ctx: SysPromptContext = {}): string {
   const ptDur      = S.playTestDuration ?? 15;
   const showIcons  = ctx.includeIcons  !== false;
   const showSounds = ctx.includeSounds !== false;
-
   // ── 1. Header ───────────────────────────────────────────────────────────────
   const header = [
     "NEXUS AI",
@@ -156,7 +165,13 @@ Defaults: UI→Vol 0.5 / Looped false / parent SoundService
           Ambience→Vol 0.3 / Looped true / parent Part`
     : `## SOUNDS — table omitted to save tokens. Ask user to specify sound names; use IDs from memory if known.`;
 
-  // ── 6. Actions Reference ────────────────────────────────────────────────────
+  // ── 6. Model Library ────────────────────────────────────────────────────────
+  const modelSection = `\
+## TOOLBOX MODELS — insert via insert_asset, never write IDs in prose
+${chunk(MODEL_ASSETS, 3).map(row => row.join(" | ")).join("\n")}
+Usage: {"action":"insert_asset","asset_id":"<ID>","name":"...","parent":"Workspace","anchored":true}`;
+
+  // ── 7. Actions Reference ────────────────────────────────────────────────────
   const actionsRef = `\
 ## NEXUS ACTIONS (24)
 Dispatch: {"action":"name",...} | Batch: {"actions":[...]} | MAX_QUEUE=50 | pcall-wrapped | auto-waypoint
@@ -176,13 +191,22 @@ PROPERTY COERCION:
   UDim2   : {xS,xO,yS,yO} | "s,o,s,o"
   Enum/BrickColor : string name
 
+WORKFLOW:
+  Inspect game : list(parent?) → lihat struktur → read_script(name) → edit_script(name, source)
+  Fix / debug  : get_output() → read_script(name) → edit_script(name, source)
+  Insert model : insert_asset(asset_id) — gunakan ID dari tabel TOOLBOX MODELS di atas
+  ALWAYS read_script before edit_script. ALWAYS list before read_script if script name unknown.
+
 ACTIONS:
   create_script(name?, type?, source?, parent?, disabled?)
     type: Script | LocalScript | ModuleScript
   edit_script(name, source, operation?)
     operation: replace (default) | append | prepend
+    REQUIRED: run read_script first to see current content before editing.
   read_script(name, line_start?, line_end?)
     → {name, class, source, lines, fullPath}
+  list(class?, parent?, pattern?)
+    → Use to browse game structure before read_script or edit_script.
   create_instance(class_name, name?, parent?, properties?)
   terrain(op, material?, position?, size?, radius?, corner1?, corner2?)
     op: fill_block | fill_ball | fill_region | clear
@@ -192,8 +216,8 @@ ACTIONS:
   rename(name, new_name, parent?)
   delete(name?, names?, class?, parent?, children_only?)
   parent(name?, names?, parent)
-  list(class?, parent?, pattern?)
   insert_asset(asset_id, name?, parent?, position?, anchored?)
+    → Use IDs from TOOLBOX MODELS table above.
   ${ptEnabled
     ? `play_test(action?, duration?, server_script?, local_script?)
     action: start (default) | stop | max 60s (default ${ptDur}s)
@@ -213,8 +237,8 @@ RUN_CODE MODES:
 
 INLINE: ping() | get_info() | set_project(id, name) | get_all_actions() | redo(label?) | run_code(...) | none()`;
 
-  // ── Assemble ─────────────────────────────────────────────────────────────────
-  return [header, identity, responseFormat, iconSection, soundSection, actionsRef]
+  // ── Assemble ──────────────────────────────────────────────────────────────────
+  return [header, identity, responseFormat, iconSection, soundSection, modelSection, actionsRef]
     .join("\n\n");
 }
 
