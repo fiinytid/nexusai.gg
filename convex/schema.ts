@@ -19,7 +19,8 @@ export default defineSchema({
     priority:   v.string(),
     ts:         v.number(),
     isPriority: v.boolean(),
-  }).index("by_username", ["username"])
+  })
+    .index("by_username",    ["username"])
     .index("by_username_ts", ["username", "ts"]),
 
   polls: defineTable({
@@ -103,26 +104,16 @@ export default defineSchema({
     read:     v.boolean(),
   }).index("by_username_ts", ["username", "ts"]),
 
-  // ── GIFS ─────────────────────────────────────────────────────────────────
-  // One row per play-test capture uploaded via storage.ts (POST /api/storage).
-  // `storageId` points at the underlying Convex file storage blob; the row
-  // itself just carries ownership + metadata so we can list/filter/delete
-  // without touching ctx.storage directly outside storage.ts.
   gifs: defineTable({
-  username:      v.string(),
-  storageId:     v.id("_storage"),
-  mime:          v.string(),
-  name:          v.string(),
-  sizeBytes:     v.number(),
-  seen:          v.boolean(),
-  // True once this capture has been pulled into an auto-publish payload.
-  // Set by store.ts markGifSeen (usedInPublish param) and defaulted to
-  // false on insert in insertGifRecord.
-  // Optional because older rows predate this field — treat missing as false
-  // wherever it's read (e.g. `doc.usedInPublish ?? false`).
-  usedInPublish: v.optional(v.boolean()),
-  createdAt:     v.number(),
-})
-  .index("by_username",         ["username", "createdAt"])
-  // ↓ required by store.ts listGifRecords — filters unseen per user
-  .index("by_username_unseen",  ["username", "seen", "createdAt"]),
+    username:      v.string(),
+    storageId:     v.id("_storage"),
+    mime:          v.string(),
+    name:          v.string(),
+    sizeBytes:     v.number(),
+    seen:          v.boolean(),
+    usedInPublish: v.optional(v.boolean()),
+    createdAt:     v.number(),
+  })
+    .index("by_username",        ["username", "createdAt"])
+    .index("by_username_unseen", ["username", "seen", "createdAt"]),
+});
