@@ -5,7 +5,6 @@ import { internal } from "./_generated/api";
 const REQUIRED_PLUGIN_VERSION = "V1.3.44";
 
 // ── TUNABLES ───────────────────────────────────────────────────────────────────
-const SESSION_TTL           = 24 * 60 * 60 * 1_000;
 const SESSION_TOKEN_MAX     = 128;
 const MIN_ADMIN_TOKEN_LEN   = 16;
 const MAX_BODY_FIELD_LEN    = 50_000;
@@ -16,10 +15,6 @@ const RATE_USER_PER_MIN     = 300;
 const RATE_IP_PER_MIN       = 600;
 const RATE_BURST_COUNT      = 60;
 const RATE_BURST_WINDOW     = 5_000;
-const TTL_TOOLBOX           = 5  * 60_000;
-const TTL_ASSET             = 30 * 60_000;
-const TTL_USER_INFO         = 10 * 60_000;
-const TTL_GAME_INFO         = 15 * 60_000;
 const MAX_BATCH_COMMANDS    = 200;
 const MAX_MULTI_TARGETS     = 20;
 const MAX_AI_FEED_ENTRIES   = 300;
@@ -27,9 +22,6 @@ const AI_FEED_DEFAULT_LIMIT = 50;
 
 const NONCE_TTL_MS  = 5 * 60_000;
 const MAX_DELAY_MS  = 60_000;
-
-// Suppress unused warning for SESSION_TTL (used conceptually for docs)
-void SESSION_TTL;
 
 // ── DISPATCH ACTIONS — nonce replay exempt ─────────────────────────────────────
 const NONCE_EXEMPT_ACTIONS = new Set<string>([
@@ -48,6 +40,7 @@ const NONCE_EXEMPT_ACTIONS = new Set<string>([
   "parent",
   "list",
   "insert_asset",
+  "insert_rbxm",
   "play_test",
   "run_test",
   "stop_test",
@@ -64,6 +57,7 @@ const NONCE_EXEMPT_ACTIONS = new Set<string>([
   "get_all_actions",
   "delay",
   "none",
+  "read_instance",
 ]);
 
 // ── ALLOWED ORIGINS ────────────────────────────────────────────────────────────
@@ -73,17 +67,6 @@ const ALLOWED_ORIGINS = new Set<string>([
   "http://localhost:3000",
   "https://fine-setter-131.convex.site",
   "https://brazen-lapwing-697.convex.site",
-]);
-
-// ── VALID ASSET TYPE SETS ──────────────────────────────────────────────────────
-const VALID_TOOLBOX_TYPES = new Set<string>([
-  "Model", "Plugin", "Audio", "Decal", "Image", "MeshPart",
-  "Package", "Hat", "Shirt", "Pants", "TShirt", "Gear", "Animation",
-]);
-
-const INSERTABLE_ASSET_TYPES = new Set<string>([
-  "Model", "Plugin", "Package", "Hat", "Shirt", "Pants",
-  "TShirt", "Gear", "Animation", "MeshPart", "Unknown",
 ]);
 
 // ── ADMIN-GATED ACTIONS ────────────────────────────────────────────────────────
@@ -129,6 +112,9 @@ const ACTION_RENAME_MAP: Record<string, string> = {
   execute_text:           "dispatch_from_text",
   multi_target:           "dispatch_multi_target",
   RunCode:                "run_code",
+  // New action aliases
+  instance_data:          "instance_data_report",
+  insert_rbxm_result:     "insert_rbxm_report",
 };
 
 function migrateActionName(raw: string): string {
@@ -153,74 +139,6 @@ interface ProjectData {
   updatedAt:   number;
 }
 
-interface AssetResult {
-  valid:        boolean;
-  assetId:      string;
-  name:         string;
-  description?: string;
-  assetType:    string;
-  creator:      { name: string; type: string; userId: string };
-  isPublic:     boolean;
-  insertable:   boolean;
-  insertScript: string;
-  unverified?:  boolean;
-}
-
-interface ToolboxResult {
-  assets:     AssetItem[];
-  nextCursor: string | null;
-  total:      number;
-}
-
-interface AssetItem {
-  assetId:     string;
-  name:        string;
-  description: string;
-  assetType:   string;
-  creator:     { name: string; type: string; userId: string };
-  thumbnail:   string;
-  updated:     string | null;
-}
-
-interface UserInfo {
-  userId:      number;
-  username:    string;
-  displayName: string;
-  description: string;
-  isBanned:    boolean;
-  created:     string | null;
-  avatarUrl:   string;
-}
-
-interface GameInfo {
-  universeId:     number;
-  placeId:        number;
-  name:           string;
-  description:    string;
-  creator:        { name: string; type: string };
-  playing:        number;
-  visits:         number;
-  maxPlayers:     number;
-  favoritedCount: number;
-  genre:          string;
-  thumbnailUrl:   string;
-}
-
-interface DocsResult {
-  results: DocEntry[];
-  source:  string;
-  query:   string;
-}
-
-interface DocEntry {
-  title:     string;
-  url:       string;
-  snippet:   string;
-  category:  string;
-  score?:    number;
-  keywords?: string;
-}
-
 interface AuthResult {
   ok:      boolean;
   status?: number;
@@ -240,6 +158,31 @@ interface AiFeedEntry {
   data:     unknown;
   ts:       number;
   read:     boolean;
+}
+
+// ── insert_rbxm result interface ───────────────────────────────────────────────
+interface InsertRbxmReport {
+  success:    boolean;
+  count:      number;
+  names:      string[];
+  class:      string | null;
+  parentPath: string;
+  error:      string | null;
+  ts:         number;
+}
+
+// ── read_instance result interface ─────────────────────────────────────────────
+interface InstanceDataReport {
+  name:        string;
+  class:       string;
+  fullPath:    string;
+  parentName:  string | null;
+  properties:  Record<string, unknown>;
+  attributes:  Record<string, unknown> | null;
+  children:    Array<{ name: string; class: string; path: string }> | null;
+  descendants: Array<{ name: string; class: string; path: string }> | null;
+  childCount:  number;
+  ts:          number;
 }
 
 // ── SANITISERS ─────────────────────────────────────────────────────────────────
@@ -304,18 +247,6 @@ function sanAction(val: unknown): string {
     .toLowerCase()
     .replace(/[^a-z0-9_]/g, "")
     .substring(0, 80);
-}
-
-function sanUrl(val: unknown): string | null {
-  const s = sanStr(val, 500).trim();
-  if (!s) return null;
-  try {
-    const u = new URL(s);
-    if (u.protocol !== "https:") return null;
-    return u.toString();
-  } catch {
-    return null;
-  }
 }
 
 // ── JSON HELPERS ───────────────────────────────────────────────────────────────
@@ -587,11 +518,6 @@ function getClientIp(request: Request): string {
     .substring(0, 45);
 }
 
-function getRobloxApiKey(): string | null {
-  const key = process.env.ROBLOX_OPEN_CLOUD_KEY ?? "";
-  return key.length >= 20 ? key : null;
-}
-
 // ── AUTHORISATION ──────────────────────────────────────────────────────────────
 async function authorizeCommand(
   ctx: ActionCtx,
@@ -656,412 +582,6 @@ function filterBatch(commands: unknown[], isAdmin: boolean): FilterResult {
   return { safe, removed };
 }
 
-// ── SAFE FETCH ─────────────────────────────────────────────────────────────────
-
-async function safeFetch(
-  url: string,
-  options: RequestInit = {},
-  timeoutMs = 10_000,
-  maxRetries = 2
-): Promise<Response> {
-  let lastError: Error | null = null;
-  for (let attempt = 0; attempt <= maxRetries; attempt++) {
-    try {
-      const controller = new AbortController();
-      const timer      = setTimeout(() => controller.abort(), timeoutMs);
-      const resp       = await fetch(url, { ...options, signal: controller.signal });
-      clearTimeout(timer);
-      if (resp.status === 429 && attempt < maxRetries) {
-        const wait = Math.min(
-          parseInt(resp.headers.get("Retry-After") ?? "2", 10) * 1_000,
-          5_000
-        );
-        await new Promise((r) => setTimeout(r, wait));
-        continue;
-      }
-      return resp;
-    } catch (err) {
-      lastError = err as Error;
-      if ((err as Error)?.name === "AbortError") break;
-      if (attempt < maxRetries)
-        await new Promise((r) => setTimeout(r, 1_000 * (attempt + 1)));
-    }
-  }
-  throw lastError ?? new Error("safeFetch: all retries failed");
-}
-
-// ── ROBLOX HELPERS ─────────────────────────────────────────────────────────────
-
-function buildInsertScript(assetId: string | number, assetName: string): string {
-  const safeName = sanStr(String(assetName ?? "Asset"), 80)
-    .replace(/[^a-zA-Z0-9 _\-]/g, "")
-    .trim() || "Asset";
-  return [
-    "-- Auto-generated by NexusAI",
-    `local InsertService = game:GetService("InsertService")`,
-    `local ok, result = pcall(function() return InsertService:LoadAsset(${assetId}) end)`,
-    `if ok then`,
-    `    result.Name = "${safeName}"`,
-    `    result.Parent = workspace`,
-    `    print("[NexusAI] Inserted: ${safeName} (${assetId})")`,
-    `else`,
-    `    warn("[NexusAI] Insert failed ${assetId}: " .. tostring(result))`,
-    `end`,
-  ].join("\n");
-}
-
-async function robloxToolboxSearch(
-  ctx: ActionCtx,
-  keyword: string,
-  assetType = "Model",
-  limit = 10,
-  cursor: string | null = null
-): Promise<ToolboxResult> {
-  const cacheKey = `toolbox:${keyword}:${assetType}:${limit}:${cursor ?? ""}`;
-  const cached   = await ctx.runQuery(internal.store.getCacheEntry, { key: cacheKey });
-  if (cached) return JSON.parse(cached) as ToolboxResult;
-
-  const apiKey = getRobloxApiKey();
-  if (!apiKey)
-    throw Object.assign(new Error("ROBLOX_OPEN_CLOUD_KEY not configured."), { code: 503 });
-
-  const safeType = VALID_TOOLBOX_TYPES.has(assetType) ? assetType : "Model";
-  const params   = new URLSearchParams({
-    keyword:   String(keyword).substring(0, 100),
-    assetType: safeType,
-    limit:     String(Math.min(Math.max(1, limit), 100)),
-    ...(cursor ? { cursor } : {}),
-  });
-
-  let resp: Response;
-  try {
-    resp = await safeFetch(
-      `https://apis.roblox.com/toolbox-service/v2/assets:search?${params}`,
-      {
-        method:  "GET",
-        headers: { "x-api-key": apiKey, Accept: "application/json", "User-Agent": "NexusAI" },
-      },
-      12_000,
-      2
-    );
-  } catch (err) {
-    throw Object.assign(
-      new Error(`Roblox Toolbox connection failed: ${(err as Error)?.message ?? "timeout"}`),
-      { code: 502 }
-    );
-  }
-
-  if (resp.status === 401 || resp.status === 403)
-    throw Object.assign(new Error("Invalid Roblox API key."), { code: resp.status });
-  if (resp.status === 429)
-    throw Object.assign(new Error("Roblox Toolbox rate limit reached."), { code: 429 });
-  if (!resp.ok) {
-    const body = await resp.text().catch(() => "");
-    throw Object.assign(
-      new Error(`Roblox Toolbox HTTP ${resp.status}: ${sanStr(body, 80)}`),
-      { code: resp.status }
-    );
-  }
-
-  let data: Record<string, unknown>;
-  try {
-    data = (await resp.json()) as Record<string, unknown>;
-  } catch {
-    throw Object.assign(new Error("Non-JSON response from Roblox Toolbox."), { code: 502 });
-  }
-
-  const rawItems = sanArr<Record<string, unknown>>(
-    data["data"] ?? data["assets"] ?? data["results"]
-  );
-  const assets: AssetItem[] = rawItems
-    .map((item) => ({
-      assetId:     String(item["assetId"] ?? item["id"] ?? ""),
-      name:        sanStr(item["name"] ?? item["assetName"] ?? "Untitled", 120),
-      description: sanStr(item["description"] ?? "", 250),
-      assetType:   sanStr(item["assetType"] ?? safeType, 30),
-      creator: {
-        name:   sanStr((item["creator"] as Record<string, unknown>)?.["name"] ?? item["creatorName"] ?? "Unknown", 80),
-        type:   sanStr((item["creator"] as Record<string, unknown>)?.["type"] ?? "User", 20),
-        userId: String((item["creator"] as Record<string, unknown>)?.["userId"] ?? item["creatorTargetId"] ?? ""),
-      },
-      thumbnail: sanStr((item["thumbnail"] as Record<string, unknown>)?.["url"] ?? item["thumbnailUrl"] ?? "", 300),
-      updated:   (item["updated"] ?? item["createdUtc"] ?? null) as string | null,
-    }))
-    .filter((a) => a.assetId);
-
-  const result: ToolboxResult = {
-    assets,
-    nextCursor: (data["nextPageCursor"] as string | null) ?? null,
-    total:      (data["totalCount"] as number) ?? assets.length,
-  };
-  await ctx.runMutation(internal.store.setCacheEntry, {
-    key:       cacheKey,
-    value:     JSON.stringify(result),
-    expiresAt: Date.now() + TTL_TOOLBOX,
-  });
-  return result;
-}
-
-async function validateAsset(ctx: ActionCtx, assetId: unknown): Promise<AssetResult> {
-  const id = parseInt(String(assetId).replace(/\D/g, ""), 10);
-  if (!id || id <= 0 || id > 99_999_999_999)
-    throw Object.assign(new Error(`Invalid asset ID: "${sanStr(String(assetId), 30)}"`), { code: 400 });
-
-  const cacheKey = `asset:${id}`;
-  const cached   = await ctx.runQuery(internal.store.getCacheEntry, { key: cacheKey });
-  if (cached) return JSON.parse(cached) as AssetResult;
-
-  let assetData: Record<string, unknown> | null = null;
-  for (const url of [
-    `https://catalog.roblox.com/v1/catalog/items/${id}/details`,
-    `https://economy.roblox.com/v2/assets/${id}/details`,
-  ]) {
-    try {
-      const r = await safeFetch(url, { headers: { Accept: "application/json" } }, 8_000, 1);
-      if (r.ok) { assetData = (await r.json()) as Record<string, unknown>; break; }
-    } catch (_) {}
-  }
-
-  if (!assetData) {
-    try {
-      const r = await safeFetch(
-        `https://assetdelivery.roblox.com/v1/asset/?id=${id}`,
-        { headers: { Accept: "application/json" } },
-        8_000, 1
-      );
-      if (r.ok || r.status === 302)
-        assetData = { name: `Asset #${id}`, assetType: "Model", creator: {} };
-    } catch (_) {}
-  }
-
-  if (!assetData) {
-    const result: AssetResult = {
-      valid: true, assetId: String(id), name: `Asset #${id}`,
-      assetType: "Unknown",
-      creator: { name: "Unknown", type: "User", userId: "" },
-      isPublic: true, unverified: true, insertable: true,
-      insertScript: buildInsertScript(id, `Asset #${id}`),
-    };
-    await ctx.runMutation(internal.store.setCacheEntry, {
-      key: cacheKey, value: JSON.stringify(result), expiresAt: Date.now() + TTL_ASSET / 4,
-    });
-    return result;
-  }
-
-  const rawType   = sanStr(String(assetData["assetType"] ?? assetData["itemType"] ?? "Model"), 30);
-  const assetName = sanStr(String(assetData["name"] ?? `Asset #${id}`), 120);
-  const isPublic  = !(assetData["sales"] === 0 && assetData["isForSale"] === false);
-  const creator   = sanObj(assetData["creator"]);
-
-  const result: AssetResult = {
-    valid: true, assetId: String(id), name: assetName,
-    description:  sanStr(String(assetData["description"] ?? ""), 250),
-    assetType:    rawType,
-    creator: {
-      name:   sanStr(String(creator["name"] ?? "Unknown"), 80),
-      type:   sanStr(String(creator["creatorType"] ?? "User"), 20),
-      userId: String(creator["creatorTargetId"] ?? ""),
-    },
-    isPublic,
-    insertable:   INSERTABLE_ASSET_TYPES.has(rawType),
-    insertScript: buildInsertScript(id, assetName),
-  };
-  await ctx.runMutation(internal.store.setCacheEntry, {
-    key: cacheKey, value: JSON.stringify(result), expiresAt: Date.now() + TTL_ASSET,
-  });
-  return result;
-}
-
-async function fetchUserInfo(ctx: ActionCtx, userId: number): Promise<UserInfo> {
-  const id = parseInt(String(userId).replace(/\D/g, ""), 10);
-  if (!id || id <= 0) throw new Error("Invalid userId.");
-  const cacheKey = `userinfo:${id}`;
-  const cached   = await ctx.runQuery(internal.store.getCacheEntry, { key: cacheKey });
-  if (cached) return JSON.parse(cached) as UserInfo;
-
-  const resp = await safeFetch(
-    `https://users.roblox.com/v1/users/${id}`,
-    { headers: { Accept: "application/json" } }, 8_000, 1
-  );
-  if (!resp.ok) throw new Error(`Roblox Users API error: HTTP ${resp.status}`);
-
-  const d      = (await resp.json()) as Record<string, unknown>;
-  const result: UserInfo = {
-    userId,
-    username:    sanStr(String(d["name"] ?? ""), 80),
-    displayName: sanStr(String(d["displayName"] ?? d["name"] ?? ""), 80),
-    description: sanStr(String(d["description"] ?? ""), 300),
-    isBanned:    Boolean(d["isBanned"]),
-    created:     (d["created"] as string | null) ?? null,
-    avatarUrl:   `https://www.roblox.com/headshot-thumbnail/image?userId=${id}&width=150&height=150&format=png`,
-  };
-  await ctx.runMutation(internal.store.setCacheEntry, {
-    key: cacheKey, value: JSON.stringify(result), expiresAt: Date.now() + TTL_USER_INFO,
-  });
-  return result;
-}
-
-async function fetchGameInfo(ctx: ActionCtx, id: number, isPlaceId = false): Promise<GameInfo> {
-  const parsed = parseInt(String(id).replace(/\D/g, ""), 10);
-  if (!parsed || parsed <= 0) throw new Error("Invalid universeId / placeId.");
-  const cacheKey = `gameinfo:${parsed}:${isPlaceId}`;
-  const cached   = await ctx.runQuery(internal.store.getCacheEntry, { key: cacheKey });
-  if (cached) return JSON.parse(cached) as GameInfo;
-
-  let universeId = parsed;
-  if (isPlaceId) {
-    try {
-      const r = await safeFetch(
-        `https://apis.roblox.com/universes/v1/places/${parsed}/universe`,
-        { headers: { Accept: "application/json" } }, 8_000, 1
-      );
-      if (r.ok) {
-        const j    = (await r.json()) as Record<string, unknown>;
-        universeId = (j["universeId"] as number) ?? parsed;
-      }
-    } catch (_) {}
-  }
-
-  const resp = await safeFetch(
-    `https://games.roblox.com/v1/games?universeIds=${universeId}`,
-    { headers: { Accept: "application/json" } }, 8_000, 1
-  );
-  if (!resp.ok) throw new Error(`Roblox Games API error: HTTP ${resp.status}`);
-
-  const d    = (await resp.json()) as { data?: Record<string, unknown>[] };
-  const game = (d.data ?? [])[0];
-  if (!game) throw new Error("Game not found.");
-
-  const gc     = sanObj(game["creator"]);
-  const result: GameInfo = {
-    universeId,
-    placeId:        (game["rootPlaceId"] as number) ?? parsed,
-    name:           sanStr(String(game["name"] ?? ""), 120),
-    description:    sanStr(String(game["description"] ?? ""), 500),
-    creator: {
-      name: sanStr(String(gc["name"] ?? ""), 80),
-      type: sanStr(String(gc["type"]  ?? "User"), 20),
-    },
-    playing:        (game["playing"]        as number) ?? 0,
-    visits:         (game["visits"]         as number) ?? 0,
-    maxPlayers:     (game["maxPlayers"]     as number) ?? 0,
-    favoritedCount: (game["favoritedCount"] as number) ?? 0,
-    genre:          sanStr(String(game["genre"] ?? ""), 30),
-    thumbnailUrl:   `https://www.roblox.com/asset-thumbnail/image?assetId=${game["rootPlaceId"] ?? parsed}&width=768&height=432&format=png`,
-  };
-  await ctx.runMutation(internal.store.setCacheEntry, {
-    key: cacheKey, value: JSON.stringify(result), expiresAt: Date.now() + TTL_GAME_INFO,
-  });
-  return result;
-}
-
-// ── LOCAL DOCS INDEX ───────────────────────────────────────────────────────────
-
-function getLocalDocsIndex(): DocEntry[] {
-  return [
-    { title: "Instance",             url: "https://create.roblox.com/docs/reference/engine/classes/Instance",             snippet: "Base class. FindFirstChild, WaitForChild, Destroy, Clone.",                   category: "api",   keywords: "instance findfirstchild waitforchild destroy clone parent classname isa" },
-    { title: "Workspace",            url: "https://create.roblox.com/docs/reference/engine/classes/Workspace",            snippet: "Primary 3D container. Gravity, CurrentCamera.",                               category: "api",   keywords: "workspace gravity camera service 3d world" },
-    { title: "BasePart / Part",      url: "https://create.roblox.com/docs/reference/engine/classes/BasePart",             snippet: "Physical part. Size, Position, CFrame, Anchored, Material.",                 category: "api",   keywords: "part size position cframe anchored material transparency mesh union" },
-    { title: "Script / LocalScript", url: "https://create.roblox.com/docs/reference/engine/classes/Script",               snippet: "Script: server. LocalScript: client. ModuleScript: shared.",                 category: "api",   keywords: "script localscript modulescript server client require enabled source" },
-    { title: "RemoteEvent",          url: "https://create.roblox.com/docs/reference/engine/classes/RemoteEvent",          snippet: "FireServer, FireClient, FireAllClients, OnServerEvent, OnClientEvent.",       category: "api",   keywords: "remoteevent onserverevent onclientevent fireserver fireclient" },
-    { title: "RemoteFunction",       url: "https://create.roblox.com/docs/reference/engine/classes/RemoteFunction",       snippet: "InvokeServer, InvokeClient, OnServerInvoke, OnClientInvoke.",                category: "api",   keywords: "remotefunction invokeserver invokeclient onserverinvoke" },
-    { title: "Players",              url: "https://create.roblox.com/docs/reference/engine/classes/Players",              snippet: "PlayerAdded, PlayerRemoving, GetPlayers, LocalPlayer.",                      category: "api",   keywords: "players playeradded playerremoving getplayers localplayer character" },
-    { title: "DataStoreService",     url: "https://create.roblox.com/docs/reference/engine/classes/DataStoreService",     snippet: "GetAsync, SetAsync, UpdateAsync. Always wrap with pcall.",                   category: "api",   keywords: "datastore getasync setasync updateasync save load persistent" },
-    { title: "TweenService",         url: "https://create.roblox.com/docs/reference/engine/classes/TweenService",         snippet: "Create(instance, TweenInfo, goals). Play, Pause, Cancel.",                  category: "api",   keywords: "tweenservice tween animation tweeninfo play pause cancel easing" },
-    { title: "RunService",           url: "https://create.roblox.com/docs/reference/engine/classes/RunService",           snippet: "Heartbeat, RenderStepped, Stepped. IsServer, IsClient.",                    category: "api",   keywords: "runservice heartbeat renderstepped stepped loop isserver isclient" },
-    { title: "InsertService",        url: "https://create.roblox.com/docs/reference/engine/classes/InsertService",        snippet: "LoadAsset(assetId). Asset must be public. Always pcall.",                   category: "api",   keywords: "insertservice loadasset asset insert model pcall public" },
-    { title: "HttpService",          url: "https://create.roblox.com/docs/reference/engine/classes/HttpService",          snippet: "GetAsync, PostAsync, JSONEncode, JSONDecode.",                               category: "api",   keywords: "httpservice getasync postasync http json encode decode api webhook" },
-    { title: "task Library",         url: "https://create.roblox.com/docs/reference/engine/libraries/task",               snippet: "task.wait, task.spawn, task.delay. Preferred over wait().",                  category: "guide", keywords: "task wait spawn delay cancel coroutine thread async timing yield" },
-    { title: "Terrain",              url: "https://create.roblox.com/docs/reference/engine/classes/Terrain",              snippet: "FillBlock, FillBall, FillCylinder. ReplaceMaterial.",                       category: "api",   keywords: "terrain fillblock fillball fillcylinder material grass water rock" },
-    { title: "PathfindingService",   url: "https://create.roblox.com/docs/reference/engine/classes/PathfindingService",   snippet: "CreatePath, ComputeAsync, GetWaypoints.",                                   category: "api",   keywords: "pathfinding npc navigation ai moveto waypoints compute agent" },
-    { title: "UserInputService",     url: "https://create.roblox.com/docs/reference/engine/classes/UserInputService",     snippet: "InputBegan, InputEnded, GetKeysPressed, TouchTap.",                         category: "api",   keywords: "input keyboard mouse touch gamepad keybind userinputservice" },
-    { title: "SoundService",         url: "https://create.roblox.com/docs/reference/engine/classes/SoundService",         snippet: "PlayLocalSound, SetListener, GlobalSounds.",                                category: "api",   keywords: "sound audio music sfx soundservice play volume" },
-    { title: "CollectionService",    url: "https://create.roblox.com/docs/reference/engine/classes/CollectionService",    snippet: "AddTag, RemoveTag, GetTagged, HasTag.",                                     category: "api",   keywords: "tag collection gettagged addtag removetag hastag collectionservice" },
-    { title: "ContextActionService", url: "https://create.roblox.com/docs/reference/engine/classes/ContextActionService", snippet: "BindAction, UnbindAction. Mobile buttons, keyboard.",                      category: "api",   keywords: "bind action mobile button contextactionservice keyboard" },
-    { title: "Lighting",             url: "https://create.roblox.com/docs/reference/engine/classes/Lighting",             snippet: "Ambient, Brightness, TimeOfDay, FogEnd.",                                   category: "api",   keywords: "lighting ambient brightness fog timeofday atmosphere" },
-  ];
-}
-
-async function searchDocs(ctx: ActionCtx, query: string, docType = "all", limit = 5): Promise<DocsResult> {
-  const q      = sanStr(query, 150).trim();
-  const maxRes = Math.min(Math.max(1, limit), 20);
-  if (!q) throw new Error("Query cannot be empty.");
-
-  const cacheKey = `docs:${q}:${docType}:${limit}`;
-  const cached   = await ctx.runQuery(internal.store.getCacheEntry, { key: cacheKey });
-  if (cached) return JSON.parse(cached) as DocsResult;
-
-  try {
-    const params = new URLSearchParams({
-      query: q, type: docType === "all" ? "" : docType, limit: String(maxRes), locale: "en-us",
-    });
-    const resp = await safeFetch(
-      `https://create.roblox.com/api/search/docs?${params}`,
-      { headers: { Accept: "application/json", "User-Agent": "NexusAI" } }, 8_000, 1
-    );
-    if (resp.ok) {
-      const data = (await resp.json()) as Record<string, unknown>;
-      const raw  = sanArr<Record<string, unknown>>(data["results"] ?? data["data"]);
-      if (raw.length > 0) {
-        const result: DocsResult = {
-          results: raw.slice(0, maxRes).map((r) => ({
-            title:    sanStr(String(r["title"]    ?? r["name"]        ?? "No Title"), 120),
-            url:      sanStr(String(r["url"]      ?? r["path"]        ?? ""), 300),
-            snippet:  sanStr(String(r["snippet"]  ?? r["excerpt"]     ?? r["description"] ?? ""), 300),
-            category: sanStr(String(r["category"] ?? r["type"]        ?? "docs"), 50),
-          })),
-          source: "roblox_creator_docs",
-          query:  q,
-        };
-        await ctx.runMutation(internal.store.setCacheEntry, {
-          key: cacheKey, value: JSON.stringify(result), expiresAt: Date.now() + 10 * 60_000,
-        });
-        return result;
-      }
-    }
-  } catch (_) {}
-
-  const index  = getLocalDocsIndex();
-  const tokens = q.toLowerCase().split(/\s+/).filter(Boolean);
-  const scored = index
-    .map((entry) => {
-      let score = 0;
-      const hay = `${entry.title} ${entry.keywords}`.toLowerCase();
-      for (const t of tokens) {
-        if (hay.includes(t))                          score += t.length;
-        if (entry.title.toLowerCase().startsWith(t)) score += 10;
-        if (entry.title.toLowerCase() === t)         score += 20;
-      }
-      return { ...entry, score };
-    })
-    .filter((e) => e.score > 0)
-    .sort((a, b) => b.score - a.score)
-    .slice(0, maxRes);
-
-  if (scored.length === 0) {
-    return {
-      results: [{
-        title:    "Roblox Creator Documentation",
-        url:      "https://create.roblox.com/docs",
-        snippet:  `No local results found for "${q}". Try the full docs site.`,
-        category: "fallback",
-      }],
-      source: "local_fallback",
-      query:  q,
-    };
-  }
-
-  const result: DocsResult = {
-    results: scored.map(({ score: _s, keywords: _k, ...rest }) => rest),
-    source:  "local_index",
-    query:   q,
-  };
-  await ctx.runMutation(internal.store.setCacheEntry, {
-    key: cacheKey, value: JSON.stringify(result), expiresAt: Date.now() + 60 * 60_000,
-  });
-  return result;
-}
-
 // ── DATA STORE HELPERS ─────────────────────────────────────────────────────────
 
 async function saveData(
@@ -1085,11 +605,18 @@ async function dispatchWebhook(ctx: ActionCtx, u: string, event: string, data: u
   const wh = await ctx.runQuery(internal.store.getWebhook, { username: u });
   if (!wh?.url?.startsWith("https://")) return;
   try {
-    await safeFetch(
+    const controller = new AbortController();
+    const timer = setTimeout(() => controller.abort(), 5_000);
+    await fetch(
       wh.url,
-      { method: "POST", headers: { "Content-Type": "application/json", "User-Agent": "NexusAI" }, body: JSON.stringify({ event, user: u, data, ts: Date.now() }) },
-      5_000, 0
+      {
+        method: "POST",
+        headers: { "Content-Type": "application/json", "User-Agent": "NexusAI" },
+        body: JSON.stringify({ event, user: u, data, ts: Date.now() }),
+        signal: controller.signal,
+      }
     );
+    clearTimeout(timer);
   } catch (_) {}
 }
 
@@ -1109,8 +636,6 @@ async function pushAiFeed(
 
 // ── PROJECT ────────────────────────────────────────────────────────────────────
 
-// FIX: Properly cast loadData result to ProjectData with explicit field extraction
-// to avoid silent undefined fields when the stored JSON shape changes.
 async function getProject(ctx: ActionCtx, u: string): Promise<ProjectData> {
   const d = await loadData(ctx, u, "project");
   if (!d) {
@@ -1125,7 +650,6 @@ async function getProject(ctx: ActionCtx, u: string): Promise<ProjectData> {
 }
 
 async function saveProject(ctx: ActionCtx, u: string, d: Partial<ProjectData>): Promise<void> {
-  // Load existing project so we preserve fields not included in the update
   const existing = await getProject(ctx, u);
   const merged: Record<string, unknown> = {
     projectId:   sanStr(d.projectId   ?? existing.projectId   ?? "", 100),
@@ -1220,6 +744,7 @@ async function handleGet(
   if (Object.keys(q).length === 0)
     return jsonResp({ ok: true, status: "ok", required_plugin_version: REQUIRED_PLUGIN_VERSION }, 200, cors);
 
+  // ── health ────────────────────────────────────────────────────────────────
   if (q["health"] === "1") {
     const rawStats      = await ctx.runQuery(internal.store.getGlobalStats, {});
     const s             = rawStats
@@ -1238,27 +763,7 @@ async function handleGet(
     }, 200, cors);
   }
 
-  if (q["userinfo"] === "1") {
-    const uid = parseInt(String(q["userId"] ?? "0"), 10);
-    if (!uid || uid <= 0 || uid > 9_999_999_999)
-      return errResp(cors, 400, "Invalid userId.");
-    try {
-      return jsonResp({ ok: true, ...(await fetchUserInfo(ctx, uid)) }, 200, cors);
-    } catch (e) {
-      return errResp(cors, 502, sanStr((e as Error)?.message ?? "Failed to fetch user info.", 100));
-    }
-  }
-
-  if (q["gameinfo"] === "1") {
-    const id = parseInt(String(q["id"] ?? "0"), 10);
-    if (!id) return errResp(cors, 400, 'Parameter "id" is required.');
-    try {
-      return jsonResp({ ok: true, ...(await fetchGameInfo(ctx, id, q["type"] === "place")) }, 200, cors);
-    } catch (e) {
-      return errResp(cors, 502, sanStr((e as Error)?.message ?? "Failed to fetch game info.", 100));
-    }
-  }
-
+  // ── check ─────────────────────────────────────────────────────────────────
   if (q["check"] != null) {
     const u        = san(q["user"] ?? "");
     const rawStats = await ctx.runQuery(internal.store.getGlobalStats, {});
@@ -1282,6 +787,7 @@ async function handleGet(
     }, 200, cors);
   }
 
+  // ── clear_cache (admin) ───────────────────────────────────────────────────
   if (q["clear_cache"] != null) {
     if (!verifyAdminToken(request, q["token"]))
       return errResp(cors, 401, "Admin token required.");
@@ -1293,7 +799,7 @@ async function handleGet(
 
   const u = san(q["user"] ?? "");
 
-  // AI Feed
+  // ── ai_feed ───────────────────────────────────────────────────────────────
   if (q["ai_feed"] != null) {
     if (!u) return errResp(cors, 400, '"user" parameter is required.');
     const limit = sanInt(q["limit"], AI_FEED_DEFAULT_LIMIT, 1, MAX_AI_FEED_ENTRIES);
@@ -1319,19 +825,23 @@ async function handleGet(
     }, 200, cors);
   }
 
+  // ── get_webhook ───────────────────────────────────────────────────────────
   if (q["get_webhook"] != null) {
     const wh = await ctx.runQuery(internal.store.getWebhook, { username: u });
     return jsonResp({ ok: true, webhook: wh, user: u }, 200, cors);
   }
 
+  // ── get_project ───────────────────────────────────────────────────────────
   if (q["get_project"] != null)
     return jsonResp({ ok: true, ...(await getProject(ctx, u)) }, 200, cors);
 
+  // ── get_output_data ───────────────────────────────────────────────────────
   if (q["get_output_data"] != null) {
     const d = await loadData(ctx, u, "output_report");
     return jsonResp({ ok: true, ...(d ?? { outputs: [] }) }, 200, cors);
   }
 
+  // ── get_output ────────────────────────────────────────────────────────────
   if (q["get_output"] != null) {
     const raw   = await ctx.runQuery(internal.store.getData, { username: u, key: "output_log" });
     let logs    = raw ? (JSON.parse(raw) as Record<string, unknown>[]) : [];
@@ -1341,6 +851,25 @@ async function handleGet(
     return jsonResp({ ok: true, logs, count: logs.length }, 200, cors);
   }
 
+  // ── get_instance_data ─────────────────────────────────────────────────────
+  if (q["get_instance_data"] != null) {
+    const d = await loadData(ctx, u, "instance_data_report");
+    return jsonResp({
+      ok: true,
+      ...(d ?? { name: "", class: "", fullPath: "", properties: {}, childCount: 0 }),
+    }, 200, cors);
+  }
+
+  // ── get_rbxm_result ───────────────────────────────────────────────────────
+  if (q["get_rbxm_result"] != null) {
+    const d = await loadData(ctx, u, "insert_rbxm_report");
+    return jsonResp({
+      ok: true,
+      ...(d ?? { success: false, count: 0, names: [], parentPath: "" }),
+    }, 200, cors);
+  }
+
+  // ── data getter map ───────────────────────────────────────────────────────
   const dataGetterKeys: Record<string, string> = {
     get_workspace:       "workspace_scan",
     get_script:          "read_script",
@@ -1364,8 +893,6 @@ async function handleGet(
 
   const emptyDefaults: Record<string, Record<string, unknown>> = {
     workspace_scan:           { data: {}, ts: 0, user: u },
-    // FIX: read_script empty default now includes all expected fields
-    // so GET ?get_script never returns a payload that silently omits source/class/etc.
     read_script:              { name: "", source: "", lineCount: 0, class: "Script", parent: "", fullPath: "", disabled: false },
     script_list_report:       { scripts: [], count: 0, total: 0, breakdown: {} },
     script_lines_report:      { content: "", lineStart: 0, lineEnd: 0, total: 0 },
@@ -1391,24 +918,28 @@ async function handleGet(
     }
   }
 
+  // ── get_plugin_errors ─────────────────────────────────────────────────────
   if (q["get_plugin_errors"] != null) {
     const raw    = await ctx.runQuery(internal.store.getData, { username: u, key: "plugin_error_report" });
     const errors = raw ? (JSON.parse(raw) as unknown[]) : [];
     return jsonResp({ ok: true, errors, count: errors.length }, 200, cors);
   }
 
+  // ── get_mentions ──────────────────────────────────────────────────────────
   if (q["get_mentions"] != null) {
     const raw      = await ctx.runQuery(internal.store.getData, { username: u, key: "mentions" });
     const mentions = raw ? (JSON.parse(raw) as unknown[]) : [];
     return jsonResp({ ok: true, mentions, count: mentions.length }, 200, cors);
   }
 
+  // ── get_cmd_history ───────────────────────────────────────────────────────
   if (q["get_cmd_history"] != null) {
     const limit   = sanInt(q["limit"], 50, 1, MAX_USER_HIST);
     const history = await ctx.runQuery(internal.store.getUserHistory, { username: u, limit });
     return jsonResp({ ok: true, history, user: u }, 200, cors);
   }
 
+  // ── queue_stats ───────────────────────────────────────────────────────────
   if (q["queue_stats"] != null) {
     const qc         = await ctx.runQuery(internal.store.countQueueItems, { username: u });
     const lastPollTs = await ctx.runQuery(internal.store.getLastPoll,     { username: u });
@@ -1422,6 +953,7 @@ async function handleGet(
     }, 200, cors);
   }
 
+  // ── get_logs (admin) ──────────────────────────────────────────────────────
   if (q["get_logs"] != null) {
     if (!verifyAdminToken(request, q["token"]))
       return errResp(cors, 401, "Admin token required.");
@@ -1430,6 +962,7 @@ async function handleGet(
     return jsonResp({ ok: true, logs, count: logs.length }, 200, cors);
   }
 
+  // ── get_history (admin) ───────────────────────────────────────────────────
   if (q["get_history"] != null) {
     if (!verifyAdminToken(request, q["token"]))
       return errResp(cors, 401, "Admin token required.");
@@ -1438,6 +971,7 @@ async function handleGet(
     return jsonResp({ ok: true, history, count: history.length }, 200, cors);
   }
 
+  // ── get_stats (admin) ─────────────────────────────────────────────────────
   if (q["get_stats"] != null) {
     const rawStats = await ctx.runQuery(internal.store.getGlobalStats, {});
     const s        = rawStats
@@ -1458,6 +992,7 @@ async function handleGet(
     }, 200, cors);
   }
 
+  // ── clear_queue (admin) ───────────────────────────────────────────────────
   if (q["clear_queue"] != null) {
     if (!verifyAdminToken(request, q["token"]))
       return errResp(cors, 401, "Admin token required.");
@@ -1466,7 +1001,7 @@ async function handleGet(
     return jsonResp({ ok: true, message: "Queue cleared.", user: u }, 200, cors);
   }
 
-  // Plugin Poll
+  // ── Plugin Poll ───────────────────────────────────────────────────────────
   if (!u) return errResp(cors, 400, '"user" parameter is required.');
 
   if (q["session_token"]) {
@@ -1511,6 +1046,7 @@ async function handlePost(
   const hasIdentity = !!(body["_user"] ?? body["user"]);
   const ratUser     = hasIdentity ? san(body["_user"] ?? body["user"]) : `ip_${ip || "unknown"}`;
 
+  // ── Rate limiting ─────────────────────────────────────────────────────────
   const okIp = await ctx.runMutation(internal.store.checkAndIncrRateLimit, {
     key: ip, kind: "ip", max: RATE_IP_PER_MIN, windowMs: 60_000,
   });
@@ -1535,7 +1071,7 @@ async function handlePost(
   if (!(await checkNonceReplay(ctx, request, rawAction)))
     return errResp(cors, 401, "Nonce already used (possible replay).");
 
-  // ── Plugin connect ─────────────────────────────────────────────────────────
+  // ── plugin_connect ────────────────────────────────────────────────────────
   if (rawAction === "plugin_connect") {
     const token   = sanStr(String(body["token"] ?? body["session_token"] ?? ""), SESSION_TOKEN_MAX).trim();
     const placeId = body["place_id"] ? sanStr(String(body["place_id"]), 30) : null;
@@ -1556,7 +1092,7 @@ async function handlePost(
     }, 200, cors);
   }
 
-  // ── Plugin disconnect ──────────────────────────────────────────────────────
+  // ── plugin_disconnect ─────────────────────────────────────────────────────
   if (rawAction === "plugin_disconnect") {
     const sess = await ctx.runQuery(internal.store.getSession, { username: san(resolvedUser) });
     if (sess) {
@@ -1569,19 +1105,12 @@ async function handlePost(
     return jsonResp({ ok: true, status: "ok" }, 200, cors);
   }
 
-  // ── read_script ────────────────────────────────────────────────────────────
-  // FIX: The plugin (ControlBridge.lua) sends the script content using field
-  // names: name, source, class (or scriptType), lineCount, fullPath, parentName.
-  // Previously this handler only accepted "source" but the plugin's safePost
-  // in Bridge.readScript sends "source" directly — and the ACTION_RENAME_MAP
-  // now routes "script_content" → "read_script" so both old and new plugin
-  // versions land here.  All alternative field names are accepted below.
+  // ── read_script ───────────────────────────────────────────────────────────
   if (rawAction === "read_script") {
     const name = sanStr(
       body["name"] ?? body["scriptName"] ?? body["script_name"] ?? "",
       100
     );
-    // Accept: source, script_source, content (all plugin versions)
     const rawSource =
       body["source"]        ??
       body["script_source"] ??
@@ -1591,9 +1120,7 @@ async function handlePost(
       name,
       parent:    sanStr(body["parentName"] ?? body["parent_name"] ?? body["parent"] ?? "", 100),
       fullPath:  sanStr(body["fullPath"]   ?? body["full_path"]   ?? "", 200),
-      // Accept: class, scriptType, script_type
       class:     sanStr(body["class"]      ?? body["scriptType"]  ?? body["script_type"] ?? "Script", 30),
-      // FIX: Use sanStrSafe (not sanStr) so source is not truncated to 200 chars
       source:    sanStrSafe(rawSource),
       lineCount: sanInt(body["lineCount"]  ?? body["line_count"]  ?? body["lines"], 0, 0, 99_999),
       disabled:  !!body["disabled"],
@@ -1611,14 +1138,83 @@ async function handlePost(
     return jsonResp({ ok: true, status: "ok", name, lineCount: reportData.lineCount }, 200, cors);
   }
 
-  // ── workspace_scan ─────────────────────────────────────────────────────────
+  // ── instance_data_report (from read_instance action) ──────────────────────
+  // The plugin's read_instance action posts back with action="instance_data"
+  // which is migrated to "instance_data_report" via ACTION_RENAME_MAP.
+  if (rawAction === "instance_data_report") {
+    const report: InstanceDataReport = {
+      name:        sanStr(body["name"]       ?? "", 100),
+      class:       sanStr(body["class"]      ?? "", 60),
+      fullPath:    sanStr(body["fullPath"]   ?? "", 300),
+      parentName:  body["parentName"] ? sanStr(String(body["parentName"]), 100) : null,
+      properties:  sanObj(body["properties"]),
+      attributes:  body["attributes"] ? sanObj(body["attributes"]) : null,
+      children:    body["children"]    ? sanArr(body["children"],    200)  : null,
+      descendants: body["descendants"] ? sanArr(body["descendants"], 1000) : null,
+      childCount:  sanInt(body["childCount"] ?? body["child_count"], 0, 0, 99_999),
+      ts:          Date.now(),
+    };
+    await saveData(ctx, resolvedUser, "instance_data_report", report as unknown as Record<string, unknown>);
+    await pushAiFeed(
+      ctx, resolvedUser, "instance_data_report",
+      `Instance "${report.name}" [${report.class}] data received (${report.childCount} children).`,
+      report
+    );
+    await ctx.runMutation(internal.store.pushLog, {
+      action: "instance_data_report", user: resolvedUser,
+      details: `${report.name} [${report.class}] @ ${report.fullPath}`,
+    });
+    return jsonResp({
+      ok: true, status: "ok",
+      name:       report.name,
+      class:      report.class,
+      childCount: report.childCount,
+    }, 200, cors);
+  }
+
+  // ── insert_rbxm_report (from insert_rbxm action) ──────────────────────────
+  // The plugin's insert_rbxm action posts back with action="insert_rbxm_result"
+  // which is migrated to "insert_rbxm_report" via ACTION_RENAME_MAP.
+  if (rawAction === "insert_rbxm_report") {
+    const report: InsertRbxmReport = {
+      success:    !!body["success"],
+      count:      sanInt(body["count"] ?? body["descendants"], 0, 0, 999_999),
+      names:      sanArr<string>(body["names"] ?? (body["name"] ? [String(body["name"])] : []), 100),
+      class:      body["class"] ? sanStr(String(body["class"]), 60) : null,
+      parentPath: sanStr(body["parentPath"] ?? body["parent_path"] ?? "", 300),
+      error:      body["error"] ? sanStr(String(body["error"]), 300) : null,
+      ts:         Date.now(),
+    };
+    await saveData(ctx, resolvedUser, "insert_rbxm_report", report as unknown as Record<string, unknown>);
+
+    const summary = report.success
+      ? `Inserted rbxm "${report.names[0] ?? "model"}" [${report.class ?? "unknown"}] into "${report.parentPath}" (${report.count} total instances).`
+      : `Failed to insert rbxm: ${report.error ?? "unknown error"}`;
+
+    await pushAiFeed(ctx, resolvedUser, "insert_rbxm_report", summary, report);
+    await ctx.runMutation(internal.store.pushLog, {
+      action: "insert_rbxm_report", user: resolvedUser,
+      details: JSON.stringify({
+        success: report.success, name: report.names[0] ?? "", count: report.count,
+      }),
+    });
+    return jsonResp({
+      ok: true, status: "ok",
+      success:    report.success,
+      count:      report.count,
+      names:      report.names,
+      parentPath: report.parentPath,
+    }, 200, cors);
+  }
+
+  // ── workspace_scan ────────────────────────────────────────────────────────
   if (rawAction === "workspace_scan") {
     const d = { data: sanObj(body["data"]), ts: (body["ts"] as number) ?? Date.now(), user: resolvedUser };
     await saveData(ctx, resolvedUser, "workspace_scan", d);
     return jsonResp({ ok: true, status: "ok", ts: d.ts }, 200, cors);
   }
 
-  // ── output_report ──────────────────────────────────────────────────────────
+  // ── output_report ─────────────────────────────────────────────────────────
   if (rawAction === "output_report") {
     await saveData(ctx, resolvedUser, "output_report", {
       outputs: sanArr(body["outputs"], 200), ts: Date.now(),
@@ -1626,7 +1222,7 @@ async function handlePost(
     return jsonResp({ ok: true, status: "ok" }, 200, cors);
   }
 
-  // ── script_list_report ─────────────────────────────────────────────────────
+  // ── script_list_report ────────────────────────────────────────────────────
   if (rawAction === "script_list_report") {
     const count = sanInt(body["total"] ?? body["count"], 0, 0, 99_999);
     await saveData(ctx, resolvedUser, "script_list_report", {
@@ -1642,7 +1238,7 @@ async function handlePost(
     return jsonResp({ ok: true, status: "ok", count }, 200, cors);
   }
 
-  // ── script_lines_report ────────────────────────────────────────────────────
+  // ── script_lines_report ───────────────────────────────────────────────────
   if (rawAction === "script_lines_report") {
     await saveData(ctx, resolvedUser, "script_lines_report", {
       name:      sanStr(body["name"] ?? "", 100),
@@ -1654,7 +1250,7 @@ async function handlePost(
     return jsonResp({ ok: true, status: "ok" }, 200, cors);
   }
 
-  // ── output_log ─────────────────────────────────────────────────────────────
+  // ── output_log ────────────────────────────────────────────────────────────
   if (rawAction === "output_log") {
     const logs = sanArr(body["logs"], 100);
     await ctx.runMutation(internal.store.pushLogSvc, {
@@ -1674,7 +1270,7 @@ async function handlePost(
     return jsonResp({ ok: true, status: "ok", received: logs.length }, 200, cors);
   }
 
-  // ── mention_report ─────────────────────────────────────────────────────────
+  // ── mention_report ────────────────────────────────────────────────────────
   if (rawAction === "mention_report") {
     await ctx.runMutation(internal.store.pushMention, {
       username: resolvedUser,
@@ -1688,7 +1284,7 @@ async function handlePost(
     return jsonResp({ ok: true, status: "ok" }, 200, cors);
   }
 
-  // ── toolbox_search_report ──────────────────────────────────────────────────
+  // ── toolbox_search_report ─────────────────────────────────────────────────
   if (rawAction === "toolbox_search_report") {
     const count = sanInt(body["count"], 0, 0, 99_999);
     await saveData(ctx, resolvedUser, "toolbox_search_report", {
@@ -1697,7 +1293,7 @@ async function handlePost(
     return jsonResp({ ok: true, status: "ok", count }, 200, cors);
   }
 
-  // ── descendants_report ─────────────────────────────────────────────────────
+  // ── descendants_report ────────────────────────────────────────────────────
   if (rawAction === "descendants_report") {
     await saveData(ctx, resolvedUser, "descendants_report", {
       target:      sanStr(body["target"] ?? "", 100),
@@ -1707,7 +1303,7 @@ async function handlePost(
     return jsonResp({ ok: true, status: "ok" }, 200, cors);
   }
 
-  // ── properties_report ──────────────────────────────────────────────────────
+  // ── properties_report ─────────────────────────────────────────────────────
   if (rawAction === "properties_report") {
     await saveData(ctx, resolvedUser, "properties_report", {
       name: sanStr(body["name"] ?? "", 100), properties: sanObj(body["properties"]),
@@ -1715,7 +1311,7 @@ async function handlePost(
     return jsonResp({ ok: true, status: "ok" }, 200, cors);
   }
 
-  // ── properties_set_report ──────────────────────────────────────────────────
+  // ── properties_set_report ─────────────────────────────────────────────────
   if (rawAction === "properties_set_report") {
     await saveData(ctx, resolvedUser, "properties_report", {
       name:       sanStr(body["name"] ?? body["instance"] ?? "", 100),
@@ -1730,7 +1326,7 @@ async function handlePost(
     return jsonResp({ ok: true, status: "ok" }, 200, cors);
   }
 
-  // ── action_list_report ─────────────────────────────────────────────────────
+  // ── action_list_report ────────────────────────────────────────────────────
   if (rawAction === "action_list_report") {
     await saveData(ctx, resolvedUser, "action_list_report", {
       actions: sanArr(body["actions"]), count: sanInt(body["count"], 0, 0, 9_999),
@@ -1738,7 +1334,7 @@ async function handlePost(
     return jsonResp({ ok: true, status: "ok" }, 200, cors);
   }
 
-  // ── asset_library_report ───────────────────────────────────────────────────
+  // ── asset_library_report ──────────────────────────────────────────────────
   if (rawAction === "asset_library_report") {
     await saveData(ctx, resolvedUser, "asset_library_report", {
       category: sanStr(body["category"] ?? "all", 50),
@@ -1747,7 +1343,7 @@ async function handlePost(
     return jsonResp({ ok: true, status: "ok" }, 200, cors);
   }
 
-  // ── asset_id_report ────────────────────────────────────────────────────────
+  // ── asset_id_report ───────────────────────────────────────────────────────
   if (rawAction === "asset_id_report") {
     await saveData(ctx, resolvedUser, "asset_id_report", {
       category: sanStr(body["category"] ?? "", 50),
@@ -1758,7 +1354,7 @@ async function handlePost(
     return jsonResp({ ok: true, status: "ok" }, 200, cors);
   }
 
-  // ── asset_folder_report ────────────────────────────────────────────────────
+  // ── asset_folder_report ───────────────────────────────────────────────────
   if (rawAction === "asset_folder_report") {
     await saveData(ctx, resolvedUser, "asset_folder_report", {
       folder: sanStr(body["folder"] ?? "all", 50), contents: sanObj(body["contents"]),
@@ -1766,7 +1362,7 @@ async function handlePost(
     return jsonResp({ ok: true, status: "ok" }, 200, cors);
   }
 
-  // ── module_deploy_report ───────────────────────────────────────────────────
+  // ── module_deploy_report ──────────────────────────────────────────────────
   if (rawAction === "module_deploy_report") {
     await saveData(ctx, resolvedUser, "module_deploy_report", {
       name:   sanStr(body["name"]   ?? "", 100),
@@ -1776,7 +1372,7 @@ async function handlePost(
     return jsonResp({ ok: true, status: "ok" }, 200, cors);
   }
 
-  // ── module_list_report ─────────────────────────────────────────────────────
+  // ── module_list_report ────────────────────────────────────────────────────
   if (rawAction === "module_list_report") {
     await saveData(ctx, resolvedUser, "module_list_report", {
       folder:  sanStr(body["folder"] ?? "modulescripts", 100),
@@ -1786,7 +1382,7 @@ async function handlePost(
     return jsonResp({ ok: true, status: "ok" }, 200, cors);
   }
 
-  // ── terrain_materials_report ───────────────────────────────────────────────
+  // ── terrain_materials_report ──────────────────────────────────────────────
   if (rawAction === "terrain_materials_report") {
     await saveData(ctx, resolvedUser, "terrain_materials_report", {
       materials: sanArr(body["materials"]), count: sanInt(body["count"], 0, 0, 999),
@@ -1794,7 +1390,7 @@ async function handlePost(
     return jsonResp({ ok: true, status: "ok" }, 200, cors);
   }
 
-  // ── runcode_report ─────────────────────────────────────────────────────────
+  // ── runcode_report ────────────────────────────────────────────────────────
   if (rawAction === "runcode_report") {
     const result = {
       mode:    sanStr(body["mode"] ?? "pipeline", 20),
@@ -1816,7 +1412,7 @@ async function handlePost(
     return jsonResp({ ok: true, status: "ok", mode: result.mode, success: result.success }, 200, cors);
   }
 
-  // ── expression_report ──────────────────────────────────────────────────────
+  // ── expression_report ─────────────────────────────────────────────────────
   if (rawAction === "expression_report") {
     const result = {
       expression: sanStr(body["expression"] ?? "", 300),
@@ -1827,7 +1423,7 @@ async function handlePost(
     return jsonResp({ ok: true, status: "ok", expression: result.expression }, 200, cors);
   }
 
-  // ── query_report ───────────────────────────────────────────────────────────
+  // ── query_report ──────────────────────────────────────────────────────────
   if (rawAction === "query_report") {
     const result = {
       results: sanArr(body["results"], 200),
@@ -1838,7 +1434,7 @@ async function handlePost(
     return jsonResp({ ok: true, status: "ok", count: result.count }, 200, cors);
   }
 
-  // ── plugin_error_report ────────────────────────────────────────────────────
+  // ── plugin_error_report ───────────────────────────────────────────────────
   if (rawAction === "plugin_error_report") {
     const errorEntry = {
       actionName: sanStr(body["actionName"] ?? body["action_name"] ?? "unknown", 80),
@@ -1861,7 +1457,7 @@ async function handlePost(
     return jsonResp({ ok: true, status: "ok" }, 200, cors);
   }
 
-  // ── ping ───────────────────────────────────────────────────────────────────
+  // ── ping ──────────────────────────────────────────────────────────────────
   if (rawAction === "ping") {
     const target     = san(body["_target_user"] ?? body["_user"] ?? "");
     const lastPollTs = target
@@ -1875,7 +1471,7 @@ async function handlePost(
     }, 200, cors);
   }
 
-  // ── get_info ───────────────────────────────────────────────────────────────
+  // ── get_info ──────────────────────────────────────────────────────────────
   if (rawAction === "get_info") {
     const target = san(body["_target_user"] ?? body["_user"] ?? "");
     if (!target) return errResp(cors, 400, '"_user" is required.');
@@ -1896,9 +1492,10 @@ async function handlePost(
     }, 200, cors);
   }
 
-  // ── get_all_actions ────────────────────────────────────────────────────────
+  // ── get_all_actions ───────────────────────────────────────────────────────
   if (rawAction === "get_all_actions") {
     const allActions = [
+      // Report / data-in actions (plugin → backend)
       "read_script", "output_log", "output_report", "workspace_scan",
       "toolbox_search_report", "descendants_report", "properties_report",
       "properties_set_report", "action_list_report", "asset_library_report",
@@ -1906,16 +1503,21 @@ async function handlePost(
       "module_list_report", "terrain_materials_report", "runcode_report",
       "expression_report", "query_report", "mention_report",
       "plugin_error_report", "script_list_report", "script_lines_report",
+      "instance_data_report", "insert_rbxm_report",
+      // Session management
       "plugin_connect", "plugin_disconnect",
+      // Dispatch actions (backend → plugin via queue)
       "dispatch_command", "dispatch_batch", "dispatch_from_text",
       "dispatch_multi_target",
+      // Plugin actions
       "create_instance", "create_script", "edit_script", "set_properties",
-      "rename", "delete", "parent", "list", "insert_asset", "play_test",
-      "run_test", "stop_test", "terrain", "undo", "redo",
-      "resolve_mention", "run_code", "delay", "none",
+      "rename", "delete", "parent", "list", "insert_asset", "insert_rbxm",
+      "play_test", "run_test", "stop_test", "terrain", "undo", "redo",
+      "resolve_mention", "run_code", "delay", "none", "read_instance",
+      // Utility
       "ping", "get_info", "get_all_actions", "status", "reset",
-      "set_project", "set_webhook", "search_toolbox", "insert_model",
-      "search_docs", "get_game_info", "get_user_info", "validate_asset",
+      "set_project", "set_webhook",
+      // Admin
       "get_logs", "get_history",
     ];
     return jsonResp({
@@ -1925,12 +1527,12 @@ async function handlePost(
     }, 200, cors);
   }
 
-  // ── none ───────────────────────────────────────────────────────────────────
+  // ── none ──────────────────────────────────────────────────────────────────
   if (rawAction === "none") {
     return jsonResp({ ok: true, status: "ok", action: "none" }, 200, cors);
   }
 
-  // ── delay ──────────────────────────────────────────────────────────────────
+  // ── delay ─────────────────────────────────────────────────────────────────
   if (rawAction === "delay") {
     const sender   = san(body["_user"] ?? "");
     const target   = san(body["_target_user"] ?? sender);
@@ -1996,7 +1598,7 @@ async function handlePost(
     }, 200, cors);
   }
 
-  // ── dispatch_command ───────────────────────────────────────────────────────
+  // ── dispatch_command ──────────────────────────────────────────────────────
   if (rawAction === "dispatch_command") {
     const sender   = san(body["_user"]        ?? "");
     const target   = san(body["_target_user"] ?? sender);
@@ -2046,7 +1648,7 @@ async function handlePost(
     }, 200, cors);
   }
 
-  // ── reset ──────────────────────────────────────────────────────────────────
+  // ── reset ─────────────────────────────────────────────────────────────────
   if (rawAction === "reset") {
     const target = san(body["_user"] ?? body["user"] ?? "");
     if (!target) return errResp(cors, 400, '"user" is required.');
@@ -2056,7 +1658,7 @@ async function handlePost(
     return jsonResp({ ok: true, status: "ok", message: "Queue reset.", user: target }, 200, cors);
   }
 
-  // ── status ─────────────────────────────────────────────────────────────────
+  // ── status ────────────────────────────────────────────────────────────────
   if (rawAction === "status") {
     const target     = san(body["_user"] ?? body["user"] ?? "");
     const sess       = await ctx.runQuery(internal.store.getSession,      { username: target });
@@ -2077,12 +1679,11 @@ async function handlePost(
     }, 200, cors);
   }
 
-  // ── set_project ────────────────────────────────────────────────────────────
+  // ── set_project ───────────────────────────────────────────────────────────
   if (rawAction === "set_project") {
     if (!resolvedUser) return errResp(cors, 400, '"_user" is required.');
     const auth = await authorizeCommand(ctx, request, body, ratUser, resolvedUser, "set_project");
     if (!auth.ok) return errResp(cors, auth.status!, auth.error!);
-    // FIX: Accept both camelCase and snake_case field names, merge with existing
     const incoming: Partial<ProjectData> = {
       projectId:   sanStr(String(body["projectId"]   ?? body["project_id"]   ?? ""), 100) || undefined,
       projectName: sanStr(String(body["projectName"] ?? body["project_name"] ?? ""), 100) || undefined,
@@ -2096,18 +1697,28 @@ async function handlePost(
     return jsonResp({ ok: true, status: "ok", ...saved }, 200, cors);
   }
 
-  // ── set_webhook ────────────────────────────────────────────────────────────
+  // ── set_webhook ───────────────────────────────────────────────────────────
   if (rawAction === "set_webhook") {
     if (!resolvedUser) return errResp(cors, 400, '"_user" is required.');
     const auth = await authorizeCommand(ctx, request, body, ratUser, resolvedUser, null);
     if (!auth.ok) return errResp(cors, auth.status!, auth.error!);
-    const webhookUrl = body["url"] ? sanUrl(String(body["url"])) : null;
-    if (body["url"] && !webhookUrl)
-      return errResp(cors, 400, "Webhook URL must be a valid HTTPS URL.");
+
+    const rawUrl = body["url"] ? String(body["url"]).trim() : "";
+    let webhookUrl: string | null = null;
+    if (rawUrl) {
+      try {
+        const u = new URL(rawUrl);
+        webhookUrl = u.protocol === "https:" ? u.toString() : null;
+      } catch { webhookUrl = null; }
+      if (!webhookUrl)
+        return errResp(cors, 400, "Webhook URL must be a valid HTTPS URL.");
+    }
+
     if (webhookUrl)
       await ctx.runMutation(internal.store.upsertWebhook, { username: resolvedUser, url: webhookUrl });
     else
       await ctx.runMutation(internal.store.deleteWebhook, { username: resolvedUser });
+
     return jsonResp({ ok: true, status: "ok", webhookSet: !!webhookUrl, user: resolvedUser }, 200, cors);
   }
 
@@ -2143,7 +1754,7 @@ async function handlePost(
     return jsonResp({ ok: true, status: "ok", pushed, targets: results }, 200, cors);
   }
 
-  // ── Admin: get_logs / get_history via POST ─────────────────────────────────
+  // ── Admin: get_logs / get_history via POST ────────────────────────────────
   if (rawAction === "get_logs" || rawAction === "get_history") {
     if (!verifyAdminToken(request)) return errResp(cors, 401, "Admin token required.");
     if (rawAction === "get_logs") {
@@ -2154,165 +1765,7 @@ async function handlePost(
     return jsonResp({ ok: true, history }, 200, cors);
   }
 
-  // ── search_toolbox ─────────────────────────────────────────────────────────
-  if (rawAction === "search_toolbox") {
-    const sender    = san(body["_user"] ?? "");
-    const keyword   = sanStr(String(body["keyword"] ?? body["query"] ?? body["term"] ?? ""), 100).trim();
-    const assetType = sanStr(String(body["asset_type"] ?? body["assetType"] ?? "Model"), 30);
-    const limit     = sanInt(body["limit"] ?? body["count"], 10, 1, 50);
-    const cursor    = body["cursor"] ? sanStr(String(body["cursor"]), 200) : null;
-
-    if (!keyword) return errResp(cors, 400, '"keyword" is required.');
-
-    try {
-      const result     = await robloxToolboxSearch(ctx, keyword, assetType, limit, cursor);
-      const target     = san(body["_target_user"] ?? sender);
-      const lastPollTs = await ctx.runQuery(internal.store.getLastPoll, { username: target });
-
-      if (target && Date.now() - lastPollTs < 8_000) {
-        await pushQueue(ctx, target, {
-          action: "toolbox_search_report", keyword, assetType,
-          assets: result.assets.slice(0, 20), nextCursor: result.nextCursor,
-          total: result.total, _user: sender,
-        }, "normal");
-      }
-
-      await ctx.runMutation(internal.store.bumpStats, { user: sender ?? "web", action: "search_toolbox" });
-      await ctx.runMutation(internal.store.pushLog, {
-        action: "search_toolbox", user: sender ?? "web", target,
-        details: JSON.stringify({ keyword: sanStr(keyword, 50), assetType, found: result.assets.length }),
-      });
-
-      return jsonResp({
-        ok: true, status: "ok", keyword, assetType,
-        assets: result.assets, nextCursor: result.nextCursor,
-        total: result.total, count: result.assets.length,
-        pluginNotified: Date.now() - lastPollTs < 8_000,
-      }, 200, cors);
-    } catch (err) {
-      const code = (err as { code?: number })?.code ?? 500;
-      return errResp(cors, code === 400 ? 400 : code === 429 ? 429 : 502,
-        sanStr((err as Error)?.message ?? "Toolbox search failed.", 200));
-    }
-  }
-
-  // ── insert_model ───────────────────────────────────────────────────────────
-  if (rawAction === "insert_model") {
-    const sender   = san(body["_user"] ?? "");
-    const target   = san(body["_target_user"] ?? sender);
-    const assetId  = body["asset_id"] ?? body["assetId"] ?? body["id"] ?? "";
-    const parent   = sanStr(String(body["parent"] ?? body["parentPath"] ?? "workspace"), 100);
-    const priority = sanPriority(body["priority"]);
-
-    if (!assetId) return errResp(cors, 400, '"asset_id" is required.');
-    if (!target)  return errResp(cors, 400, '"_user" is required.');
-
-    const auth = await authorizeCommand(ctx, request, body, sender, target, "insert_asset");
-    if (!auth.ok) return errResp(cors, auth.status!, auth.error!);
-
-    try {
-      const asset = await validateAsset(ctx, assetId);
-      if (!asset.insertable && asset.assetType !== "Unknown")
-        return errResp(cors, 400, `AssetType "${asset.assetType}" cannot be inserted into Workspace.`);
-
-      await pushQueue(ctx, target, {
-        action: "insert_asset", asset_id: asset.assetId, name: asset.name,
-        parent, insert_script: asset.insertScript, _user: sender, _target_user: target,
-      }, priority);
-
-      const lastPollTs = await ctx.runQuery(internal.store.getLastPoll,     { username: target });
-      const qc         = await ctx.runQuery(internal.store.countQueueItems, { username: target });
-
-      await ctx.runMutation(internal.store.bumpStats,       { user: sender ?? "web", action: "insert_model" });
-      await ctx.runMutation(internal.store.pushLog,         { action: "insert_model", user: sender ?? "web", target, details: JSON.stringify({ assetId: asset.assetId, assetName: sanStr(asset.name, 50), parent }) });
-      await ctx.runMutation(internal.store.pushUserHistory, { username: sender, action: "insert_model", details: `${asset.name} (${asset.assetId})` });
-
-      return jsonResp({
-        ok: true, status: "ok",
-        assetId:     asset.assetId,
-        name:        asset.name,
-        description: asset.description ?? "",
-        assetType:   asset.assetType,
-        creator:     asset.creator,
-        isPublic:    asset.isPublic,
-        unverified:  asset.unverified  ?? false,
-        insertable:  asset.insertable,
-        insertScript: asset.insertScript,
-        parent, priority,
-        pluginConnected: Date.now() - lastPollTs < 8_000,
-        queued: true, queueLength: qc.total,
-      }, 200, cors);
-    } catch (err) {
-      const code = (err as { code?: number })?.code ?? 500;
-      return errResp(cors, code === 400 ? 400 : 502, sanStr((err as Error)?.message ?? "Insert failed.", 200));
-    }
-  }
-
-  // ── search_docs ────────────────────────────────────────────────────────────
-  if (rawAction === "search_docs") {
-    const sender  = san(body["_user"] ?? "");
-    const query   = sanStr(String(body["query"] ?? body["keyword"] ?? body["q"] ?? ""), 150).trim();
-    const docType = ["api", "guide", "all"].includes(String(body["doc_type"] ?? ""))
-      ? String(body["doc_type"]) : "all";
-    const limit = sanInt(body["limit"], 5, 1, 20);
-    if (!query) return errResp(cors, 400, '"query" is required.');
-    try {
-      const result = await searchDocs(ctx, query, docType, limit);
-      await ctx.runMutation(internal.store.bumpStats, { user: sender ?? "web", action: "search_docs" });
-      return jsonResp({
-        ok: true, status: "ok", query, docType,
-        results: result.results, count: result.results.length, source: result.source,
-      }, 200, cors);
-    } catch (err) {
-      return errResp(cors, 500, sanStr((err as Error)?.message ?? "Docs search failed.", 200));
-    }
-  }
-
-  // ── get_game_info ──────────────────────────────────────────────────────────
-  if (rawAction === "get_game_info") {
-    const sender  = san(body["_user"] ?? "");
-    const isPlace = body["type"] === "place" || !!body["place_id"];
-    const id      = parseInt(String(body["id"] ?? body["universe_id"] ?? body["place_id"] ?? "0").replace(/\D/g, ""), 10);
-    if (!id) return errResp(cors, 400, '"id" is required.');
-    try {
-      const info = await fetchGameInfo(ctx, id, isPlace);
-      await ctx.runMutation(internal.store.bumpStats, { user: sender ?? "web", action: "get_game_info" });
-      return jsonResp({ ok: true, status: "ok", ...info }, 200, cors);
-    } catch (err) {
-      return errResp(cors, 502, sanStr((err as Error)?.message ?? "Failed to fetch game info.", 200));
-    }
-  }
-
-  // ── get_user_info / get_avatar_info ────────────────────────────────────────
-  if (rawAction === "get_user_info" || rawAction === "get_avatar_info") {
-    const sender = san(body["_user"] ?? "");
-    const userId = parseInt(String(body["user_id"] ?? body["userId"] ?? body["id"] ?? "0").replace(/\D/g, ""), 10);
-    if (!userId) return errResp(cors, 400, '"user_id" is required.');
-    try {
-      const info = await fetchUserInfo(ctx, userId);
-      await ctx.runMutation(internal.store.bumpStats, { user: sender ?? "web", action: rawAction });
-      return jsonResp({ ok: true, status: "ok", ...info }, 200, cors);
-    } catch (err) {
-      return errResp(cors, 502, sanStr((err as Error)?.message ?? "Failed to fetch user info.", 200));
-    }
-  }
-
-  // ── validate_asset ─────────────────────────────────────────────────────────
-  if (rawAction === "validate_asset") {
-    const sender  = san(body["_user"] ?? "");
-    const assetId = body["asset_id"] ?? body["assetId"] ?? body["id"] ?? "";
-    if (!assetId) return errResp(cors, 400, '"asset_id" is required.');
-    try {
-      const asset = await validateAsset(ctx, assetId);
-      await ctx.runMutation(internal.store.bumpStats, { user: sender ?? "web", action: "validate_asset" });
-      return jsonResp({ ok: true, status: "ok", ...asset }, 200, cors);
-    } catch (err) {
-      const code = (err as { code?: number })?.code ?? 500;
-      return errResp(cors, code === 400 ? 400 : 502, sanStr((err as Error)?.message ?? "", 200));
-    }
-  }
-
-  // ── dispatch_batch ─────────────────────────────────────────────────────────
+  // ── dispatch_batch ────────────────────────────────────────────────────────
   if (rawAction === "dispatch_batch") {
     const sender   = san(body["_user"] ?? "");
     const target   = san(body["target"] ?? body["_target_user"] ?? sender);
@@ -2369,7 +1822,7 @@ async function handlePost(
     }, 200, cors);
   }
 
-  // ── dispatch_from_text ─────────────────────────────────────────────────────
+  // ── dispatch_from_text ────────────────────────────────────────────────────
   if (rawAction === "dispatch_from_text") {
     const sender   = san(body["_user"] ?? "");
     const target   = san(body["_target_user"] ?? sender);

@@ -169,11 +169,13 @@ Defaults: UI→Vol 0.5 / Looped false / parent SoundService
   const modelSection = `\
 ## TOOLBOX MODELS — insert via insert_asset, never write IDs in prose
 ${chunk(MODEL_ASSETS, 3).map(row => row.join(" | ")).join("\n")}
-Usage: {"action":"insert_asset","asset_id":"<ID>","name":"...","parent":"Workspace","anchored":true}`;
+Usage: {"action":"insert_asset","asset_id":"<ID>","name":"...","parent":"Workspace","anchored":true}
+Need a different asset than the ones above? Ask the user for an asset ID/link —
+there is no keyword search; get_toolbox_asset only looks up an ID you already have.`;
 
   // ── 7. Actions Reference ────────────────────────────────────────────────────
   const actionsRef = `\
-## NEXUS ACTIONS (24)
+## NEXUS ACTIONS (25)
 Dispatch: {"action":"name",...} | Batch: {"actions":[...]} | MAX_QUEUE=50 | pcall-wrapped | auto-waypoint
 
 SEARCH  : exact → case-insensitive → partial | Dot-paths: "StarterGui.Frame.Btn"
@@ -192,9 +194,10 @@ PROPERTY COERCION:
   Enum/BrickColor : string name
 
 WORKFLOW:
-  Inspect game : list(parent?) → lihat struktur → read_script(name) → edit_script(name, source)
+  Inspect game : list(parent?) → check structure → read_script(name) → edit_script(name, source)
   Fix / debug  : get_output() → read_script(name) → edit_script(name, source)
-  Insert model : insert_asset(asset_id) — gunakan ID dari tabel TOOLBOX MODELS di atas
+  Insert model : insert_asset(asset_id) — use an ID from the TOOLBOX MODELS table above
+  Verify asset : get_toolbox_asset(assetId) → confirm name/type before insert_asset, if user gave an ID
   ALWAYS read_script before edit_script. ALWAYS list before read_script if script name unknown.
 
 ACTIONS:
@@ -217,7 +220,15 @@ ACTIONS:
   delete(name?, names?, class?, parent?, children_only?)
   parent(name?, names?, parent)
   insert_asset(asset_id, name?, parent?, position?, anchored?)
-    → Use IDs from TOOLBOX MODELS table above.
+    → Use IDs from TOOLBOX MODELS table above, or an ID confirmed via get_toolbox_asset.
+  get_toolbox_asset(assetId)
+    → Look up details for ONE Roblox Toolbox/Creator Store asset by numeric ID
+      (name, type, creator, votes, thumbnail). No Studio connection required.
+    → No keyword search exists. If the user wants to find an asset by description
+      ("a coin", "a house"), ask them for an asset ID or Creator Store link instead.
+    → Result: {id, name, description, category, creator, creatorVerified,
+               upVotes, downVotes, upVotePercent, thumbnailUrl, assetUrl}
+    → Optionally follow up with insert_asset using the same id, if the user wants it added.
   ${ptEnabled
     ? `play_test(action?, duration?, server_script?, local_script?)
     action: start (default) | stop | max 60s (default ${ptDur}s)

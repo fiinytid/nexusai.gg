@@ -79,6 +79,21 @@ const MAX_DAILY_CATCHUP_DAYS = 7
 const _NEW_CHAT_DEBOUNCE = 800
 const _defaultModel = { id: 'gemini-3.5-flash', prov: 'gemini', cost: 3, label: 'Gemini 3.5 Flash' }
 
+// Known Toolbox categories accepted by the updated /toolboxService endpoint.
+// Kept loose/exported so callers (and step-label code) can validate or
+// normalize a user-facing category name without guessing blindly.
+const TOOLBOX_CATEGORIES = [
+  'Model', 'Decal', 'Mesh', 'MeshPart', 'Plugin', 'Audio', 'Video',
+  'FontFamily', 'Animation',
+] as const
+type ToolboxCategory = typeof TOOLBOX_CATEGORIES[number]
+function _normalizeToolboxCategory(input: unknown): ToolboxCategory | undefined {
+  if (!input || typeof input !== 'string') return undefined
+  const lower = input.trim().toLowerCase()
+  const found = TOOLBOX_CATEGORIES.find(c => c.toLowerCase() === lower)
+  return found
+}
+
 // ── GLOBAL STATE ──────────────────────────────────────────────────────────────
 let SESSION: NexusSession | null = null
 let studioConnected = false
@@ -197,6 +212,33 @@ function safeMarked(md: string): string {
   } catch { return esc(md) }
 }
 
+// ── SCROLL HELPER ─────────────────────────────────────────────────────────────
+// Centralized "scroll the chat to the bottom" helper. On long conversations
+// the #msgs container's scrollHeight can be momentarily stale right after a
+// DOM mutation (the browser hasn't finished layout yet), so a single
+// synchronous `scrollTop = scrollHeight` right after appending a node can
+// silently land short of the real bottom — which is what made the thinking
+// chips look "stuck"/unreachable once there was enough chat history above
+// them. We fix this by:
+//   1) doing an immediate scroll (covers the common case, no visible delay)
+//   2) re-asserting it on the next animation frame (covers the case where
+//      layout/reflow hadn't settled yet)
+//   3) re-asserting it once more after a short timeout (covers async image
+//      loads / font swaps / highlight.js reflow that can grow the bubble
+//      height after the frame above already ran)
+// `force` ignores any "user has scrolled up to read history" check — we
+// don't currently track that, so this always pins to bottom, matching the
+// rest of the app's existing scroll behavior.
+function scrollMsgsToBottom(): void {
+  const c = document.getElementById('msgs')
+  if (!c) return
+  const pin = () => { c.scrollTop = c.scrollHeight }
+  pin()
+  requestAnimationFrame(pin)
+  setTimeout(pin, 60)
+  setTimeout(pin, 220)
+}
+
 // ── MODEL LIST ────────────────────────────────────────────────────────────────
 const MODEL_LIST: ModelEntry[] = [
   { grp: 'Google' },
@@ -250,6 +292,7 @@ const UI = {
   retrying:        'Retrying...',
   testRunning:     'Running play_test',
   projectLabel:    'Project',
+  toolboxSearching:'Searching Roblox Toolbox',
   installSteps: [
     'Download from <a href="https://create.roblox.com/store/asset/91870814099475/NEXUS-AI" target="_blank" style="color:var(--cyan)">Creator Store</a>',
     'Save to: <code>C:\\Users\\[Name]\\AppData\\Local\\Roblox\\Plugins\\</code>',
@@ -369,6 +412,14 @@ function _injectChipStyles(): void {
 .clarify-other-btn:hover:not(:disabled) { background:rgba(0,229,255,.2); }
 .clarify-other-btn:disabled { opacity:.35; cursor:default; }
 
+/* ── Toolbox asset result card ── */
+.toolbox-result-list { display:flex; flex-direction:column; gap:5px; margin-top:2px; }
+.toolbox-result-item { display:flex; align-items:center; gap:8px; padding:6px 8px; border-radius:7px; background:rgba(0,229,255,.04); border:1px solid rgba(0,229,255,.10); }
+.toolbox-result-thumb { width:30px; height:30px; border-radius:6px; object-fit:cover; flex-shrink:0; background:rgba(0,229,255,.08); }
+.toolbox-result-info { flex:1; min-width:0; }
+.toolbox-result-name { font-size:10.5px; color:var(--text); white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+.toolbox-result-meta { font-size:9px; color:var(--dim); margin-top:1px; }
+
 /* ── UI fix ── */
 .inp-l { align-items:center!important; }
 .inp-l > .ib, .inp-l > label.ib, .inp-l > button.ib { display:inline-flex!important; align-items:center!important; justify-content:center!important; vertical-align:middle!important; line-height:0!important; box-sizing:border-box!important; margin:0!important; }
@@ -447,7 +498,11 @@ function createThinkingBubble(): void {
   cb.onclick = cancelGen; cancelRow.appendChild(cb); body.appendChild(cancelRow)
   wrap.appendChild(body); c.appendChild(wrap)
   _chipWrapEl = wrap; _chipListEl = list; _chipMap.clear(); _chipId = 0
-  c.scrollTop = c.scrollHeight
+  // Long chat history can mean #msgs hasn't finished laying out this new
+  // node yet on the same tick — scrollMsgsToBottom() re-asserts the scroll
+  // across a couple of frames/timeouts so the thinking bubble is always
+  // reachable instead of getting visually "stuck" above the fold.
+  scrollMsgsToBottom()
 }
 
 function removeThinkingBubble(): void {
@@ -460,7 +515,7 @@ function addChip(label: string, state: 'running'|'done'|'error'|'info'|'pending'
   const chip: ChipData = { id, label, detail, state, expanded: false }
   _chipMap.set(id, chip)
   if (_chipListEl) { const div = document.createElement('div'); div.innerHTML = _renderChip(chip); _chipListEl.appendChild(div.firstElementChild!); if (detail) _chipListEl.appendChild(div.lastElementChild!) }
-  document.getElementById('msgs')?.scrollTo(0,99999)
+  scrollMsgsToBottom()
   return id
 }
 
@@ -480,6 +535,7 @@ function updateChip(id: number, state: 'running'|'done'|'error'|'info'|'pending'
   }
   const lbl = chipEl.querySelector('.chip-label'); if (lbl && label) lbl.textContent = label
   if (detail !== undefined) { let dd = document.getElementById(`cd_${id}`); if (!dd && detail && chipEl.parentNode) { dd = document.createElement('div'); dd.className = 'chip-detail'; dd.id = `cd_${id}`; chipEl.parentNode.insertBefore(dd, chipEl.nextSibling) }; if (dd) dd.textContent = detail }
+  scrollMsgsToBottom()
 }
 
 function finalizeChips(): void {
@@ -487,6 +543,7 @@ function finalizeChips(): void {
   _chipMap.forEach((chip, id) => {
     if (chip.state==='running') { updateChip(id, 'done') }
   })
+  scrollMsgsToBottom()
 }
 
 ;(window as unknown as Record<string,unknown>)._toggleChip = function(id: number) {
@@ -783,7 +840,7 @@ async function checkStudio(): Promise<void> {
 async function retryStudio(): Promise<void> { _pollFailCount=0; toast(UI.reconnectToast); await checkStudio() }
 
 // ── ACTION PARSING ────────────────────────────────────────────────────────────
-const NEXUS_ACTIONS_SET = new Set(['create_instance','create_script','edit_script','read_script','set_properties','rename','delete','parent','list','insert_asset','play_test','terrain','undo','redo','resolve_mention','RunCode','run_code','get_output','ping','get_info','set_project','get_all_actions','run_test','stop_test','none'])
+const NEXUS_ACTIONS_SET = new Set(['create_instance','create_script','edit_script','read_script','set_properties','rename','delete','parent','list','insert_asset','play_test','terrain','undo','redo','resolve_mention','RunCode','run_code','get_output','ping','get_info','set_project','get_all_actions','run_test','stop_test','get_toolbox_asset','search_toolbox','none'])
 function isKnownAction(name: string): boolean { return NEXUS_ACTIONS_SET.has(name) }
 function _stripLuaExpressions(str: string): string {
   if (typeof str!=='string') return str
@@ -905,6 +962,19 @@ function makeStepLabel(cmd: ActionCmd): string|null {
     case 'get_info':        return 'Get plugin info'
     case 'set_project':     return 'Set project info'
     case 'get_all_actions': return 'List available actions'
+    // ── Toolbox search ──────────────────────────────────────────────────
+    // The Toolbox service is now keyword-search-first: callers pass a free
+    // text `query` plus an optional `category` (Model, Decal, Mesh, Audio,
+    // Plugin, etc). `get_toolbox_asset` is kept as an alias of
+    // `search_toolbox` since the AI model may emit either action name —
+    // both are routed to the same search-by-keyword flow below.
+    case 'search_toolbox':
+    case 'get_toolbox_asset': {
+      const q = String(cmd.query||cmd.keyword||cmd.search||nm||'').trim()
+      const cat = _normalizeToolboxCategory(cmd.category||cmd.searchCategoryType)
+      const qLabel = q ? `"${q}"` : '?'
+      return cat ? `${UI.toolboxSearching}: ${qLabel} (${cat})` : `${UI.toolboxSearching}: ${qLabel}`
+    }
     case 'none':            return null
     default:                return a+(nm?': '+nm:'')
   }
@@ -938,6 +1008,118 @@ async function _injectCommand(cmdToSend: ActionCmd, user: string, signal?: Abort
   if(r.ok&&(rd.status==='ok'||(rd.pushed||0)>0)) return {ok:true,data:rd}
   return {ok:false,error:rd.error?rd.error.slice(0,120):('HTTP '+r.status)}
 }
+
+// ── TOOLBOX SEARCH ────────────────────────────────────────────────────────────
+// The /toolboxService endpoint is keyword-search-first now:
+//   GET {API_URL}/toolboxService?category=Model&query=house%20modern
+// `category` is one of TOOLBOX_CATEGORIES (Model, Decal, Mesh, MeshPart,
+// Plugin, Audio, Video, FontFamily, Animation) and is optional — omitting it
+// searches across all categories. `query` is the free-text keyword search
+// (e.g. "house modern", "footstep sfx", "coin"). Each result item carries an
+// `id` (numeric asset id, may be null if Roblox didn't return one for that
+// item) and a `name` — these are what the AI/action layer needs to then
+// reference or insert the asset via `insert_asset`.
+export interface ToolboxSearchItem {
+  id: number | string | null
+  name: string
+  description?: string
+  assetType?: string
+  creator?: string
+  creatorVerified?: boolean
+  isForSale?: boolean
+  priceLabel?: string
+  thumbnailUrl?: string
+  assetUrl?: string
+}
+export interface ToolboxSearchResponse {
+  ok: boolean
+  items: ToolboxSearchItem[]
+  totalResults?: number
+  query?: string
+  category?: string
+  error?: string
+}
+
+async function fetchToolboxSearch(query: string, category?: string, limit = 10): Promise<ToolboxSearchResponse> {
+  const q = (query||'').trim()
+  if (!q) return { ok:false, items:[], error:'No query provided' }
+  const normCat = _normalizeToolboxCategory(category)
+  try {
+    const ctrl=new AbortController(); const tid=setTimeout(()=>ctrl.abort(),12000)
+    const params=new URLSearchParams()
+    if (normCat) params.set('category', normCat)
+    params.set('query', q)
+    if (limit>0) params.set('limit', String(Math.min(50, Math.max(1, limit))))
+    const r=await fetch(`${API_URL}/toolboxService?${params.toString()}`,{signal:ctrl.signal})
+    clearTimeout(tid)
+    const d=await r.json().catch(()=>null) as {ok?:boolean;result?:{items?:unknown[];totalResults?:number;query?:string};error?:string}|null
+    if (!r.ok || !d) return { ok:false, items:[], error: d?.error || `HTTP ${r.status}` }
+    if (d.error && !d.ok) return { ok:false, items:[], error:d.error }
+    const rawItems = Array.isArray(d.result?.items) ? d.result!.items! : []
+    const items: ToolboxSearchItem[] = rawItems.map((raw) => {
+      const it = raw as Record<string, unknown>
+      const idVal = it.id
+      const id = (typeof idVal==='number' || typeof idVal==='string') ? idVal : null
+      return {
+        id,
+        name: typeof it.name==='string' ? it.name : 'Untitled',
+        description: typeof it.description==='string' ? it.description : undefined,
+        assetType: typeof it.assetType==='string' ? it.assetType : undefined,
+        creator: typeof it.creator==='string' ? it.creator : undefined,
+        creatorVerified: it.creatorVerified===true,
+        isForSale: it.isForSale===true,
+        priceLabel: typeof it.priceLabel==='string' ? it.priceLabel : undefined,
+        thumbnailUrl: typeof it.thumbnailUrl==='string' ? it.thumbnailUrl : undefined,
+        assetUrl: typeof it.assetUrl==='string' ? it.assetUrl : undefined,
+      }
+    })
+    return { ok:true, items, totalResults: d.result?.totalResults ?? items.length, query: d.result?.query ?? q, category: normCat }
+  } catch(e) {
+    if (_isAbortError(e)) return { ok:false, items:[], error:'Request timed out' }
+    return { ok:false, items:[], error:String((e as Error).message||'Network error') }
+  }
+}
+
+// Builds a short, AI-readable text block describing search results — this is
+// what gets fed back to the model as the "result" of its toolbox search
+// action so it can decide which asset id/name to use next (e.g. to follow up
+// with an `insert_asset` action).
+function _buildToolboxResultSummary(res: ToolboxSearchResponse): string {
+  if (!res.ok) return `Toolbox search failed: ${res.error||'unknown error'}`
+  if (!res.items.length) return `No Toolbox results found for "${res.query||''}"${res.category?` in category ${res.category}`:''}.`
+  const lines = res.items.slice(0,10).map((it,i) => {
+    const idStr = it.id!=null ? String(it.id) : 'unknown'
+    const extra: string[] = []
+    if (it.assetType) extra.push(it.assetType)
+    if (it.creator) extra.push(`by ${it.creator}`)
+    if (it.priceLabel) extra.push(it.priceLabel)
+    return `${i+1}. id=${idStr} — "${it.name}"${extra.length?` (${extra.join(', ')})`:''}`
+  })
+  return [`Toolbox search results for "${res.query||''}"${res.category?` [${res.category}]`:''} (${res.items.length} shown):`, ...lines].join('\n')
+}
+
+// Renders a small visual list (thumbnail + name + id) under the thinking
+// chip's expanded detail area isn't practical since chip detail is plain
+// text — instead this renders a compact result card directly into the chat
+// bubble flow. Currently we keep results as the chip's detail text (see
+// autoInjectToStudio) since that's consistent with how read_script/list
+// results are surfaced; this helper is here so a richer card can be wired in
+// later without touching the action-handling logic.
+function renderToolboxResultCard(container: HTMLElement, items: ToolboxSearchItem[]): void {
+  if (!items.length) return
+  const wrap = document.createElement('div'); wrap.className = 'toolbox-result-list'
+  items.slice(0,8).forEach(it => {
+    const row = document.createElement('div'); row.className = 'toolbox-result-item'
+    if (it.thumbnailUrl) { const img=document.createElement('img'); img.className='toolbox-result-thumb'; img.src=it.thumbnailUrl; img.alt=it.name; img.onerror=()=>{img.style.visibility='hidden'}; row.appendChild(img) }
+    const info = document.createElement('div'); info.className = 'toolbox-result-info'
+    const nameEl = document.createElement('div'); nameEl.className='toolbox-result-name'; nameEl.textContent = it.name
+    const metaEl = document.createElement('div'); metaEl.className='toolbox-result-meta'; metaEl.textContent = `id: ${it.id ?? 'unknown'}${it.assetType?' · '+it.assetType:''}`
+    info.appendChild(nameEl); info.appendChild(metaEl); row.appendChild(info)
+    wrap.appendChild(row)
+  })
+  container.appendChild(wrap)
+}
+
 async function fetchReadScriptResult(scriptName: string, maxWaitMs=6000): Promise<{name:string;source:string;class:string;lineCount:number}|null> {
   if (!SESSION) return null
   const user=(SESSION.user.username||'').toLowerCase(); const deadline=Date.now()+maxWaitMs
@@ -991,6 +1173,43 @@ async function autoInjectToStudio(aiResponse: string, _userPrompt: string): Prom
     if(!step.sid){doneCount++;continue}
     updateStep(step.sid,'running'); await _sleep(120)
     const cmd=step.cmd, a=cmd.action||''
+
+    // ── Toolbox keyword search ─────────────────────────────────────────
+    // Accepts either action name (`search_toolbox` or the legacy
+    // `get_toolbox_asset`) and routes both through the same keyword-search
+    // flow against {API_URL}/toolboxService?category=...&query=....
+    // The AI provides `query` (required) and optionally `category` (Model,
+    // Decal, Mesh, MeshPart, Plugin, Audio, Video, FontFamily, Animation).
+    // Results (id + name for every match) are surfaced back into the chip
+    // detail text so the AI's next turn can read them from the
+    // conversation and pick an id/name to act on (e.g. via insert_asset).
+    if (a==='search_toolbox' || a==='get_toolbox_asset') {
+      const query = String(cmd.query||cmd.keyword||cmd.search||cmd.name||cmd.target||'').trim()
+      const category = (cmd.category||cmd.searchCategoryType) as string|undefined
+      const limit = typeof cmd.limit==='number' ? cmd.limit : (typeof cmd.maxPageSize==='number' ? cmd.maxPageSize : 10)
+      if (!query) {
+        updateStep(step.sid,'error','No search query provided')
+        doneCount++; continue
+      }
+      updateStep(step.sid,'info',undefined,`Searching Toolbox for "${query}"${category?` (${category})`:''}...`)
+      const searchRes = await fetchToolboxSearch(query, category, limit)
+      if (searchRes.ok && searchRes.items.length) {
+        const topNames = searchRes.items.slice(0,3).map(it=>it.name).join(', ')
+        updateStep(step.sid,'done',`Found ${searchRes.items.length} result(s): ${topNames}`,_buildToolboxResultSummary(searchRes))
+        readResults.push({
+          name:`toolbox_search:${query}`,
+          source:_buildToolboxResultSummary(searchRes),
+          class:'ToolboxSearchResult',
+          lineCount: searchRes.items.length,
+        })
+      } else if (searchRes.ok) {
+        updateStep(step.sid,'info',undefined,`No results found for "${query}".`)
+      } else {
+        updateStep(step.sid,'error',(searchRes.error||'Search failed').slice(0,100))
+      }
+      doneCount++; continue
+    }
+
     const res=await _injectCommand(cmd,user,sig)
     if(res.ok){
       if(a==='play_test'||a==='run_test'){updateStep(step.sid,'running',UI.testRunning);_playTestActive=true}
@@ -1204,7 +1423,13 @@ async function _sendInner(): Promise<void> {
       studioSummary=injectResult.summary
       if(!S.gen||_localCancelSignal?.aborted){_resetGenState();const cancelMsg: ConvMsg={role:'ai',content:'Process cancelled.',time:Date.now()};cv.msgs.push(cancelMsg);appendMsg(cancelMsg);saveS();return}
       displayText=stripAllCode(aiText)
-      if(injectResult.readResults.length>0){const readBlocks=injectResult.readResults.map(r=>`**${r.name}** (${r.class}, ${r.lineCount} line${r.lineCount===1?'':'s'}):\n\`\`\`lua\n${r.source}\n\`\`\``).join('\n\n');displayText=displayText?displayText+'\n\n'+readBlocks:readBlocks}
+      if(injectResult.readResults.length>0){const readBlocks=injectResult.readResults.map(r=>{
+        // Toolbox search results are plain text (an id/name list), not Lua
+        // source — render them as a fenced text block instead of ```lua so
+        // they don't look like (or get re-parsed as) executable code.
+        if (r.class==='ToolboxSearchResult') return `**${r.name}**:\n\`\`\`\n${r.source}\n\`\`\``
+        return `**${r.name}** (${r.class}, ${r.lineCount} line${r.lineCount===1?'':'s'}):\n\`\`\`lua\n${r.source}\n\`\`\``
+      }).join('\n\n');displayText=displayText?displayText+'\n\n'+readBlocks:readBlocks}
       if(!displayText||displayText.length<20)displayText=studioSummary?.length?'Successfully sent to Studio:\n'+studioSummary.map(s=>'• '+s).join('\n'):'Done. Check Explorer in Studio.'
     } else {
       if(showThinking) finalizeChips()
@@ -1358,7 +1583,12 @@ function renderMsgs(msgs: ConvMsg[]): void {
   const w=document.getElementById('welcome')
   if(!msgs?.length){if(w)w.style.display='flex';c.querySelectorAll('.msg,.think-wrap').forEach(el=>el.remove());return}
   if(w)w.style.display='none'; c.querySelectorAll('.msg,.think-wrap').forEach(el=>el.remove())
-  msgs.forEach(m=>appendMsg(m,true)); c.scrollTop=c.scrollHeight
+  msgs.forEach(m=>appendMsg(m,true))
+  // Use the same multi-pass scroll helper as the thinking bubble — a single
+  // synchronous scrollTop assignment right after a big batch DOM insert
+  // (many messages on conversation load) can land short of the true bottom
+  // before layout settles, especially on long histories.
+  scrollMsgsToBottom()
 }
 function mkAv(role: string): HTMLElement {
   const av=document.createElement('div'); av.className='av'
@@ -1468,7 +1698,12 @@ function appendMsg(m: ConvMsg, skipScroll?: boolean): void {
     acts.innerHTML=`<button class="mab" onclick="window.copyMsgText(this)"><svg viewBox="0 0 24 24"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 01-2-2V4a2 2 0 012-2h9a2 2 0 012 2v1"/></svg></button><button class="mab" onclick="window.retryMsg(this)"><svg viewBox="0 0 24 24"><polyline points="1 4 1 10 7 10"/><path d="M3.51 15a9 9 0 102.13-9.36L1 10"/></svg></button><button class="mab ${(m as ConvMsg&{_liked?:boolean})._liked?'liked':''}" onclick="window.likeMsg(this,true)"><svg viewBox="0 0 24 24"><path d="M14 9V5a3 3 0 00-3-3l-4 9v11h11.28a2 2 0 002-1.7l1.38-9a2 2 0 00-2-2.3zM7 22H4a2 2 0 01-2-2v-7a2 2 0 012-2h3"/></svg></button><button class="mab ${(m as ConvMsg&{_disliked?:boolean})._disliked?'disliked':''}" onclick="window.likeMsg(this,false)"><svg viewBox="0 0 24 24"><path d="M10 15v4a3 3 0 003 3l4-9V2H5.72a2 2 0 00-2 1.7l-1.38 9a2 2 0 002 2.3zm7-13h2.67A2.31 2.31 0 0122 4v7a2.31 2.31 0 01-2.33 2H17"/></svg></button><button class="mab" onclick="window.openShareModal()"><svg viewBox="0 0 24 24"><circle cx="18" cy="5" r="3"/><circle cx="6" cy="12" r="3"/><circle cx="18" cy="19" r="3"/><line x1="8.59" y1="13.51" x2="15.42" y2="17.49"/><line x1="15.41" y1="6.51" x2="8.59" y2="10.49"/></svg></button>`
     mbWrap.appendChild(acts)
   }
-  wrap.appendChild(mbWrap); c.appendChild(wrap); if(!skipScroll)c.scrollTop=c.scrollHeight
+  wrap.appendChild(mbWrap); c.appendChild(wrap)
+  // Same fix as createThinkingBubble/addChip: don't rely on a single
+  // synchronous scroll. On a chat with a lot of history, the freshly
+  // appended node's height isn't always reflected in scrollHeight on the
+  // same tick, so the view can stop short of the actual bottom.
+  if(!skipScroll) scrollMsgsToBottom()
 }
 
 // ── CODE ACTIONS ──────────────────────────────────────────────────────────────

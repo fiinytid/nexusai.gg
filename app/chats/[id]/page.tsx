@@ -4,20 +4,9 @@ import React, { useEffect, useRef } from 'react'
 import Script from 'next/script'
 
 /* ─────────────────────────────────────────────────────────────────────────────
-   CSS — NEXUS AI · v14
-   Changes in this version:
-   1. Storage endpoint: https://fine-setter-131.convex.site/storage
-   2. Responsive overhaul — phone (≤768), small phone (≤480), tiny (≤360),
-      tablet portrait (769–1024), tablet landscape, landscape phone
-   3. Sidebar overlay: smoother cubic-bezier slide, backdrop blur on mobile
-   4. Input bar: larger tap targets on all touch breakpoints (min 44 px)
-   5. Message bubbles: better max-width scaling on ultra-narrow viewports
-   6. Modal: max-height + overflow-y so tall modals stay scrollable on phone
-   7. Welcome grid: single-column on ≤480, 2-col on 481–768, original above
-   8. Code preview modal: 100% wide on mobile, scrollable pre block
-   9. Steps card: always visible; cancel button always reachable on mobile
-  10. Safe-area insets applied everywhere (notch / home-bar devices)
-  11. coarse-pointer safety net expanded to ALL interactive controls
+   CSS — NEXUS AI · v15
+   Changes: chip-based thinking (no steps card), collapsed tool-call chips,
+   suggestion queries updated, page.tsx strips all steps-card CSS.
 ─────────────────────────────────────────────────────────────────────────────── */
 const PAGE_CSS = `
 /* ══════════════════════════════════════════════
@@ -145,7 +134,6 @@ body::before {
   width: var(--sb-w); min-width: 0; min-height: 0;
   -webkit-overflow-scrolling: touch;
 }
-
 .sb-head {
   padding: 11px 14px 10px; border-bottom: 1px solid var(--b);
   display: flex; align-items: center; gap: 9px;
@@ -166,11 +154,9 @@ body::before {
   font-family: 'Orbitron', sans-serif; font-size: 6.5px; font-weight: 700;
   letter-spacing: .5px; border: 1px solid rgba(255,214,0,.4);
   background: rgba(255,214,0,.08); color: var(--yellow);
-  flex-shrink: 0; white-space: nowrap; line-height: 1;
-  vertical-align: middle;
+  flex-shrink: 0; white-space: nowrap; line-height: 1; vertical-align: middle;
 }
 .sb-logo-sub { font-size: var(--fs-2xs); color: var(--dim); line-height: 1; }
-
 .sb-user {
   padding: 8px 12px; display: flex; align-items: center; gap: 8px;
   border-bottom: 1px solid var(--b); flex-shrink: 0; height: 52px;
@@ -196,7 +182,6 @@ body::before {
 .sb-gear:hover { color: var(--cyan); border-color: var(--b); background: var(--hover); }
 .sb-gear svg { width: 15px; height: 15px; stroke: currentColor; fill: none; stroke-width: 2; }
 
-/* Project chip in sidebar */
 .sb-proj-chip {
   display: none; margin: 0 12px 4px;
   align-items: center; gap: 5px;
@@ -410,8 +395,7 @@ body::before {
   background: rgba(10,11,34,.9); border: 1px solid rgba(0,229,255,.25); border-radius: 5px;
   color: var(--cyan); font-size: var(--fs-2xs); padding: 0 8px; cursor: pointer;
   display: flex; align-items: center; gap: 3px; transition: .12s; height: var(--h-xs);
-  min-height: 28px;
-  -webkit-tap-highlight-color: transparent;
+  min-height: 28px; -webkit-tap-highlight-color: transparent;
 }
 .cbtn:hover { background: rgba(0,229,255,.15); }
 .cbtn svg   { width: 11px; height: 11px; stroke: currentColor; fill: none; stroke-width: 2; }
@@ -463,76 +447,50 @@ body::before {
    INPUT AREA
 ══════════════════════════════════════════════ */
 .inp-area {
-  padding: 10px 14px 14px;
-  border-top: 1px solid var(--b);
-  background: var(--bg2);
+  padding: 10px 14px 14px; border-top: 1px solid var(--b); background: var(--bg2);
   flex-shrink: 0; position: relative; z-index: 2;
   padding-bottom: calc(14px + var(--safe-bottom));
   padding-left: calc(14px + var(--safe-left));
   padding-right: calc(14px + var(--safe-right));
 }
 .inp-box {
-  background: var(--bg3);
-  border: 1.5px solid rgba(0, 229, 255, 0.18);
-  border-radius: 18px;
-  transition: border-color .22s, box-shadow .22s;
-  overflow: hidden;
+  background: var(--bg3); border: 1.5px solid rgba(0,229,255,0.18);
+  border-radius: 18px; transition: border-color .22s, box-shadow .22s; overflow: hidden;
 }
 .inp-box.drag-over    { border-color: var(--cyan); box-shadow: 0 0 0 3px rgba(0,229,255,.08); }
 .inp-box:focus-within { border-color: rgba(0,229,255,.42); box-shadow: 0 0 0 3px rgba(0,229,255,.05); }
 #inp {
   width: 100%; background: transparent; border: none; outline: none;
-  color: rgba(255,255,255,.92);
-  font-family: 'JetBrains Mono', monospace; font-size: 14px;
+  color: rgba(255,255,255,.92); font-family: 'JetBrains Mono', monospace; font-size: 14px;
   padding: 14px 16px 6px; resize: none;
-  min-height: 52px; max-height: 180px; line-height: 1.65;
-  display: block; scrollbar-width: thin; scrollbar-color: var(--b) transparent;
+  min-height: 52px; max-height: 180px; line-height: 1.65; display: block;
+  scrollbar-width: thin; scrollbar-color: var(--b) transparent;
 }
 #inp::placeholder { color: rgba(58,74,122,.75); font-size: 13px; }
+.inp-bar { display: flex; align-items: center; padding: 6px 10px 10px; gap: 6px; }
+.inp-l { display: flex; align-items: center; gap: 4px; flex: 1; min-width: 0; overflow: hidden; }
 
-.inp-bar {
-  display: flex; align-items: center;
-  padding: 6px 10px 10px; gap: 6px;
-}
-.inp-l {
-  display: flex; align-items: center;
-  gap: 4px; flex: 1; min-width: 0; overflow: hidden;
-}
-
-/* Universal icon button — works for <button> AND <label> */
 .ib {
   width: 32px; height: 32px; min-width: 32px;
-  display: inline-flex !important;
-  align-items: center; justify-content: center;
+  display: inline-flex !important; align-items: center; justify-content: center;
   flex-shrink: 0; vertical-align: middle;
-  border: none; border-radius: 8px;
-  background: transparent; color: rgba(58,74,122,.9);
+  border: none; border-radius: 8px; background: transparent; color: rgba(58,74,122,.9);
   cursor: pointer; transition: color .14s, background .14s;
   padding: 0; line-height: 1; box-sizing: border-box;
-  user-select: none; outline: none;
-  -webkit-tap-highlight-color: transparent;
-  position: relative;
-  font-size: 0;
-  text-align: center;
+  user-select: none; outline: none; -webkit-tap-highlight-color: transparent;
+  position: relative; font-size: 0; text-align: center;
 }
 .ib:hover  { color: var(--text); background: rgba(0,229,255,.07); }
 .ib:active { background: rgba(0,229,255,.12); opacity: .75; }
-.ib svg {
-  width: 16px; height: 16px;
-  stroke: currentColor; fill: none; stroke-width: 1.6;
-  flex-shrink: 0; display: block; pointer-events: none;
-}
+.ib svg { width: 16px; height: 16px; stroke: currentColor; fill: none; stroke-width: 1.6; flex-shrink: 0; display: block; pointer-events: none; }
 
-/* File input — truly off-screen */
 #fi {
   position: fixed !important; top: -9999px !important; left: -9999px !important;
   width: 1px !important; height: 1px !important; opacity: 0 !important;
   overflow: hidden !important; pointer-events: none !important; visibility: hidden !important;
 }
-
 .inp-divider { width: 1px; height: 16px; background: rgba(0,229,255,.1); flex-shrink: 0; border-radius: 1px; margin: 0 2px; }
 
-/* Model selector pill */
 .inp-model {
   display: flex; align-items: center; gap: 5px;
   height: 28px; padding: 0 8px; border-radius: 8px;
@@ -547,20 +505,17 @@ body::before {
 .inp-model-name  { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; flex: 1; font-size: 10px; min-width: 0; }
 .inp-model-badge {
   font-size: 7.5px; font-weight: 700; flex-shrink: 0;
-  padding: 1px 4px; border-radius: 3px; border: 1px solid;
-  letter-spacing: .3px;
+  padding: 1px 4px; border-radius: 3px; border: 1px solid; letter-spacing: .3px;
 }
 .inp-model-badge[data-tier="fast"]  { color: var(--cyan);   border-color: rgba(0,229,255,.3);   background: rgba(0,229,255,.07); }
 .inp-model-badge[data-tier="pro"]   { color: #cc55ff;       border-color: rgba(136,0,255,.35);  background: rgba(136,0,255,.07); }
 .inp-model-badge[data-tier="think"] { color: var(--yellow); border-color: rgba(255,214,0,.3);   background: rgba(255,214,0,.06); }
 .inp-model-badge[data-tier="free"]  { color: var(--green);  border-color: rgba(0,255,170,.3);   background: rgba(0,255,170,.06); }
 
-/* Send / Cancel buttons */
 .btn-send {
   width: 36px; height: 36px; border-radius: 50%; border: none;
   background: linear-gradient(135deg, var(--cyan), var(--purple));
-  color: white;
-  display: inline-flex; align-items: center; justify-content: center;
+  color: white; display: inline-flex; align-items: center; justify-content: center;
   cursor: pointer; transition: opacity .18s, transform .14s; flex-shrink: 0;
   -webkit-tap-highlight-color: transparent;
 }
@@ -570,8 +525,7 @@ body::before {
 .btn-cancel {
   width: 32px; height: 32px; border-radius: 50%;
   border: 1px solid rgba(255,45,107,.3); background: rgba(255,45,107,.08);
-  color: var(--pink);
-  display: inline-flex; align-items: center; justify-content: center;
+  color: var(--pink); display: inline-flex; align-items: center; justify-content: center;
   cursor: pointer; transition: .14s; flex-shrink: 0;
   -webkit-tap-highlight-color: transparent;
 }
@@ -593,7 +547,6 @@ body::before {
 .model-dd::-webkit-scrollbar { width: 3px; }
 .model-dd::-webkit-scrollbar-thumb { background: var(--b); border-radius: 2px; }
 .model-dd.open { display: block; }
-
 .mg {
   padding: 8px 10px 4px; margin-top: 2px;
   font-size: 7.5px; font-weight: 700; letter-spacing: 2px;
@@ -602,12 +555,10 @@ body::before {
 }
 .mg::after { content: ''; flex: 1; height: 1px; background: var(--b); border-radius: 1px; }
 .mg:first-child { margin-top: 0; padding-top: 4px; }
-
 .mo {
   padding: 8px 10px; display: flex; align-items: center; gap: 10px;
   cursor: pointer; transition: background .1s; min-height: 48px;
-  border-radius: 8px; margin-bottom: 2px;
-  -webkit-tap-highlight-color: transparent;
+  border-radius: 8px; margin-bottom: 2px; -webkit-tap-highlight-color: transparent;
 }
 .mo:hover { background: var(--hover); }
 .mo.act   { background: rgba(0,229,255,.07); border: 1px solid rgba(0,229,255,.15); }
@@ -630,70 +581,7 @@ body::before {
 .mo-badge.free { background: rgba(0,255,170,.1);   color: var(--green);  border-color: rgba(0,255,170,.3);   }
 .mo-badge.lite { background: rgba(0,229,255,.07);  color: rgba(0,229,255,.7); border-color: rgba(0,229,255,.2); }
 .mo-cost { font-size: 8px; color: var(--dim); line-height: 1; }
-.mo-sel-dot {
-  width: 6px; height: 6px; border-radius: 50%;
-  background: var(--cyan); flex-shrink: 0; align-self: center;
-}
-
-
-/* ══════════════════════════════════════════════
-   THINKING / STEPS CARD
-══════════════════════════════════════════════ */
-.steps-wrap {
-  display: flex; gap: 9px; animation: mi .22s ease;
-  position: relative; z-index: 3;
-}
-.steps-box  {
-  background: var(--bg2); border: 1px solid var(--b);
-  border-radius: 2px 10px 10px 10px;
-  overflow: hidden; min-width: 280px; max-width: min(520px, 88vw);
-  min-height: 52px;
-}
-.steps-hdr  {
-  padding: 9px 13px 8px; display: flex; align-items: center; gap: 7px;
-  border-bottom: 1px solid var(--b); flex-wrap: nowrap;
-  background: rgba(0,229,255,.02);
-}
-.steps-hdr-spinner {
-  width: 11px; height: 11px;
-  border: 1.5px solid rgba(0,229,255,.2); border-top-color: var(--cyan);
-  border-radius: 50%; animation: spin .7s linear infinite; flex-shrink: 0;
-}
-.steps-hdr-txt   { font-family: 'Orbitron', sans-serif; font-size: var(--fs-2xs); color: var(--cyan); letter-spacing: .5px; flex: 1; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-.steps-hdr-count { font-size: var(--fs-2xs); color: var(--dim); flex-shrink: 0; }
-.steps-list { padding: 4px 0; }
-.step-row   { display: flex; align-items: flex-start; gap: 7px; padding: 3px 12px; font-size: var(--fs-md); line-height: 1.5; animation: stepIn .18s ease; }
-@keyframes stepIn { from{opacity:0;transform:translateX(-3px)} to{opacity:1;transform:none} }
-.step-ic    { width: 14px; flex-shrink: 0; display: flex; align-items: center; justify-content: center; margin-top: 1px; }
-.step-spin  { width: 10px; height: 10px; border: 1.5px solid rgba(0,229,255,.15); border-top-color: var(--cyan); border-radius: 50%; animation: spin .6s linear infinite; }
-.step-check { width: 10px; height: 10px; color: var(--green); stroke: currentColor; fill: none; stroke-width: 2.5; }
-.step-err   { width: 10px; height: 10px; color: var(--pink);  stroke: currentColor; fill: none; stroke-width: 2.5; }
-.step-pend  { width: 8px;  height: 8px;  border-radius: 50%; border: 1.5px solid var(--dim); }
-.step-info  { width: 10px; height: 10px; color: var(--yellow); stroke: currentColor; fill: none; stroke-width: 2; }
-.step-content { flex: 1; min-width: 0; }
-.step-txt   { color: var(--text); word-break: break-word; }
-.step-row[data-st="done"]    .step-txt { color: var(--dim); }
-.step-row[data-st="running"] .step-txt { color: var(--cyan); }
-.step-row[data-st="error"]   .step-txt { color: var(--pink); }
-.step-row[data-st="info"]    .step-txt { color: var(--yellow); }
-.step-sub   { font-size: var(--fs-2xs); color: var(--dim); margin-top: 1px; opacity: .8; }
-.steps-cancel { padding: 7px 12px; border-top: 1px solid var(--b); }
-.steps-cancel-btn {
-  padding: 0 12px; height: var(--h-xs);
-  background: rgba(255,45,107,.08); border: 1px solid rgba(255,45,107,.25);
-  border-radius: 5px; color: var(--pink); font-size: var(--fs-2xs); cursor: pointer; transition: .1s;
-  font-family: 'JetBrains Mono', monospace; display: inline-flex; align-items: center;
-  min-height: 36px;
-  -webkit-tap-highlight-color: transparent;
-}
-.steps-cancel-btn:hover { background: rgba(255,45,107,.16); }
-@keyframes spin { to{transform:rotate(360deg)} }
-
-.studio-summary-box   { margin-top: 8px; padding: 8px 10px; background: rgba(0,255,170,.04); border: 1px solid rgba(0,255,170,.15); border-radius: 6px; font-size: 10.5px; }
-.studio-summary-title { color: var(--green); font-size: var(--fs-2xs); font-weight: 700; margin-bottom: 4px; display: flex; align-items: center; gap: 4px; flex-wrap: wrap; }
-.studio-summary-item  { color: var(--text); padding: 1px 0; display: flex; align-items: center; gap: 5px; }
-.studio-summary-dot   { display: inline-block; width: 6px; height: 6px; border-radius: 50%; background: var(--green); flex-shrink: 0; }
-.studio-summary-items { transition: all .2s ease; }
+.mo-sel-dot { width: 6px; height: 6px; border-radius: 50%; background: var(--cyan); flex-shrink: 0; align-self: center; }
 
 
 /* ══════════════════════════════════════════════
@@ -717,30 +605,6 @@ body::before {
 .mention-name { font-size: var(--fs-md); color: white; flex: 1; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; min-width: 0; }
 .mention-path { font-size: var(--fs-2xs); color: var(--dim); }
 .mention-empty{ padding: 12px; font-size: var(--fs-sm); color: var(--dim); text-align: center; }
-
-
-/* ══════════════════════════════════════════════
-   SUGGESTION CHIPS
-══════════════════════════════════════════════ */
-.suggestion-chips { display: flex; flex-direction: column; gap: 5px; margin-top: 10px; margin-bottom: 2px; }
-.suggestion-chip {
-  display: flex; align-items: center; gap: 8px; padding: 8px 12px 8px 10px;
-  background: rgba(0,229,255,.05); border: 1px solid rgba(0,229,255,.16); border-radius: 8px;
-  color: var(--text); font-size: 11.5px; cursor: pointer; text-align: left;
-  transition: background .14s, border-color .14s, color .14s, transform .1s;
-  font-family: 'JetBrains Mono', monospace; width: fit-content; max-width: 100%; line-height: 1.4;
-  min-height: 40px;
-  -webkit-tap-highlight-color: transparent;
-}
-.suggestion-chip::before {
-  content: ''; display: inline-flex; width: 0; height: 0;
-  border-top: 4.5px solid transparent; border-bottom: 4.5px solid transparent;
-  border-left: 7px solid var(--cyan); flex-shrink: 0; opacity: .55; transition: opacity .14s, transform .14s;
-}
-.suggestion-chip:hover { background: rgba(0,229,255,.12); border-color: rgba(0,229,255,.38); color: var(--cyan); }
-.suggestion-chip:hover::before { opacity: 1; transform: translateX(2px); }
-.suggestion-chip:active { transform: scale(.97); }
-.suggestion-chip.sending { opacity: .5; pointer-events: none; }
 
 
 /* ══════════════════════════════════════════════
@@ -826,237 +690,57 @@ body::before {
 
 
 /* ══════════════════════════════════════════════
-   RESPONSIVE — full pass
-   ≤1100px narrow desktop
-   ≤1024px tablet landscape
-   ≤900px  tablet portrait (sidebar stays docked)
-   ≤768px  mobile — sidebar becomes overlay drawer
-   ≤480px  small phone
-   ≤360px  very small phone
-   landscape + short viewport override
-   (pointer:coarse) safety net
+   RESPONSIVE
 ══════════════════════════════════════════════ */
-
-/* ── Narrow desktop ── */
 @media (max-width: 1100px) { :root { --sb-w: 230px; } }
+@media (max-width: 1024px) { :root { --sb-w: 220px; } .inp-model { max-width: 150px; } .mb-wrap { max-width: 86%; } }
+@media (max-width: 900px) and (min-width: 769px) { :root { --sb-w: 200px; } .inp-model { max-width: 130px; } .bubble { font-size: 12.8px; } #msgs { padding: 14px 14px 8px; } }
 
-/* ── Tablet landscape ── */
-@media (max-width: 1024px) {
-  :root { --sb-w: 220px; }
-  .inp-model { max-width: 150px; }
-  .mb-wrap { max-width: 86%; }
-}
-
-/* ── Tablet portrait ── */
-@media (max-width: 900px) and (min-width: 769px) {
-  :root { --sb-w: 200px; }
-  .inp-model { max-width: 130px; }
-  .sb-nav-btn { font-size: var(--fs-sm); }
-  .bubble { font-size: 12.8px; }
-  #msgs { padding: 14px 14px 8px; }
-}
-
-/* ══════════════════════════════════════════════
-   MOBILE ≤768px — sidebar overlay drawer
-══════════════════════════════════════════════ */
 @media (max-width: 768px) {
-  #app {
-    display: flex !important; flex-direction: column !important;
-    height: 100vh !important; height: 100dvh !important;
-    grid-template-columns: none !important; overflow: hidden !important;
-  }
-  #app.sb-hidden { grid-template-columns: none !important; }
-
-  /* Sidebar: fixed overlay drawer */
-  #sb {
-    position: fixed !important; left: 0 !important; top: 0 !important;
-    width: min(290px, 85vw) !important; height: 100% !important; height: 100dvh !important;
-    max-height: none !important; z-index: 100 !important;
-    border-right: 1px solid var(--b) !important; border-bottom: none !important;
-    overflow-y: auto !important;
-    box-shadow: 6px 0 40px rgba(0,0,0,.8) !important;
-    transform: translateX(-105%) !important;
-    transition: transform .28s cubic-bezier(.4,0,.2,1) !important;
-    will-change: transform; -webkit-overflow-scrolling: touch;
-    padding-top: var(--safe-top) !important;
-  }
+  #app { display: flex !important; flex-direction: column !important; height: 100vh !important; height: 100dvh !important; grid-template-columns: none !important; overflow: hidden !important; }
+  #sb { position: fixed !important; left: 0 !important; top: 0 !important; width: min(290px, 85vw) !important; height: 100% !important; height: 100dvh !important; max-height: none !important; z-index: 100 !important; border-right: 1px solid var(--b) !important; overflow-y: auto !important; box-shadow: 6px 0 40px rgba(0,0,0,.8) !important; transform: translateX(-105%) !important; transition: transform .28s cubic-bezier(.4,0,.2,1) !important; will-change: transform; -webkit-overflow-scrolling: touch; padding-top: var(--safe-top) !important; }
   #sb.mobile-open { transform: translateX(0) !important; }
-
   #menuBtn { display: inline-flex !important; }
   .collapse-sb { display: none !important; }
   #chat { flex: 1 !important; min-height: 0 !important; width: 100% !important; overflow: hidden !important; }
-
-  /* Sidebar internals — bigger tap targets */
-  .sb-head { height: 56px !important; }
-  .sb-user { height: 56px !important; }
-  .sb-av   { width: 40px !important; height: 40px !important; }
-  .sb-gear { width: 40px !important; height: 40px !important; }
-  .creds   { height: 56px !important; }
-  .sb-nav-btn { height: 44px !important; font-size: 11px !important; }
-  .ci { min-height: 44px !important; padding: 9px 10px !important; }
-  .ci-del { min-width: 36px !important; min-height: 36px !important; opacity: 1 !important; }
-
-  /* Header */
-  .chat-hdr {
-    height: 48px !important; padding: 0 10px !important;
-    padding-left: calc(10px + var(--safe-left)) !important;
-    padding-right: calc(10px + var(--safe-right)) !important;
-    gap: 6px !important;
-  }
-  .chat-title { font-size: 11px !important; }
-  .proj-name-pill { max-width: 130px !important; }
-  .status-badge { max-width: 90px !important; font-size: 8px !important; padding: 0 6px !important; height: 22px !important; }
-
-  /* Plugin banner — single line on mobile */
-  .plug-banner {
-    font-size: 9px !important; height: 28px !important;
-    padding: 0 10px !important;
-    padding-left: calc(10px + var(--safe-left)) !important;
-    gap: 5px !important;
-    overflow: hidden !important;
-  }
-  .plug-banner > *:not(:first-child):not(:nth-child(2)):not(:nth-child(3)) {
-    display: none !important;
-  }
-
-  /* Messages */
+  .sb-head { height: 56px !important; } .sb-user { height: 56px !important; } .sb-av { width: 40px !important; height: 40px !important; } .sb-gear { width: 40px !important; height: 40px !important; } .creds { height: 56px !important; } .sb-nav-btn { height: 44px !important; font-size: 11px !important; } .ci { min-height: 44px !important; padding: 9px 10px !important; } .ci-del { min-width: 36px !important; min-height: 36px !important; opacity: 1 !important; }
+  .chat-hdr { height: 48px !important; padding: 0 10px !important; padding-left: calc(10px + var(--safe-left)) !important; padding-right: calc(10px + var(--safe-right)) !important; gap: 6px !important; }
+  .chat-title { font-size: 11px !important; } .proj-name-pill { max-width: 130px !important; } .status-badge { max-width: 90px !important; font-size: 8px !important; padding: 0 6px !important; height: 22px !important; }
+  .plug-banner { font-size: 9px !important; height: 28px !important; padding: 0 10px !important; padding-left: calc(10px + var(--safe-left)) !important; gap: 5px !important; overflow: hidden !important; }
   #msgs { padding: 10px 10px 6px !important; gap: 8px !important; }
-  .mb-wrap { max-width: 91% !important; }
-  .bubble  { font-size: 13px !important; padding: 9px 11px !important; }
-  .av { width: 28px !important; height: 28px !important; }
-  .msg { gap: 7px !important; }
-  .msg-img { max-width: 130px !important; max-height: 110px !important; }
-
-  /* Suggestions welcome grid — 1 column on small phones, 2 otherwise */
-  .suggs { grid-template-columns: 1fr 1fr !important; max-width: 100% !important; }
-  .wt { font-size: 20px !important; }
-  .ws { font-size: var(--fs-md) !important; max-width: 280px !important; }
-
-  /* Input area */
-  .inp-area {
-    padding: 8px 10px 12px !important;
-    padding-left: calc(10px + var(--safe-left)) !important;
-    padding-right: calc(10px + var(--safe-right)) !important;
-    padding-bottom: calc(12px + var(--safe-bottom)) !important;
-  }
+  .mb-wrap { max-width: 91% !important; } .bubble { font-size: 13px !important; padding: 9px 11px !important; } .av { width: 28px !important; height: 28px !important; } .msg { gap: 7px !important; } .msg-img { max-width: 130px !important; max-height: 110px !important; }
+  .suggs { grid-template-columns: 1fr 1fr !important; max-width: 100% !important; } .wt { font-size: 20px !important; } .ws { font-size: var(--fs-md) !important; max-width: 280px !important; }
+  .inp-area { padding: 8px 10px 12px !important; padding-left: calc(10px + var(--safe-left)) !important; padding-right: calc(10px + var(--safe-right)) !important; padding-bottom: calc(12px + var(--safe-bottom)) !important; }
   .inp-box { border-radius: 16px !important; }
-  #inp {
-    font-size: 16px !important;
-    padding: 13px 14px 5px !important;
-    min-height: 52px !important; max-height: 140px !important;
-  }
+  #inp { font-size: 16px !important; padding: 13px 14px 5px !important; min-height: 52px !important; max-height: 140px !important; }
   .inp-bar { padding: 4px 8px 8px !important; gap: 5px !important; }
-  .ib { width: 40px !important; height: 40px !important; min-width: 40px !important; }
-  .ib svg { width: 18px !important; height: 18px !important; }
-  .btn-send { width: 44px !important; height: 44px !important; }
-  .btn-send svg { width: 17px !important; height: 17px !important; }
-  .btn-cancel { width: 40px !important; height: 40px !important; }
+  .ib { width: 40px !important; height: 40px !important; min-width: 40px !important; } .ib svg { width: 18px !important; height: 18px !important; }
+  .btn-send { width: 44px !important; height: 44px !important; } .btn-send svg { width: 17px !important; height: 17px !important; } .btn-cancel { width: 40px !important; height: 40px !important; }
   .inp-model { max-width: 110px !important; height: 30px !important; }
-
-  /* Steps card */
-  .steps-box { max-width: calc(100vw - 52px) !important; min-width: 220px !important; }
-  .steps-cancel-btn { min-height: 40px !important; }
-
-  /* Modals */
   .ov { padding: 10px 10px !important; padding-top: calc(10px + var(--safe-top)) !important; padding-bottom: calc(10px + var(--safe-bottom)) !important; }
-  .modal {
-    padding: 16px !important; border-radius: 12px !important;
-    max-height: calc(100dvh - 20px - var(--safe-top) - var(--safe-bottom)) !important;
-    overflow-y: auto !important;
-  }
-  .modal-t { font-size: 12px !important; }
-  .btn-modal { height: 44px !important; min-height: 44px !important; }
-
-  /* Settings */
-  .settings-row { gap: 6px !important; min-height: 44px !important; }
-  .settings-btn { height: 40px !important; min-height: 40px !important; }
-  .settings-select { height: 40px !important; font-size: 13px !important; }
-  .toggle-sw { width: 48px !important; height: 27px !important; }
-  .toggle-sw::after { width: 21px !important; height: 21px !important; }
-  .toggle-sw.on::after { left: 24px !important; }
-
-  /* Mention dropdown */
-  .mention-dd { min-width: 0 !important; width: calc(100vw - 20px) !important; max-width: 360px !important; }
-  .mention-item { min-height: 48px !important; }
-
-  /* Model dropdown */
-  .model-dd { min-width: 0 !important; width: calc(100vw - 24px) !important; max-width: 340px !important; }
-  .mo { min-height: 52px !important; }
-
-  /* Code block — scrollable on mobile */
+  .modal { padding: 16px !important; border-radius: 12px !important; max-height: calc(100dvh - 20px - var(--safe-top) - var(--safe-bottom)) !important; overflow-y: auto !important; }
+  .modal-t { font-size: 12px !important; } .btn-modal { height: 44px !important; min-height: 44px !important; }
+  .settings-row { gap: 6px !important; min-height: 44px !important; } .settings-btn { height: 40px !important; min-height: 40px !important; } .settings-select { height: 40px !important; font-size: 13px !important; }
+  .toggle-sw { width: 48px !important; height: 27px !important; } .toggle-sw::after { width: 21px !important; height: 21px !important; } .toggle-sw.on::after { left: 24px !important; }
+  .mention-dd { min-width: 0 !important; width: calc(100vw - 20px) !important; max-width: 360px !important; } .mention-item { min-height: 48px !important; }
+  .model-dd { min-width: 0 !important; width: calc(100vw - 24px) !important; max-width: 340px !important; } .mo { min-height: 52px !important; }
   .code-block-wrap pre { overflow-x: auto !important; -webkit-overflow-scrolling: touch; }
   .code-block-wrap pre code.hljs { font-size: 10px !important; padding: 10px 12px !important; }
-
-  /* Message actions — bigger tap area */
   .mab { height: 34px !important; min-width: 34px !important; }
 }
-
-/* ══════════════════════════════════════════════
-   SMALL PHONE ≤480px
-══════════════════════════════════════════════ */
 @media (max-width: 480px) {
-  .suggs { grid-template-columns: 1fr !important; }
-  .inp-model { max-width: 95px !important; }
-  .chat-title { font-size: 10px !important; }
-  .status-badge { max-width: 78px !important; font-size: 7.5px !important; }
-  .wt { font-size: 18px !important; }
-  .ws { font-size: 10.5px !important; }
-  .modal { padding: 14px !important; }
-  .mb-wrap { max-width: 94% !important; }
-  .bubble { font-size: 12.5px !important; }
-  .sugg { padding: 8px 10px !important; }
-  .sb-footer { font-size: 7.5px !important; }
+  .suggs { grid-template-columns: 1fr !important; } .inp-model { max-width: 95px !important; } .chat-title { font-size: 10px !important; } .status-badge { max-width: 78px !important; font-size: 7.5px !important; } .wt { font-size: 18px !important; } .ws { font-size: 10.5px !important; } .modal { padding: 14px !important; } .mb-wrap { max-width: 94% !important; } .bubble { font-size: 12.5px !important; } .sugg { padding: 8px 10px !important; } .sb-footer { font-size: 7.5px !important; }
   .settings-row { flex-direction: column !important; align-items: flex-start !important; gap: 8px !important; }
-  .settings-row > span:first-child,
-  .settings-row > div:first-child { width: 100% !important; }
-  .modal-footer { flex-direction: column !important; align-items: stretch !important; }
-  .modal-footer .btn-modal { width: 100% !important; justify-content: center !important; }
-  /* Code preview modal: full width, taller scrollable area */
-  #codePreviewModal .modal { width: 100% !important; }
-  #codePreviewCode { font-size: 10px !important; padding: 10px !important; }
-  /* Report textarea: easier to type */
-  .report-ta { font-size: 16px !important; }
-  /* Attach/attach row smaller */
-  .attach-item img { width: 44px !important; height: 44px !important; }
+  .modal-footer { flex-direction: column !important; align-items: stretch !important; } .modal-footer .btn-modal { width: 100% !important; justify-content: center !important; }
+  #codePreviewModal .modal { width: 100% !important; } #codePreviewCode { font-size: 10px !important; padding: 10px !important; }
+  .report-ta { font-size: 16px !important; } .attach-item img { width: 44px !important; height: 44px !important; }
 }
-
-/* ══════════════════════════════════════════════
-   VERY SMALL ≤360px
-══════════════════════════════════════════════ */
 @media (max-width: 360px) {
-  .status-badge { display: none !important; }
-  .proj-name-pill { display: none !important; }
-  .inp-model { max-width: 80px !important; }
-  .sb-logo-text { font-size: 11px !important; }
-  .cred-v { font-size: 18px !important; }
-  .plug-banner a:last-child { display: none !important; }
-  .sugg-title { font-size: 9px !important; }
-  .steps-box { min-width: 180px !important; }
+  .status-badge { display: none !important; } .proj-name-pill { display: none !important; } .inp-model { max-width: 80px !important; } .sb-logo-text { font-size: 11px !important; } .cred-v { font-size: 18px !important; }
 }
-
-/* ══════════════════════════════════════════════
-   LANDSCAPE PHONE — short viewport
-══════════════════════════════════════════════ */
 @media (max-width: 900px) and (orientation: landscape) and (max-height: 500px) {
-  .chat-hdr { height: 40px !important; }
-  .plug-banner { height: 24px !important; }
-  #inp { max-height: 80px !important; min-height: 40px !important; }
-  .inp-area { padding-top: 5px !important; padding-bottom: calc(5px + var(--safe-bottom)) !important; }
-  #msgs { padding: 7px 10px 4px !important; gap: 6px !important; }
-  .welcome { padding: 10px 16px !important; gap: 7px !important; }
-  .wt { font-size: 17px !important; }
-  .ws { line-height: 1.5 !important; }
-  .suggs { grid-template-columns: 1fr 1fr !important; }
-  .ov { padding-top: calc(6px + var(--safe-top)) !important; padding-bottom: calc(6px + var(--safe-bottom)) !important; }
-  .modal { max-height: calc(100dvh - 12px - var(--safe-top) - var(--safe-bottom)) !important; }
-  /* Sidebar: narrower in landscape */
-  #sb { width: min(260px, 75vw) !important; }
+  .chat-hdr { height: 40px !important; } .plug-banner { height: 24px !important; } #inp { max-height: 80px !important; min-height: 40px !important; } .inp-area { padding-top: 5px !important; padding-bottom: calc(5px + var(--safe-bottom)) !important; } #msgs { padding: 7px 10px 4px !important; gap: 6px !important; } .welcome { padding: 10px 16px !important; gap: 7px !important; } .wt { font-size: 17px !important; } .ws { line-height: 1.5 !important; } .suggs { grid-template-columns: 1fr 1fr !important; } .ov { padding-top: calc(6px + var(--safe-top)) !important; padding-bottom: calc(6px + var(--safe-bottom)) !important; } .modal { max-height: calc(100dvh - 12px - var(--safe-top) - var(--safe-bottom)) !important; } #sb { width: min(260px, 75vw) !important; }
 }
-
-/* ══════════════════════════════════════════════
-   COARSE POINTER — safety net for all touch devices
-   Ensures every interactive control ≥ 40×40 px
-══════════════════════════════════════════════ */
 @media (pointer: coarse) {
   .ib, .btn-cancel { min-width: 40px !important; min-height: 40px !important; }
   .btn-send { min-width: 44px !important; min-height: 44px !important; }
@@ -1066,16 +750,12 @@ body::before {
   .mab { min-height: 36px !important; min-width: 36px !important; }
   .cbtn { min-height: 32px !important; }
   .attach-rm { width: 24px !important; height: 24px !important; }
-  .steps-cancel-btn { min-height: 44px !important; }
   .mo { min-height: 52px !important; }
   .mention-item { min-height: 48px !important; }
-  .suggestion-chip { min-height: 44px !important; }
 }
 `
 
-/* ─────────────────────────────────────────────────────────────────────────────
-   QUEUE-BASED wCall
-─────────────────────────────────────────────────────────────────────────────── */
+// ── Queue-based wCall ──────────────────────────────────────────────────────────
 type AnyFn = (...args: unknown[]) => void
 interface PendingCall { name: string; args: unknown[] }
 const _pendingCalls: PendingCall[] = []
@@ -1088,7 +768,7 @@ function wCall(name: string, ...args: unknown[]): void {
   if (!_chatsModuleLoaded) { _pendingCalls.push({ name, args }); return }
   setTimeout(() => {
     const fn2 = (window as unknown as Record<string, unknown>)[name]
-    if (typeof fn2 === 'function') { ;(fn2 as AnyFn)(...args) }
+    if (typeof fn2 === 'function') (fn2 as AnyFn)(...args)
     else console.warn('[NEXUS] wCall: function not found →', name)
   }, 80)
 }
@@ -1098,21 +778,14 @@ function _flushPendingCalls(): void {
   const queued = _pendingCalls.splice(0)
   queued.forEach(({ name, args }) => {
     const fn = (window as unknown as Record<string, unknown>)[name]
-    if (typeof fn === 'function') { ;(fn as AnyFn)(...args) }
+    if (typeof fn === 'function') (fn as AnyFn)(...args)
     else console.warn('[NEXUS] Flush: function not found →', name)
   })
 }
 
-/* ─────────────────────────────────────────────────────────────────────────────
-   ICONS
-─────────────────────────────────────────────────────────────────────────────── */
+// ── Icons ──────────────────────────────────────────────────────────────────────
 const Icon: Record<string, React.ReactElement> = {
-  settings: (
-    <svg viewBox="0 0 24 24" width={15} height={15} stroke="currentColor" fill="none" strokeWidth={2}>
-      <circle cx="12" cy="12" r="3"/>
-      <path d="M19.4 15a1.65 1.65 0 00.33 1.82l.06.06a2 2 0 010 2.83 2 2 0 01-2.83 0l-.06-.06a1.65 1.65 0 00-1.82-.33 1.65 1.65 0 00-1 1.51V21a2 2 0 01-4 0v-.09A1.65 1.65 0 009 19.4a1.65 1.65 0 00-1.82.33l-.06.06a2 2 0 01-2.83-2.83l.06-.06A1.65 1.65 0 004.68 15a1.65 1.65 0 00-1.51-1H3a2 2 0 010-4h.09A1.65 1.65 0 004.6 9a1.65 1.65 0 00-.33-1.82l-.06-.06a2 2 0 012.83-2.83l.06.06A1.65 1.65 0 009 4.68a1.65 1.65 0 001-1.51V3a2 2 0 014 0v.09a1.65 1.65 0 001 1.51 1.65 1.65 0 001.82-.33l.06-.06a2 2 0 012.83 2.83l-.06.06A1.65 1.65 0 0019.4 9a1.65 1.65 0 001.51 1H21a2 2 0 010 4h-.09a1.65 1.65 0 00-1.51 1z"/>
-    </svg>
-  ),
+  settings: (<svg viewBox="0 0 24 24" width={15} height={15} stroke="currentColor" fill="none" strokeWidth={2}><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 00.33 1.82l.06.06a2 2 0 010 2.83 2 2 0 01-2.83 0l-.06-.06a1.65 1.65 0 00-1.82-.33 1.65 1.65 0 00-1 1.51V21a2 2 0 01-4 0v-.09A1.65 1.65 0 009 19.4a1.65 1.65 0 00-1.82.33l-.06.06a2 2 0 01-2.83-2.83l.06-.06A1.65 1.65 0 004.68 15a1.65 1.65 0 00-1.51-1H3a2 2 0 010-4h.09A1.65 1.65 0 004.6 9a1.65 1.65 0 00-.33-1.82l-.06-.06a2 2 0 012.83-2.83l.06.06A1.65 1.65 0 009 4.68a1.65 1.65 0 001-1.51V3a2 2 0 014 0v.09a1.65 1.65 0 001 1.51 1.65 1.65 0 001.82-.33l.06-.06a2 2 0 012.83 2.83l-.06.06A1.65 1.65 0 0019.4 9a1.65 1.65 0 001.51 1H21a2 2 0 010 4h-.09a1.65 1.65 0 00-1.51 1z"/></svg>),
   menu:     (<svg viewBox="0 0 24 24" width={18} height={18} stroke="currentColor" fill="none" strokeWidth={2}><line x1="3" y1="6" x2="21" y2="6"/><line x1="3" y1="12" x2="21" y2="12"/><line x1="3" y1="18" x2="21" y2="18"/></svg>),
   send:     (<svg viewBox="0 0 24 24" width={14} height={14} stroke="currentColor" fill="none" strokeWidth={2.2}><line x1="12" y1="19" x2="12" y2="5"/><polyline points="5 12 12 5 19 12"/></svg>),
   x:        (<svg viewBox="0 0 24 24" width={14} height={14} stroke="currentColor" fill="none" strokeWidth={2}><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>),
@@ -1130,95 +803,64 @@ const Icon: Record<string, React.ReactElement> = {
   code:     (<svg viewBox="0 0 24 24" width={11} height={11} stroke="currentColor" fill="none" strokeWidth={2}><polyline points="16 18 22 12 16 6"/><polyline points="8 6 2 12 8 18"/></svg>),
 }
 
-/* ─────────────────────────────────────────────────────────────────────────────
-   PAGE COMPONENT
-─────────────────────────────────────────────────────────────────────────────── */
+// ── Page Component ─────────────────────────────────────────────────────────────
 export default function ChatsPage() {
   const scriptsLoadedRef = useRef(false)
 
   const handleMobileMenuToggle = () => {
-    const sb      = document.getElementById('sb')
-    const overlay = document.getElementById('sbOverlay')
-    const isOpen  = sb?.classList.contains('mobile-open')
-    if (isOpen) {
-      sb?.classList.remove('mobile-open')
-      overlay?.classList.remove('show')
-    } else {
-      sb?.classList.add('mobile-open')
-      overlay?.classList.add('show')
-    }
+    const sb = document.getElementById('sb'), overlay = document.getElementById('sbOverlay')
+    const isOpen = sb?.classList.contains('mobile-open')
+    if (isOpen) { sb?.classList.remove('mobile-open'); overlay?.classList.remove('show') }
+    else { sb?.classList.add('mobile-open'); overlay?.classList.add('show') }
   }
-
-  const closeMobileSidebar = () => {
-    document.getElementById('sb')?.classList.remove('mobile-open')
-    document.getElementById('sbOverlay')?.classList.remove('show')
-  }
+  const closeMobileSidebar = () => { document.getElementById('sb')?.classList.remove('mobile-open'); document.getElementById('sbOverlay')?.classList.remove('show') }
 
   useEffect(() => {
     document.title = 'NEXUS AI - Roblox Dev Intelligence'
-    document.documentElement.style.height   = '100%'
+    document.documentElement.style.height = '100%'
     document.documentElement.style.overflow = 'hidden'
-    document.body.style.height              = '100%'
-    document.body.style.overflow            = 'hidden'
-
+    document.body.style.height = '100%'
+    document.body.style.overflow = 'hidden'
     const preventBodyScroll = (e: TouchEvent) => {
-      if ((e.target as HTMLElement).closest(
-        '#msgs, #sb, .convs, .ov, .model-dd, .mention-dd, .modal'
-      )) return
+      if ((e.target as HTMLElement).closest('#msgs, #sb, .convs, .ov, .model-dd, .mention-dd, .modal')) return
       e.preventDefault()
     }
     document.addEventListener('touchmove', preventBodyScroll, { passive: false })
-
     if (!scriptsLoadedRef.current) {
       scriptsLoadedRef.current = true
       import('./system_prompt')
-        .then((mod) => {
+        .then(mod => {
           const smod = mod as Record<string, unknown>
-          const w    = window as unknown as Record<string, unknown>
+          const w = window as unknown as Record<string, unknown>
           if (typeof smod.buildSysPrompt === 'function') w.buildSysPrompt = smod.buildSysPrompt
-          else if (typeof smod.default === 'function')   w.buildSysPrompt = smod.default
+          else if (typeof smod.default === 'function') w.buildSysPrompt = smod.default
           return import('./chats')
         })
         .then(() => { _flushPendingCalls() })
-        .catch((err: unknown) => {
-          console.error('[NEXUS] Module load error:', err)
-          _chatsModuleLoaded = true
-          _pendingCalls.length = 0
-        })
+        .catch((err: unknown) => { console.error('[NEXUS] Module load error:', err); _chatsModuleLoaded = true; _pendingCalls.length = 0 })
     }
-
     return () => {
-      document.documentElement.style.height   = ''
+      document.documentElement.style.height = ''
       document.documentElement.style.overflow = ''
-      document.body.style.height              = ''
-      document.body.style.overflow            = ''
+      document.body.style.height = ''
+      document.body.style.overflow = ''
       document.removeEventListener('touchmove', preventBodyScroll)
     }
   }, [])
 
-  const handleClick = (fn: string, ...args: unknown[]) =>
-    (): void => wCall(fn, ...args)
-
-  const handleClickWithEvent = (fn: string, ...args: unknown[]) =>
-    (e: React.MouseEvent<HTMLElement>): void => { e.stopPropagation(); wCall(fn, e, ...args) }
-
-  const handleImgErr  = (e: React.SyntheticEvent<HTMLImageElement>): void => { e.currentTarget.style.display = 'none' }
-  const handleLogoErr = (e: React.SyntheticEvent<HTMLImageElement>): void => {
-    const p = e.currentTarget.parentElement
-    if (p) p.style.background = 'linear-gradient(135deg,#00e5ff,#8800ff)'
-    e.currentTarget.style.display = 'none'
-  }
-  const handleFileChange        = (e: React.ChangeEvent<HTMLInputElement>): void => wCall('handleFile', e)
+  const handleClick       = (fn: string, ...args: unknown[]) => (): void => wCall(fn, ...args)
+  const handleClickWithEvent = (fn: string, ...args: unknown[]) => (e: React.MouseEvent<HTMLElement>): void => { e.stopPropagation(); wCall(fn, e, ...args) }
+  const handleImgErr      = (e: React.SyntheticEvent<HTMLImageElement>): void => { e.currentTarget.style.display = 'none' }
+  const handleLogoErr     = (e: React.SyntheticEvent<HTMLImageElement>): void => { const p = e.currentTarget.parentElement; if (p) p.style.background = 'linear-gradient(135deg,#00e5ff,#8800ff)'; e.currentTarget.style.display = 'none' }
+  const handleFileChange  = (e: React.ChangeEvent<HTMLInputElement>): void => wCall('handleFile', e)
   const handlePlayTestDurChange = (e: React.ChangeEvent<HTMLInputElement>): void => wCall('setPlayTestDur', e.target.value)
 
   return (
     <>
       <style dangerouslySetInnerHTML={{ __html: PAGE_CSS }} />
-
       {/* eslint-disable-next-line @next/next/no-page-custom-font */}
       <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Orbitron:wght@400;600;700;900&family=JetBrains+Mono:wght@300;400;500&display=swap"/>
       <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/styles/atom-one-dark.min.css"/>
-
       <Script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"                                           strategy="beforeInteractive"/>
       <Script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/highlight.min.js"                 strategy="beforeInteractive"/>
       <Script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/languages/lua.min.js"             strategy="beforeInteractive"/>
@@ -1226,9 +868,7 @@ export default function ChatsPage() {
 
       {/* PAGE LOADER */}
       <div id="pageLoader">
-        <div className="pl-logo">
-          <img src="/images/nexusai.png" alt="N" onError={handleLogoErr}/>
-        </div>
+        <div className="pl-logo"><img src="/images/nexusai.png" alt="N" onError={handleLogoErr}/></div>
         <div className="pl-title">NEXUS AI</div>
         <div className="pl-bar-wrap"><div className="pl-bar" id="plBar"/></div>
         <div className="pl-txt" id="plTxt">Initializing...</div>
@@ -1240,9 +880,7 @@ export default function ChatsPage() {
       {/* MENTION DROPDOWN */}
       <div className="mention-dd" id="mentionDD">
         <div className="mention-hdr">
-          <svg viewBox="0 0 24 24" width={10} height={10} stroke="currentColor" fill="none" strokeWidth={2}>
-            <circle cx="12" cy="8" r="4"/><path d="M20 21a8 8 0 10-16 0"/>
-          </svg>
+          <svg viewBox="0 0 24 24" width={10} height={10} stroke="currentColor" fill="none" strokeWidth={2}><circle cx="12" cy="8" r="4"/><path d="M20 21a8 8 0 10-16 0"/></svg>
           <span id="mentionHdrTxt">Scripts &amp; Objects in Place</span>
         </div>
         <div id="mentionList"/>
@@ -1251,303 +889,125 @@ export default function ChatsPage() {
       {/* APP SHELL */}
       <div id="app" className="hidden">
 
-        {/* ═══════════════════════════════
-            SIDEBAR
-        ═══════════════════════════════ */}
+        {/* ═══ SIDEBAR ═══ */}
         <div id="sb">
-
-          {/* Logo + Brand + BETA */}
           <div className="sb-head">
-            <div className="sb-logo">
-              <img src="/images/nexusai.png" alt="N" onError={handleLogoErr}/>
-            </div>
+            <div className="sb-logo"><img src="/images/nexusai.png" alt="N" onError={handleLogoErr}/></div>
             <div className="sb-brand">
-              <div className="sb-logo-text">
-                NEXUS AI
-                <span className="sb-beta-badge" id="verBadge">BETA</span>
-              </div>
+              <div className="sb-logo-text">NEXUS AI<span className="sb-beta-badge" id="verBadge">BETA</span></div>
               <div className="sb-logo-sub">Roblox Dev</div>
             </div>
           </div>
 
-          {/* User */}
           <div className="sb-user">
-            <img
-              className="sb-av" id="sbAv"
-              src="/images/nexusai.png" alt="Avatar"
-              onError={(e) => { e.currentTarget.style.opacity = '0.3' }}
-              onClick={handleClick('openAvatarModal')}
-            />
+            <img className="sb-av" id="sbAv" src="/images/nexusai.png" alt="Avatar" onError={e => { e.currentTarget.style.opacity = '0.3' }} onClick={handleClick('openAvatarModal')}/>
             <div style={{ minWidth: 0, flex: 1 }}>
-              <div className="sb-un"   id="sbUn">—</div>
+              <div className="sb-un" id="sbUn">—</div>
               <div className="sb-role" id="sbRole">Roblox Developer</div>
             </div>
-            <button className="sb-gear" type="button" onClick={handleClick('openSettings')} aria-label="Settings">
-              {Icon.settings}
-            </button>
+            <button className="sb-gear" type="button" onClick={handleClick('openSettings')} aria-label="Settings">{Icon.settings}</button>
           </div>
 
-          {/* Project chip (shown by JS when in a project) */}
-          <div className="sb-proj-chip" id="sbProjChip">
-            <span className="sb-proj-chip-dot"/>
-            <span id="sbProjName"/>
+          <div className="sb-proj-chip" id="sbProjChip"><span className="sb-proj-chip-dot"/><span id="sbProjName"/></div>
+
+          <div className="creds" id="credsEl" onClick={() => { window.location.href = '/payment' }} role="button" tabIndex={0} onKeyDown={e => { if (e.key === 'Enter') window.location.href = '/payment' }}>
+            <div><div className="cred-l" id="credLabel">Credits</div><div className="cred-hint" id="credHint">Tap to buy more</div></div>
+            <div style={{ textAlign: 'right' }}><div className="cred-v" id="credDisp">30</div><div style={{ fontSize: 'var(--fs-2xs)', color: 'rgba(255,214,0,.5)' }}>CR</div></div>
           </div>
 
-          {/* Credits */}
-          <div
-            className="creds" id="credsEl"
-            onClick={() => { window.location.href = '/payment' }}
-            role="button" tabIndex={0}
-            onKeyDown={(e) => { if (e.key === 'Enter') window.location.href = '/payment' }}
-          >
-            <div>
-              <div className="cred-l"    id="credLabel">Credits</div>
-              <div className="cred-hint" id="credHint">Tap to buy more</div>
-            </div>
-            <div style={{ textAlign: 'right' }}>
-              <div className="cred-v" id="credDisp">30</div>
-              <div style={{ fontSize: 'var(--fs-2xs)', color: 'rgba(255,214,0,.5)' }}>CR</div>
-            </div>
-          </div>
-
-          {/* Nav */}
           <div className="sb-btn-group">
-            <button className="sb-nav-btn cyan"   type="button" onClick={() => { window.location.href = '/dashboard' }}>
-              {Icon.home}<span id="dashLbl">Dashboard</span>
-            </button>
-            <button className="sb-nav-btn cyan"   type="button" onClick={handleClick('newChat')}>
-              {Icon.plus}<span id="newChatLbl">New Conversation</span>
-            </button>
-            <button className="sb-nav-btn yellow" type="button" onClick={() => { window.location.href = '/agent' }}>
-              {Icon.help}<span id="helpBtnText">Need Help?</span>
-            </button>
-            <button className="sb-nav-btn purple" type="button" onClick={() => { window.location.href = '/inbox' }}>
-              {Icon.inbox}<span id="inboxBtnText">Inbox</span>
-              <span className="inbox-badge" id="inboxBadge">0</span>
-            </button>
+            <button className="sb-nav-btn cyan"   type="button" onClick={() => { window.location.href = '/dashboard' }}>{Icon.home}<span id="dashLbl">Dashboard</span></button>
+            <button className="sb-nav-btn cyan"   type="button" onClick={handleClick('newChat')}>{Icon.plus}<span id="newChatLbl">New Conversation</span></button>
+            <button className="sb-nav-btn yellow" type="button" onClick={() => { window.location.href = '/agent' }}>{Icon.help}<span id="helpBtnText">Need Help?</span></button>
+            <button className="sb-nav-btn purple" type="button" onClick={() => { window.location.href = '/inbox' }}>{Icon.inbox}<span id="inboxBtnText">Inbox</span><span className="inbox-badge" id="inboxBadge">0</span></button>
           </div>
 
           <div className="sec-lbl" id="recentLbl">Chat History</div>
-          <div className="convs" id="convList">
-            <div className="conv-empty" id="noConvLbl">No conversations yet</div>
-          </div>
+          <div className="convs" id="convList"><div className="conv-empty" id="noConvLbl">No conversations yet</div></div>
 
           <div className="sb-footer">
             Built by <span style={{ color: 'var(--cyan)' }}>NEXUS STUDIO</span><br/>
             YouTube: <span style={{ color: 'rgba(0,229,255,.6)' }}>NEXUS STUDIO</span>
           </div>
 
-          {/* Desktop collapse toggle */}
-          <div
-            className="collapse-sb"
-            onClick={handleClick('toggleSidebar')}
-            role="button" tabIndex={0}
-            onKeyDown={(e) => { if (e.key === 'Enter') wCall('toggleSidebar') }}
-          >
-            <svg id="collapseSbIcon" viewBox="0 0 24 24" width={10} height={10} stroke="currentColor" fill="none" strokeWidth={2}>
-              <polyline points="15 18 9 12 15 6"/>
-            </svg>
+          <div className="collapse-sb" onClick={handleClick('toggleSidebar')} role="button" tabIndex={0} onKeyDown={e => { if (e.key === 'Enter') wCall('toggleSidebar') }}>
+            <svg id="collapseSbIcon" viewBox="0 0 24 24" width={10} height={10} stroke="currentColor" fill="none" strokeWidth={2}><polyline points="15 18 9 12 15 6"/></svg>
           </div>
         </div>
-        {/* end #sb */}
 
-        {/* ═══════════════════════════════
-            CHAT PANEL
-        ═══════════════════════════════ */}
+        {/* ═══ CHAT PANEL ═══ */}
         <div id="chat">
 
-          {/* Plugin status banner */}
+          {/* Plugin banner */}
           <div className="plug-banner" id="plugBanner">
             {Icon.info}
             <span id="plugBannerTxt">Plugin not connected —</span>
-            <a
-              onClick={handleClick('showInstall')} id="plugInstallLink"
-              role="button" tabIndex={0} style={{ cursor: 'pointer' }}
-              onKeyDown={(e) => { if (e.key === 'Enter') wCall('showInstall') }}
-            >
-              How to connect
-            </a>
-            <a
-              onClick={handleClick('retryStudio')} id="plugReconnectLink"
-              role="button" tabIndex={0}
-              style={{ marginLeft: 8, color: 'var(--green)', cursor: 'pointer' }}
-              onKeyDown={(e) => { if (e.key === 'Enter') wCall('retryStudio') }}
-            >
-              Reconnect
-            </a>
+            <a onClick={handleClick('showInstall')} id="plugInstallLink" role="button" tabIndex={0} style={{ cursor: 'pointer' }} onKeyDown={e => { if (e.key === 'Enter') wCall('showInstall') }}>How to connect</a>
+            <a onClick={handleClick('retryStudio')} id="plugReconnectLink" role="button" tabIndex={0} style={{ marginLeft: 8, color: 'var(--green)', cursor: 'pointer' }} onKeyDown={e => { if (e.key === 'Enter') wCall('retryStudio') }}>Reconnect</a>
           </div>
 
-          {/* HEADER */}
+          {/* Header */}
           <div className="chat-hdr">
-            {/* Hamburger — mobile only */}
-            <button
-              id="menuBtn" type="button" className="ib"
-              onClick={handleMobileMenuToggle}
-              aria-label="Open menu"
-              style={{ flexShrink: 0 }}
-            >
-              {Icon.menu}
-            </button>
-
-            {/* Title */}
+            <button id="menuBtn" type="button" className="ib" onClick={handleMobileMenuToggle} aria-label="Open menu" style={{ flexShrink: 0 }}>{Icon.menu}</button>
             <div className="chat-title-group">
-              <div className="chat-title-row">
-                <div className="chat-title" id="chatTitle">NEXUS AI</div>
-              </div>
-              <div className="proj-name-pill" id="projNamePill">
-                <span className="proj-name-dot"/>
-                <span id="projNameText"/>
-              </div>
+              <div className="chat-title-row"><div className="chat-title" id="chatTitle">NEXUS AI</div></div>
+              <div className="proj-name-pill" id="projNamePill"><span className="proj-name-dot"/><span id="projNameText"/></div>
             </div>
-
-            {/* Studio status */}
-            <div
-              className="status-badge off" id="studioBadge"
-              onClick={handleClick('retryStudio')}
-              role="button" tabIndex={0}
-              onKeyDown={(e) => { if (e.key === 'Enter') wCall('retryStudio') }}
-            >
+            <div className="status-badge off" id="studioBadge" onClick={handleClick('retryStudio')} role="button" tabIndex={0} onKeyDown={e => { if (e.key === 'Enter') wCall('retryStudio') }}>
               <div className="sdot pulse" id="studioDot"/>
               <span id="studioTxt">Studio: OFF</span>
             </div>
           </div>
 
-          {/* CHAT CONTENT */}
-          <div
-            id="chatTab"
-            style={{ flex: 1, overflow: 'hidden', display: 'flex', flexDirection: 'column', minHeight: 0 }}
-          >
-            {/* Messages */}
+          {/* Chat content */}
+          <div id="chatTab" style={{ flex: 1, overflow: 'hidden', display: 'flex', flexDirection: 'column', minHeight: 0 }}>
             <div id="msgs">
               <div className="welcome" id="welcome">
                 <div style={{ width: 56, height: 56, borderRadius: 14, overflow: 'hidden', border: '2px solid rgba(0,229,255,.3)', flexShrink: 0 }}>
                   <img src="/images/nexusai.png" style={{ width: '100%', height: '100%', objectFit: 'cover' }} alt="" onError={handleLogoErr}/>
                 </div>
                 <div className="wt">NEXUS AI</div>
-                <div className="ws" id="welcomeText">
-                  Smart Roblox AI — write Lua, debug scripts, build GUIs. Connect the plugin to inject directly into Studio!
-                </div>
+                <div className="ws" id="welcomeText">Smart Roblox AI — write Lua, debug scripts, build GUIs. Connect the plugin to inject directly into Studio!</div>
                 <div className="suggs" id="suggGrid"/>
               </div>
             </div>
 
-            {/* INPUT AREA */}
+            {/* Input area */}
             <div className="inp-area">
               <div className="attach-row" id="attachRow"/>
-
               <div className="inp-box" id="inpBox">
-                <textarea
-                  id="inp"
-                  placeholder="Ask NEXUS AI about Roblox... (type @ to mention)"
-                  rows={1}
-                />
-
+                <textarea id="inp" placeholder="Ask NEXUS AI about Roblox... (type @ to mention)" rows={1}/>
                 <div className="inp-bar">
                   <div className="inp-l">
-                    {/* Attach label — matches .ib button visually */}
-                    <label
-                      htmlFor="fi"
-                      className="ib"
-                      title="Attach image or file"
-                      role="button"
-                      tabIndex={0}
-                      onKeyDown={(e) => {
-                        if (e.key === 'Enter' || e.key === ' ') {
-                          e.preventDefault()
-                          document.getElementById('fi')?.click()
-                        }
-                      }}
-                    >
-                      {Icon.attach}
-                    </label>
-
-                    {/* Hidden file input */}
-                    <input
-                      type="file"
-                      id="fi"
-                      accept="image/*,.lua,.txt,.json,.js,.py,.html,.css"
-                      onChange={handleFileChange}
-                      multiple
-                      tabIndex={-1}
-                      aria-hidden="true"
-                    />
-
-                    {/* Clear chat */}
-                    <button
-                      className="ib" type="button"
-                      onClick={handleClick('clearChat')}
-                      title="Clear conversation"
-                    >
-                      {Icon.trash}
-                    </button>
-
+                    <label htmlFor="fi" className="ib" title="Attach image or file" role="button" tabIndex={0} onKeyDown={e => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); document.getElementById('fi')?.click() } }}>{Icon.attach}</label>
+                    <input type="file" id="fi" accept="image/*,.lua,.txt,.json,.js,.py,.html,.css" onChange={handleFileChange} multiple tabIndex={-1} aria-hidden="true"/>
+                    <button className="ib" type="button" onClick={handleClick('clearChat')} title="Clear conversation">{Icon.trash}</button>
                     <div className="inp-divider"/>
-
-                    {/* Model selector */}
-                    <div
-                      className="inp-model" id="inpModelBtn"
-                      onClick={handleClickWithEvent('toggleMDD')}
-                      role="button" tabIndex={0}
-                      onKeyDown={(e) => { if (e.key === 'Enter') wCall('toggleMDD', e) }}
-                      aria-label="Select AI model"
-                    >
-                      <img
-                        id="inpMIcon" src="" alt=""
-                        onError={handleImgErr}
-                        style={{ width: 13, height: 13, borderRadius: 2, objectFit: 'contain', flexShrink: 0 }}
-                      />
-                      <span className="inp-model-name"  id="inpMName">Gemini 3.5 Flash</span>
+                    <div className="inp-model" id="inpModelBtn" onClick={handleClickWithEvent('toggleMDD')} role="button" tabIndex={0} onKeyDown={e => { if (e.key === 'Enter') wCall('toggleMDD', e) }} aria-label="Select AI model">
+                      <img id="inpMIcon" src="" alt="" onError={handleImgErr} style={{ width: 13, height: 13, borderRadius: 2, objectFit: 'contain', flexShrink: 0 }}/>
+                      <span className="inp-model-name" id="inpMName">Gemini 3.5 Flash</span>
                       <span className="inp-model-badge" id="inpMBadge" data-tier="fast">FAST</span>
                       {Icon.chevronDown}
                     </div>
                   </div>
-
-                  {/* Cancel / Send */}
-                  <button
-                    className="btn-cancel hidden" id="cancelBtn"
-                    type="button"
-                    onClick={handleClick('cancelGen')}
-                    title="Cancel generation"
-                    aria-label="Cancel"
-                  >
-                    {Icon.x}
-                  </button>
-                  <button
-                    className="btn-send" id="sendBtn"
-                    type="button"
-                    onClick={handleClick('send')}
-                    title="Send message"
-                    aria-label="Send"
-                  >
-                    {Icon.send}
-                  </button>
+                  <button className="btn-cancel hidden" id="cancelBtn" type="button" onClick={handleClick('cancelGen')} title="Cancel" aria-label="Cancel">{Icon.x}</button>
+                  <button className="btn-send" id="sendBtn" type="button" onClick={handleClick('send')} title="Send" aria-label="Send">{Icon.send}</button>
                 </div>
               </div>
-
-              {/* Model dropdown */}
               <div className="model-dd" id="mDD"/>
             </div>
           </div>
-          {/* end #chatTab */}
 
         </div>
-        {/* end #chat */}
       </div>
-      {/* end #app */}
 
-      {/* ════════════════════════
-          MODALS
-      ════════════════════════ */}
+      {/* ═══ MODALS ═══ */}
 
       {/* Avatar Modal */}
       <div className="ov" id="avatarModal">
         <div className="modal" style={{ width: 340, textAlign: 'center', padding: 26 }}>
           <div style={{ fontFamily: "'Orbitron',sans-serif", fontSize: 13, color: 'var(--cyan)', marginBottom: 14 }} id="avatarModalName">@—</div>
-          <img
-            id="avatarModalImg" src="" alt="Avatar"
-            style={{ width: 110, height: 110, borderRadius: '50%', border: '3px solid var(--cyan)', objectFit: 'cover', margin: '0 auto 12px', display: 'block' }}
-            onError={(e) => { e.currentTarget.src = '/images/nexusai.png' }}
-          />
+          <img id="avatarModalImg" src="" alt="Avatar" style={{ width: 110, height: 110, borderRadius: '50%', border: '3px solid var(--cyan)', objectFit: 'cover', margin: '0 auto 12px', display: 'block' }} onError={e => { e.currentTarget.src = '/images/nexusai.png' }}/>
           <div style={{ fontSize: 'var(--fs-md)', color: 'var(--dim)', marginBottom: 3 }} id="avatarModalRole">Developer</div>
           <div style={{ fontSize: 'var(--fs-sm)', color: 'var(--dim)' }} id="avatarModalId">Roblox ID: —</div>
           <div className="modal-footer" style={{ justifyContent: 'center', marginTop: 14 }}>
@@ -1561,7 +1021,7 @@ export default function ChatsPage() {
         <div className="modal">
           <div className="modal-t">{Icon.download}<span id="installTitle">How to Install NEXUS AI Plugin</span></div>
           <div className="modal-b">
-            {[1,2,3,4,5].map((n) => (
+            {[1,2,3,4,5].map(n => (
               <div key={n} className="install-step">
                 <div className="install-num">{n}</div>
                 <div className="install-txt" id={`installStep${n}`}>Step {n}</div>
@@ -1581,22 +1041,10 @@ export default function ChatsPage() {
 
           <div className="settings-section">
             <div className="settings-title" id="settingsAccountTitle">Account</div>
-            <div className="settings-row">
-              <span style={{ color: 'white', fontWeight: 600 }} id="settingsUsername">@—</span>
-              <span id="settingsBadge"/>
-            </div>
-            <div className="settings-row">
-              <span id="settingsCreditsLabel">Credits</span>
-              <span id="settingsCredits" style={{ color: 'var(--yellow)', fontWeight: 700 }}>—</span>
-            </div>
-            <div className="settings-row">
-              <span id="settingsPlanLabel">Plan</span>
-              <span id="settingsPlan" style={{ color: 'var(--green)' }}>Free</span>
-            </div>
-            <div className="settings-row">
-              <span id="settingsRobloxIdLabel">Roblox ID</span>
-              <span id="settingsRobloxId" style={{ color: 'var(--dim)', fontSize: 'var(--fs-sm)' }}>—</span>
-            </div>
+            <div className="settings-row"><span style={{ color: 'white', fontWeight: 600 }} id="settingsUsername">@—</span><span id="settingsBadge"/></div>
+            <div className="settings-row"><span id="settingsCreditsLabel">Credits</span><span id="settingsCredits" style={{ color: 'var(--yellow)', fontWeight: 700 }}>—</span></div>
+            <div className="settings-row"><span id="settingsPlanLabel">Plan</span><span id="settingsPlan" style={{ color: 'var(--green)' }}>Free</span></div>
+            <div className="settings-row"><span id="settingsRobloxIdLabel">Roblox ID</span><span id="settingsRobloxId" style={{ color: 'var(--dim)', fontSize: 'var(--fs-sm)' }}>—</span></div>
           </div>
 
           <div className="settings-section">
@@ -1612,28 +1060,19 @@ export default function ChatsPage() {
           <div className="settings-section">
             <div className="settings-title" id="playTestTitle">Auto Play Test</div>
             <div className="settings-row">
-              <div>
-                <div id="playTestLabel">Run play test after inject</div>
-                <div className="settings-hint" id="playTestHint">Disable if your PC crashes during play test</div>
-              </div>
+              <div><div id="playTestLabel">Run play test after inject</div><div className="settings-hint" id="playTestHint">Disable if your PC crashes during play test</div></div>
               <button className="toggle-sw on" id="playTestToggle" type="button" onClick={handleClick('togglePlayTest')} aria-label="Toggle auto play test"/>
             </div>
             <div className="settings-row">
               <span id="playTestDurLabel">Duration (seconds)</span>
-              <input
-                type="number" id="playTestDurInput" className="settings-select"
-                style={{ width: 70 }} min={5} max={120} defaultValue={15}
-                onChange={handlePlayTestDurChange}
-              />
+              <input type="number" id="playTestDurInput" className="settings-select" style={{ width: 70 }} min={5} max={120} defaultValue={15} onChange={handlePlayTestDurChange}/>
             </div>
           </div>
 
           <div className="settings-section">
             <div className="settings-title" id="reportTitle">Report an Issue</div>
             <textarea className="report-ta" id="reportTa" placeholder="Describe the problem..."/>
-            <div id="cf-turnstile-wrap" style={{ marginTop: 8, minHeight: 65, display: 'none' }}>
-              <div id="cf-turnstile-report" style={{ transform: 'scale(0.85)', transformOrigin: 'left' }}/>
-            </div>
+            <div id="cf-turnstile-wrap" style={{ marginTop: 8, minHeight: 65, display: 'none' }}><div id="cf-turnstile-report" style={{ transform: 'scale(0.85)', transformOrigin: 'left' }}/></div>
             <input type="hidden" id="_tsToken" value=""/>
             <div style={{ marginTop: 8, display: 'flex', alignItems: 'center', gap: 8 }}>
               <button className="settings-btn" type="button" onClick={handleClick('sendReport')} id="reportBtn">Send Report</button>
@@ -1643,9 +1082,7 @@ export default function ChatsPage() {
 
           <div className="settings-section" id="adminSection" style={{ display: 'none' }}>
             <div className="settings-title">Admin Panel</div>
-            <div style={{ marginTop: 6 }}>
-              <a href="/admin-panel" className="settings-btn" style={{ textDecoration: 'none' }}>Open Admin Panel</a>
-            </div>
+            <div style={{ marginTop: 6 }}><a href="/admin-panel" className="settings-btn" style={{ textDecoration: 'none' }}>Open Admin Panel</a></div>
           </div>
 
           <div className="settings-section">
@@ -1653,11 +1090,7 @@ export default function ChatsPage() {
             <div className="settings-row" style={{ flexDirection: 'column', alignItems: 'flex-start', gap: 6 }}>
               <div style={{ fontSize: 'var(--fs-sm)', color: 'var(--dim)' }} id="redeemHint">Get codes from the NEXUS STUDIO Discord</div>
               <div style={{ display: 'flex', gap: 8, width: '100%' }}>
-                <input
-                  type="text" id="redeemInput" className="settings-select"
-                  style={{ flex: 1, padding: '0 10px', height: 36 }}
-                  placeholder="Enter code..."
-                />
+                <input type="text" id="redeemInput" className="settings-select" style={{ flex: 1, padding: '0 10px', height: 36 }} placeholder="Enter code..."/>
                 <button className="settings-btn" type="button" onClick={handleClick('redeemCode')} id="redeemBtn">Redeem</button>
               </div>
               <span id="redeemStatus" style={{ fontSize: 'var(--fs-sm)', color: 'var(--green)' }}/>
@@ -1668,21 +1101,13 @@ export default function ChatsPage() {
             <div className="settings-title" id="downloadTitle">Download Plugin</div>
             <div className="settings-row" style={{ flexDirection: 'column', gap: 5, alignItems: 'flex-start' }}>
               <div style={{ fontSize: 'var(--fs-sm)', color: 'var(--dim)' }} id="downloadHint">Install the NEXUS AI Plugin in Roblox Studio</div>
-              <button
-                className="settings-btn" type="button" id="downloadPluginBtn"
-                onClick={() => window.open('https://create.roblox.com/store/asset/91870814099475/NEXUS-AI', '_blank')}
-              >
-                Download from Creator Store
-              </button>
+              <button className="settings-btn" type="button" id="downloadPluginBtn" onClick={() => window.open('https://create.roblox.com/store/asset/91870814099475/NEXUS-AI', '_blank')}>Download from Creator Store</button>
             </div>
           </div>
 
           <div className="settings-section">
             <div className="settings-title" id="accountTitle">Account</div>
-            <div className="settings-row">
-              <span id="logoutLabel">Sign out of NEXUS AI</span>
-              <button className="settings-btn danger" type="button" onClick={handleClick('logout')}>Sign Out</button>
-            </div>
+            <div className="settings-row"><span id="logoutLabel">Sign out of NEXUS AI</span><button className="settings-btn danger" type="button" onClick={handleClick('logout')}>Sign Out</button></div>
           </div>
 
           <div className="modal-footer">
@@ -1703,11 +1128,7 @@ export default function ChatsPage() {
             <div className="code-block-wrap" style={{ margin: 0 }}>
               <div className="code-lang-bar">
                 <span>Lua</span>
-                <div className="code-btns">
-                  <button className="cbtn" type="button" onClick={handleClick('copyPreviewCode')}>
-                    {Icon.copy} Copy
-                  </button>
-                </div>
+                <div className="code-btns"><button className="cbtn" type="button" onClick={handleClick('copyPreviewCode')}>{Icon.copy} Copy</button></div>
               </div>
               <pre style={{ maxHeight: 440, overflowY: 'auto', overflowX: 'auto', margin: 0 }}>
                 <code id="codePreviewCode" className="language-lua" style={{ fontSize: 11, lineHeight: 1.5, padding: 14, display: 'block' }}/>
@@ -1729,8 +1150,8 @@ export default function ChatsPage() {
             <textarea className="share-modal-ta" id="shareModalTa" readOnly/>
           </div>
           <div className="modal-footer">
-            <button className="btn-modal primary"   type="button" onClick={handleClick('copyShareText')}            id="shareModalCopyBtn">Copy Text</button>
-            <button className="btn-modal secondary" type="button" onClick={handleClick('closeModal', 'shareModal')}  id="shareModalCloseBtn">Close</button>
+            <button className="btn-modal primary"   type="button" onClick={handleClick('copyShareText')}           id="shareModalCopyBtn">Copy Text</button>
+            <button className="btn-modal secondary" type="button" onClick={handleClick('closeModal', 'shareModal')} id="shareModalCloseBtn">Close</button>
           </div>
         </div>
       </div>

@@ -1,257 +1,279 @@
 ==================================================================
-TUGAS UNTUK AI AGENT: Implementasi Action "search_toolbox" di NEXUS AI
+TASK FOR AI AGENT: Implement "get_toolbox_asset" action in NEXUS AI
 ==================================================================
 
-KONTEKS
+CONTEXT
 -------
-Ini adalah proyek Next.js + Convex bernama NEXUS AI (asisten AI untuk
-Roblox Studio). Model AI dapat mengeluarkan perintah "action" dalam
-format JSON di dalam respons chat (misalnya create_instance,
-read_script, edit_script, dll). Action-action ini diparsing di file
-chat frontend lalu:
-  (a) dikirim ke plugin Roblox Studio via Convex HTTP, atau
-  (b) dieksekusi langsung ke backend service (tanpa perlu Studio).
+This is a Next.js + Convex project called NEXUS AI (Roblox Studio AI
+assistant). The AI model can emit JSON "action" commands inside chat
+responses (e.g. create_instance, read_script, edit_script, etc).
+These actions are parsed in the frontend chat file and either:
+  (a) sent to the Roblox Studio plugin via Convex HTTP, or
+  (b) executed directly against a backend service (no Studio needed).
 
-TUJUAN
-------
-Menambahkan action baru bernama "search_toolbox" yang memungkinkan AI
-mencari aset di Roblox Toolbox (Creator Store) — seperti Model, Decal,
-Mesh, Audio, Plugin, Animation, dll — dengan memanggil endpoint resmi
-Open Cloud milik Roblox:
+IMPORTANT PIVOT — READ THIS FIRST
+----------------------------------
+An earlier version of this task targeted Roblox's keyword-SEARCH
+endpoint (`/toolbox-service/v2/assets:search?query=coin`). That
+endpoint returned HTTP 403 "Scope not authorized" because it is an
+internal endpoint used only by Roblox Studio's own Toolbox UI — normal
+Open Cloud API keys (created via Creator Dashboard) are not granted
+that scope, and there is no dashboard setting that unlocks it.
 
-  https://apis.roblox.com/toolbox-service/v2/assets:search?searchCategoryType={TYPE}&query={QUERY}
+The endpoint that IS officially documented and supported by a normal
+Open Cloud API key is "Get Creator Store Asset Details":
 
-Action ini TIDAK memerlukan koneksi plugin Roblox Studio. Ini adalah
-fetch murni dari sisi server, menggunakan environment variable yang
-sudah ada: ROBLOX_OPEN_CLOUD_KEY (sudah dikonfigurasi di Convex env).
+  GET https://apis.roblox.com/toolbox-service/v2/assets/{id}
 
-Sebuah file backend baru "convex_url/toolboxService.ts" SUDAH DIBUAT
-(lihat file terlampir, atau buat ulang sesuai spesifikasi di STEP 0 di
-bawah jika file tersebut belum ada). Tugas Anda adalah menghubungkan
-sisa sistem di sekitarnya.
+This means: the AI CANNOT search the Toolbox by keyword anymore. It
+can only fetch details for an asset ID that is already known (typed by
+the user, found elsewhere in chat history, or returned by a prior
+insert_asset call). The action has been renamed accordingly from
+"search_toolbox" to "get_toolbox_asset" to avoid confusion — if any
+earlier partial implementation used the name "search_toolbox", rename
+it to "get_toolbox_asset" everywhere (action name, function names,
+chip label, system prompt docs).
+
+GOAL
+----
+Add an action called "get_toolbox_asset" that lets the AI fetch details
+(name, type, creator, vote stats, thumbnail) for a single Roblox asset
+by its numeric ID, using Roblox's official Open Cloud endpoint above.
+
+This action does NOT need the Roblox Studio plugin to be connected.
+It is a pure server-side fetch using the existing environment variable
+ROBLOX_OPEN_CLOUD_KEY (already configured in Convex env).
+
+Backend files "ts/toolbox-service.ts" and "ts/toolbox-http.ts" have
+ALREADY been created/rewritten for this endpoint (see attached files
+in this delivery, or recreate them exactly as specified in STEP 0 below
+if missing). Your job is to wire the rest of the system around them.
 
 ==================================================================
-STEP 0 — Verifikasi / Buat convex_url/toolboxService.ts (Convex backend)
+STEP 0 — Verify ts/toolbox-service.ts + ts/toolbox-http.ts (backend)
 ==================================================================
-Lokasi: convex_url/toolboxService.ts
+Location: ts/toolbox-service.ts
 
-Pastikan file ini ada dan mengekspor:
-  - searchToolboxAssets(query, searchCategoryType, limit) -> fungsi async
-    Mengembalikan: { ok: true, results: ToolboxResultItem[] } | { ok: false, error: string }
-  - searchToolbox -> wrapper Convex `action` yang membungkus fungsi di atas,
-    dengan args: { query: string, searchCategoryType?: string, limit?: number }
+Confirm this file exists and exports:
+  - getToolboxAssetDetails(assetId: string|number) -> async function
+    Returns: { ok: true, result: ToolboxAssetDetails } | { ok: false, error: string }
+  - getAssetDetails -> a Convex `action` wrapper around the function above,
+    with args: { assetId: string | number }
 
-File ini harus:
-  - Membaca API key dari process.env.ROBLOX_OPEN_CLOUD_KEY
-  - Memanggil https://apis.roblox.com/toolbox-service/v2/assets:search
-    dengan header 'x-api-key': <key>
-  - Memvalidasi/menormalisasi searchCategoryType terhadap allow-list ini:
-    Model, Decal, Mesh, Audio, Plugin, Animation, Video, FontFamily,
-    EnvironmentEmote, Image  (default ke "Model" jika tidak valid/kosong)
-  - Memetakan setiap aset mentah ke bentuk yang bersih:
+It must:
+  - Read the API key from process.env.ROBLOX_OPEN_CLOUD_KEY
+  - Parse/validate assetId as a positive integer (reject anything else
+    with a clear error message, do not call Roblox with garbage input)
+  - Call https://apis.roblox.com/toolbox-service/v2/assets/{id}
+    (GET request) with header 'x-api-key': <key>
+  - Map the raw response defensively into:
     { id, name, description, category, creator, creatorVerified,
-      upVotes, downVotes, upVotePercent, thumbnailUrl, assetUrl }
-  - Membatasi hasil maksimal 10
-  - Menggunakan AbortController dengan timeout 10 detik
-  - Menangani response non-200 dan error jaringan secara baik, selalu
-    mengembalikan { ok:false, error: "..." } daripada melempar exception
+      upVotes, downVotes, upVotePercent, thumbnailUrl, assetUrl, _raw }
+    (_raw keeps the original response so nothing is silently lost if
+    Roblox's actual field names differ from what was guessed)
+  - Use AbortController with a 10s timeout
+  - Handle non-200 responses (esp. 403 and 404) with a helpful hint in
+    the error message, and handle network errors gracefully — always
+    return { ok:false, error: "..." } rather than throwing
 
-Jika file ini belum ada, buat dari awal sesuai spesifikasi di atas
-menggunakan TypeScript Convex yang bersih dan idiomatik (action +
-v.string/v.optional dari "convex/values", import { action } from
-"./_generated/server").
+Location: ts/toolbox-http.ts
 
-PENTING — penamaan file: Convex TIDAK mengizinkan tanda hubung (-)
-pada nama file module di dalam folder convex/. Hanya huruf, angka,
-underscore (_), dan titik (.) yang diperbolehkan. Karena itu file
-backend ini dan file HTTP handler-nya WAJIB dinamai tanpa hyphen:
-  - convex_url/toolboxService.ts   (bukan toolbox-service.ts)
-  - convex_url/toolboxHttp.ts      (bukan toolbox-http.ts)
-Jika file-file ini sudah dibuat dengan hyphen, rename dulu dan
-perbaiki semua import yang merujuk ke keduanya sebelum lanjut,
-atau `npx convex deploy` akan gagal dengan error InvalidConfig.
+Confirm this file exists and exports:
+  - toolboxServiceHandler -> a Convex `httpAction` that:
+    - Handles OPTIONS with a 204 + CORS headers (preflight)
+    - On GET: reads assetId from query string (?assetId=123456 or ?id=123456)
+    - On POST: reads assetId from JSON body ({ assetId: 123456 } or { id: ... })
+    - Calls getToolboxAssetDetails(assetId) from ts/toolbox-service.ts
+    - Returns the result as JSON with proper CORS headers, status 200 on
+      success / 400 on logical failure / 500 on unexpected exception
 
-==================================================================
-STEP 1 — Hubungkan action ke HTTP endpoint dispatcher
-==================================================================
-Cari router/dispatcher HTTP Convex yang sudah menangani action seperti
-"search_docs" (digunakan untuk pencarian dokumentasi Roblox) — kemungkinan
-ada di convex_url/main.ts, convex_url/http.ts, atau convex_url/http.ts.
-File ini menerima POST request dengan body berbentuk:
-  { action: "search_docs", query, doc_type, limit, _user }
+If either file is missing, write it from scratch following the spec
+above using clean, idiomatic Convex TypeScript (action + httpAction +
+v.union/v.string/v.number from "convex/values").
 
-Tambahkan cabang baru yang menangani:
-  { action: "search_toolbox", query, searchCategoryType, limit, _user }
-
-Cabang ini bisa langsung memakai handler terpisah convex_url/toolboxHttp.ts
-yang memanggil searchToolboxAssets(query, searchCategoryType, limit)
-dari convex_url/toolboxService.ts dan mengembalikan hasilnya sebagai JSON, contoh:
-  return new Response(JSON.stringify(result), { status: 200, headers: {...} })
-
-Samakan gaya/konvensi kode yang sudah dipakai pada cabang "search_docs"
-secara persis (error handling, bentuk response, headers).
-
-Jika Anda tidak menemukan dispatcher yang sesuai pola ini, cari string
-"search_docs" di seluruh codebase untuk menemukan file yang tepat dan
-sisipkan cabang baru tepat di sebelahnya.
+DO NOT implement keyword search. There is no working search-by-keyword
+endpoint available to a normal Open Cloud API key — do not attempt to
+re-add `assets:search`, it will fail with 403 regardless of code.
 
 ==================================================================
-STEP 2 — Frontend: Daftarkan nama action baru
+STEP 1 — Verify the HTTP route is registered in http.ts
 ==================================================================
-File: file client chat utama (yang berisi NEXUS_ACTIONS_SET, mungkin
-bernama chats.ts, chat.ts, atau serupa di dalam folder app/ atau
-components/).
+File: convex/http.ts (or wherever httpRouter() is set up)
 
-Cari baris ini:
-  const NEXUS_ACTIONS_SET = new Set([...daftar panjang nama action..., 'none'])
+This has ALREADY been wired with a dedicated route (not the old
+action-in-body dispatcher used for "/"). Confirm these lines exist:
 
-Tambahkan 'search_toolbox' ke dalam Set, diletakkan tepat sebelum 'none':
-  ...,'run_test','stop_test','search_toolbox','none'
+  import { toolboxServiceHandler } from "./toolbox-http";
+  ...
+  http.route({ path: "/toolbox-service", method: "GET",     handler: toolboxServiceHandler });
+  http.route({ path: "/toolbox-service", method: "POST",    handler: toolboxServiceHandler });
+  http.route({ path: "/toolbox-service", method: "OPTIONS",  handler: toolboxServiceHandler });
+
+Final URL will be: https://<deployment>.convex.site/toolbox-service
+  e.g. https://<deployment>.convex.site/toolbox-service?assetId=123456
+
+If this route is missing, add it following the exact pattern already
+used for the existing "/storage" route block in the same file (same
+import style, same http.route() call shape).
+
+Do NOT add a "search_toolbox" or "get_toolbox_asset" branch to the
+old single-endpoint dispatcher (controlHandler at path "/") — this
+feature intentionally has its own dedicated route at /toolbox-service.
 
 ==================================================================
-STEP 3 — Frontend: Tambahkan label chip untuk action
+STEP 2 — Frontend: register the new action name
 ==================================================================
-Di file yang sama. Cari fungsi makeStepLabel(cmd) — fungsi ini memiliki
-switch statement yang memetakan nama action ke label chip yang mudah
-dibaca manusia (contoh: case 'read_script': return `Read script: ${nm}`).
+File: the main chat client file (the one containing NEXUS_ACTIONS_SET,
+likely named chats.ts, chat.ts, or similar under app/ or components/).
 
-Tambahkan case baru tepat sebelum "case 'none':":
+Find this line:
+  const NEXUS_ACTIONS_SET = new Set([...long list of action names..., 'none'])
 
-  case 'search_toolbox':
-    return `Searching toolbox: ${String(cmd.query||nm||'?')} (${String(cmd.searchCategoryType||'Model')})`
+Add 'get_toolbox_asset' to the set, placed right before 'none':
+  ...,'run_test','stop_test','get_toolbox_asset','none'
 
 ==================================================================
-STEP 4 — Frontend: Tambahkan fungsi helper fetch
+STEP 3 — Frontend: add a chip label for the action
 ==================================================================
-Di file yang sama. Di dekat fungsi fetchReadScriptResult() yang sudah
-ada, tambahkan fungsi async baru bernama fetchToolboxSearchResult yang
-melakukan POST ke Convex API_URL (konstanta yang sama yang sudah
-dipakai di tempat lain dalam file ini untuk panggilan search_docs)
-dengan action "search_toolbox", lalu mem-parsing response JSON-nya.
-Fungsi ini TIDAK perlu polling — ini hanya satu kali request/response,
-berbeda dengan fetchReadScriptResult yang melakukan polling ke Studio.
+Same file. Find the function makeStepLabel(cmd) — it has a switch
+statement mapping action names to human-readable chip labels (e.g.
+case 'read_script': return `Read script: ${nm}`).
+
+Add a new case right before "case 'none':":
+
+  case 'get_toolbox_asset':
+    return `Looking up Toolbox asset: ${String(cmd.assetId||cmd.id||nm||'?')}`
+
+==================================================================
+STEP 4 — Frontend: add the fetch helper function
+==================================================================
+Same file. Near the existing function fetchReadScriptResult(), add a
+new async function fetchToolboxAssetDetails that GETs the dedicated
+Convex route at `${API_URL}/toolbox-service?assetId=...` (NOT the old
+action-in-body POST style used for search_docs — this feature has its
+own route, see STEP 1) and parses the JSON response. It should NOT
+poll — this is a single request/response, unlike fetchReadScriptResult
+which polls Studio.
 
 Signature:
-  async function fetchToolboxSearchResult(
-    query: string,
-    category: string,
-    limit = 6
-  ): Promise<{ ok: boolean; results?: unknown[]; error?: string }>
+  async function fetchToolboxAssetDetails(
+    assetId: string | number
+  ): Promise<{ ok: boolean; result?: unknown; error?: string }>
 
-Perilaku yang diharapkan:
-  - POST ke API_URL dengan body:
-    { action: 'search_toolbox', query, searchCategoryType: category,
-      limit, _user: SESSION?.user.username ?? 'web' }
-  - Timeout 12 detik via AbortController
-  - Jika berhasil (HTTP 200 + d.ok === true dengan results), kembalikan
-    { ok: true, results: d.results }
-  - Jika gagal, kembalikan { ok: false, error: <pesan error> }
-  - Gunakan kembali helper _isAbortError() yang sudah ada untuk
-    mendeteksi abort, sesuai gaya error-handling yang sudah ada di codebase.
+Behavior:
+  - GET to `${API_URL}/toolbox-service?assetId=${encodeURIComponent(String(assetId))}`
+  - 12 second timeout via AbortController
+  - On success (HTTP 200 + d.ok === true with a result), return
+    { ok: true, result: d.result }
+  - On failure, return { ok: false, error: <message> }
+  - Reuse existing helper _isAbortError() for abort detection, matching
+    the codebase's existing error-handling style.
 
 ==================================================================
-STEP 5 — Frontend: Tangani action di dalam autoInjectToStudio()
+STEP 5 — Frontend: handle the action inside autoInjectToStudio()
 ==================================================================
-Di file yang sama, di dalam fungsi autoInjectToStudio(). Fungsi ini
-melakukan loop terhadap setiap perintah action yang sudah diparsing,
-dan secara normal mengirim masing-masing action ke plugin Studio
-melalui _injectCommand(). Action search_toolbox harus DICEGAT SEBELUM
-panggilan jaringan tersebut, karena action ini sama sekali tidak
-memerlukan Studio.
+Same file, inside the function autoInjectToStudio(). This function
+loops over parsed action commands and normally sends each one to the
+Studio plugin via _injectCommand(). The get_toolbox_asset action must
+be intercepted BEFORE that network call, because it doesn't need
+Studio at all.
 
-Di dalam for-loop, tepat setelah baris yang sudah ada ini:
+Inside the for-loop, right after this existing line:
   const cmd=step.cmd, a=cmd.action||''
 
-Sisipkan blok baru ini:
+Insert this new block:
 
-  if (a === 'search_toolbox') {
-    updateStep(step.sid, 'info', undefined, 'Searching Roblox Toolbox...')
-    const query = String(cmd.query || cmd.name || '')
-    const category = String(cmd.searchCategoryType || cmd.category || 'Model')
-    const searchRes = await fetchToolboxSearchResult(query, category, Number(cmd.limit) || 6)
-    if (searchRes.ok && searchRes.results?.length) {
-      updateStep(step.sid, 'done', `Found ${searchRes.results.length} asset(s): ${query}`)
+  if (a === 'get_toolbox_asset') {
+    updateStep(step.sid, 'info', undefined, 'Looking up asset on Roblox Toolbox...')
+    const assetId = String(cmd.assetId || cmd.id || cmd.name || cmd.target || '')
+    const lookupRes = await fetchToolboxAssetDetails(assetId)
+    if (lookupRes.ok && lookupRes.result) {
+      const r = lookupRes.result as { name?: string }
+      updateStep(step.sid, 'done', `Found asset: ${r.name || assetId}`)
       readResults.push({
-        name: `toolbox_search:${query}`,
-        source: JSON.stringify(searchRes.results, null, 2),
-        class: 'ToolboxResult',
-        lineCount: searchRes.results.length,
+        name: `toolbox_asset:${assetId}`,
+        source: JSON.stringify(lookupRes.result, null, 2),
+        class: 'ToolboxAsset',
+        lineCount: 1,
       })
     } else {
-      updateStep(step.sid, 'info', undefined, searchRes.error || 'No matching assets found.')
+      updateStep(step.sid, 'info', undefined, lookupRes.error || 'Asset not found.')
     }
     doneCount++
     continue
   }
 
-PENTING: blok ini harus berada SEBELUM baris yang sudah ada:
+IMPORTANT: this block must come BEFORE the existing line:
   const res=await _injectCommand(cmd,user,sig)
-...dan harus melakukan `continue` pada loop agar search_toolbox tidak
-pernah dikirim ke plugin Studio. Jangan mengubah logika action lain
-apa pun — hanya sisipkan blok kondisional baru ini.
+...and must `continue` the loop so get_toolbox_asset is never sent to
+the Studio plugin. Do not alter the existing logic for any other
+action type — only insert this new conditional branch.
 
-Catatan: blok ini menggunakan kembali array `readResults` yang sudah
-ada (sudah bertipe {name,source,class,lineCount}[]), sehingga hasil
-JSON-nya otomatis dirender ke user sebagai code block di chat, persis
-seperti hasil read_script. Tidak perlu kode UI render baru.
+Note: this reuses the existing `readResults` array (already typed as
+{name,source,class,lineCount}[]) so the JSON result automatically
+renders to the user as a code block in chat, exactly like read_script
+results do. No new UI rendering code is needed.
 
 ==================================================================
-STEP 6 — System prompt: Ajarkan model AI tentang action baru
-=================================================================
-Cari file yang menyusun system prompt yang dikirim ke model AI
-(kemungkinan bernama system_prompt.ts, dirujuk melalui `import
-{ buildSysPrompt } from './system_prompt'` di file chat utama).
+STEP 6 — System prompt: teach the AI model about the new action
+==================================================================
+Find the file that builds the system prompt sent to the AI model
+(likely named system_prompt.ts, referenced via `import { buildSysPrompt }
+from './system_prompt'` in the main chat file).
 
-Pada bagian yang mendokumentasikan action/skema JSON yang tersedia
-untuk model (tempat action seperti create_instance, read_script, dll
-didaftarkan beserta bentuk JSON-nya), tambahkan dokumentasi untuk
-action baru ini, contohnya:
+In the section that documents available actions/JSON action schema for
+the model (where actions like create_instance, read_script, etc. are
+listed with their JSON shape), add documentation for the new action,
+for example:
 
-  search_toolbox — Mencari aset di Roblox Toolbox/Creator Store
-  berdasarkan nama dan kategori. Gunakan action ini saat pengguna ingin
-  mencari atau memasukkan aset jadi (model, decal, mesh, audio, plugin,
-  animation, dll) daripada membuatnya dari nol.
+  get_toolbox_asset — Look up details for a single Roblox Toolbox /
+  Creator Store asset by its numeric ID. Use this when the user gives
+  you (or you already know) a specific asset ID and you want to verify
+  it exists or check its name/type/creator before inserting it.
 
-  Bentuk JSON:
-  {"action":"search_toolbox","query":"coin","searchCategoryType":"Model","limit":6}
+  IMPORTANT LIMITATION: there is no keyword search available. You
+  cannot look up assets by name like "coin" or "house" — you can only
+  fetch details for an asset ID you already have. If the user wants to
+  find a new asset by description, ask them to paste an asset ID or
+  link from the Roblox Creator Store / Toolbox, you cannot search for
+  one yourself.
 
-  Nilai searchCategoryType yang valid: Model, Decal, Mesh, Audio,
-  Plugin, Animation, Video, FontFamily, EnvironmentEmote, Image.
-  Kategori default adalah "Model" jika tidak disebutkan.
+  JSON shape:
+  {"action":"get_toolbox_asset","assetId":123456}
 
-  Hasilnya dikembalikan kepada Anda sebagai array JSON berisi objek
-  dengan bentuk:
+  The result is returned to you as a JSON object shaped like:
   { id, name, description, category, creator, creatorVerified,
     upVotes, downVotes, upVotePercent, thumbnailUrl, assetUrl }
 
-  Setelah menerima hasil, Anda dapat melanjutkan dengan action
-  insert_asset menggunakan field "id" dari hasil yang dipilih sebagai
-  asset_id, jika pengguna ingin benar-benar menambahkan aset tersebut
-  ke dalam game-nya.
+  After receiving the result, you may follow up with an insert_asset
+  action using the same "id" field as the asset_id, if the user wants
+  to actually add it to their game.
 
-Samakan format/gaya penulisan yang sudah dipakai untuk mendokumentasikan
-action lain di file ini (misalnya bagaimana read_script atau
-insert_asset didokumentasikan).
+Match the formatting/style already used for documenting other actions
+in this file (e.g. how read_script or insert_asset are documented).
 
 ==================================================================
-STEP 7 — Checklist sanity sebelum selesai
+STEP 7 — Sanity checklist before finishing
 ==================================================================
-[ ] convex_url/toolboxService.ts ada, mengekspor searchToolboxAssets + searchToolbox
-[ ] convex_url/toolboxHttp.ts ada, mengekspor toolboxServiceHandler
-[ ] Tidak ada nama file Convex yang memakai tanda hubung (-)
-[ ] HTTP dispatcher (main.ts/http.ts) merutekan action:"search_toolbox" ke file tersebut
-[ ] NEXUS_ACTIONS_SET sudah memuat 'search_toolbox'
-[ ] makeStepLabel() memiliki case untuk 'search_toolbox'
-[ ] Helper fetchToolboxSearchResult() sudah ditambahkan di dekat fetchReadScriptResult()
-[ ] autoInjectToStudio() mencegat 'search_toolbox' SEBELUM _injectCommand()
-    dan melakukan `continue` pada loop (tidak pernah dikirim ke plugin Studio)
-[ ] system_prompt.ts sudah mendokumentasikan bentuk JSON dan perilaku action baru
-[ ] Tidak ada perilaku action lain yang berubah atau rusak
-[ ] TypeScript berhasil di-compile tanpa error baru (jalankan `tsc --noEmit`
-    atau script typecheck bawaan proyek jika tersedia)
+[ ] ts/toolbox-service.ts exists, exports getToolboxAssetDetails + getAssetDetails
+[ ] ts/toolbox-http.ts exists, exports toolboxServiceHandler (httpAction)
+[ ] convex/http.ts registers GET/POST/OPTIONS routes at "/toolbox-service"
+[ ] NEXUS_ACTIONS_SET includes 'get_toolbox_asset'
+[ ] makeStepLabel() has a case for 'get_toolbox_asset'
+[ ] fetchToolboxAssetDetails() helper added near fetchReadScriptResult(),
+    calling the dedicated /toolbox-service route (GET), not action-in-body
+[ ] autoInjectToStudio() intercepts 'get_toolbox_asset' BEFORE
+    _injectCommand() and `continue`s the loop (never sent to the Studio
+    plugin)
+[ ] system_prompt.ts documents the new action's JSON shape, behavior,
+    AND explicitly states there is no keyword search available
+[ ] No leftover references to the old name "search_toolbox" anywhere
+[ ] No existing action's behavior was changed or broken
+[ ] TypeScript compiles with no new errors (run `tsc --noEmit` or the
+    project's existing typecheck script if available)
 
-Setelah selesai, ringkas dengan tepat file mana saja yang diubah dan
-tampilkan diff/potongan kode untuk setiap perubahan.
+When done, summarize exactly which files were changed and show the
+diffs/snippets for each change.
 ==================================================================
-AKHIR TUGAS
+END OF TASK
 ==================================================================
