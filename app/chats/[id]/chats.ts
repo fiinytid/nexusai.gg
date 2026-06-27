@@ -651,11 +651,26 @@ async function syncToServer(): Promise<void> {
   const ctrl=new AbortController(); const timeoutId=setTimeout(()=>ctrl.abort(),12000)
   try {
     const convsTrimmed=getStoreConvs().slice(-15).map(c=>({...c,msgs:(c.msgs||[]).slice(-20)}))
-    const payload={user:(SESSION.user.username||'').toLowerCase(),robloxId:SESSION.user.robloxId,data:{plan:S.plan,model:S.model,lastClaim:S.lastClaim,convs:convsTrimmed,projects:S.projects||[],lastSync:Date.now()}}
+    // IMPORTANT: `credits` must be included here. This payload is sent by
+    // the debounced sync (_debouncedSync, fired ~4s after any saveS() call,
+    // e.g. from claimDaily/autoClaimDaily/redeemCode/selModel) — if it
+    // omits credits, the server has no way to know about a client-side
+    // credit change and will reply with whatever it already had on file.
+    // The response handler below then does `S.credits=d.credits`,
+    // overwriting the just-claimed/just-redeemed balance with that stale
+    // server value — which is exactly the "credits revert after claiming
+    // daily reward" bug: the toast shows +N CR immediately, then a few
+    // seconds later this sync round-trip silently rolls it back because
+    // the server never actually received the new total to persist.
+    const payload={user:(SESSION.user.username||'').toLowerCase(),robloxId:SESSION.user.robloxId,data:{credits:S.credits,plan:S.plan,model:S.model,lastClaim:S.lastClaim,convs:convsTrimmed,projects:S.projects||[],lastSync:Date.now()}}
     const resp=await fetch('/api/sync',{method:'POST',headers:{'Content-Type':'application/json','X-Nexus-Nonce':_csrfNonce},signal:ctrl.signal,body:JSON.stringify(payload)})
     clearTimeout(timeoutId)
     if (resp.ok) {
       const d=await resp.json() as {credits?:number;plan?:string}
+      // The server is still the source of truth for the final number (it
+      // may clamp, apply server-side bonuses, or reject an over-claim) —
+      // but now that we actually sent our updated credits above, what
+      // comes back here reflects that change instead of a pre-claim value.
       if (d&&typeof d.credits==='number') { S.credits=d.credits; updateCreds(); if (SESSION){SESSION.data.credits=S.credits;try{localStorage.setItem('nexus_session',JSON.stringify(SESSION))}catch{}}}
       _syncFailCount=0
     } else if (resp.status===401||resp.status===403) _syncFailCount=5
@@ -1156,12 +1171,76 @@ async function _tryAutoPublish(lastPrompt: string): Promise<void> {
   } catch(e){console.warn('[NEXUS auto-publish] failed (non-fatal):',(e as Error)?.message||e)}
 }
 
-// ── AUTO INJECT ───────────────────────────────────────────────────────────────
+// ── TOOLBOX ACTIONS (independent of Studio connection) ────────────────────────
+// `search_toolbox` / `get_toolbox_asset` are TOOLS, not Studio plugin
+// actions: they hit {API_URL}/toolboxService directly from the browser and
+// never touch `_injectCommand`/the plugin. That means they must work
+// whether or not Studio is connected — unlike the rest of autoInjectToStudio
+// (which is itself gated entirely behind `studioConnected`, since every
+// other action there requires the plugin to actually execute something in
+// the place). This function is called separately, before that gate, so a
+// toolbox search always runs and reports results back into the chat even
+// when there's no plugin connected at all.
 interface InjectResult { summary:string[]|null; readResults:{name:string;source:string;class:string;lineCount:number}[] }
+const TOOLBOX_ACTION_NAMES = new Set(['search_toolbox','get_toolbox_asset'])
+function isToolboxAction(cmd: ActionCmd): boolean { return TOOLBOX_ACTION_NAMES.has(cmd.action||'') }
+
+async function processToolboxActions(cmds: ActionCmd[]): Promise<InjectResult> {
+  const toolboxCmds = cmds.filter(isToolboxAction)
+  if (!toolboxCmds.length) return {summary:null,readResults:[]}
+  const summary: string[]=[], readResults: {name:string;source:string;class:string;lineCount:number}[]=[]
+  for (const cmd of toolboxCmds) {
+    if (!S.gen) break
+    const sig=S.cancelCtrl?.signal; if (sig?.aborted) break
+    const lbl=makeStepLabel(cmd); const sub=String(cmd.parent||cmd.target||'')
+    const sid = lbl ? addStep(lbl,'pending',sub) : null
+    if (!sid) continue
+    updateStep(sid,'running'); await _sleep(120)
+
+    // Accepts either action name (`search_toolbox` or the legacy
+    // `get_toolbox_asset`) and routes both through the same keyword-search
+    // flow against {API_URL}/toolboxService?category=...&query=....
+    // The AI provides `query` (required) and optionally `category` (Model,
+    // Decal, Mesh, MeshPart, Plugin, Audio, Video, FontFamily, Animation).
+    // Results (id + name for every match) are surfaced back into the chip
+    // detail text so the AI's next turn can read them from the
+    // conversation and pick an id/name to act on (e.g. via insert_asset).
+    const query = String(cmd.query||cmd.keyword||cmd.search||cmd.name||cmd.target||'').trim()
+    const category = (cmd.category||cmd.searchCategoryType) as string|undefined
+    const limit = typeof cmd.limit==='number' ? cmd.limit : (typeof cmd.maxPageSize==='number' ? cmd.maxPageSize : 10)
+    if (!query) { updateStep(sid,'error','No search query provided'); continue }
+
+    updateStep(sid,'info',undefined,`Searching Toolbox for "${query}"${category?` (${category})`:''}...`)
+    const searchRes = await fetchToolboxSearch(query, category, limit)
+    if (searchRes.ok && searchRes.items.length) {
+      const topNames = searchRes.items.slice(0,3).map(it=>it.name).join(', ')
+      updateStep(sid,'done',`Found ${searchRes.items.length} result(s): ${topNames}`,_buildToolboxResultSummary(searchRes))
+      readResults.push({
+        name:`toolbox_search:${query}`,
+        source:_buildToolboxResultSummary(searchRes),
+        class:'ToolboxSearchResult',
+        lineCount: searchRes.items.length,
+      })
+    } else if (searchRes.ok) {
+      updateStep(sid,'info',undefined,`No results found for "${query}".`)
+    } else {
+      updateStep(sid,'error',(searchRes.error||'Search failed').slice(0,100))
+    }
+  }
+  return {summary:summary.length>0?summary:null,readResults}
+}
+
+// ── AUTO INJECT ───────────────────────────────────────────────────────────────
 async function autoInjectToStudio(aiResponse: string, _userPrompt: string): Promise<InjectResult> {
   if (!studioConnected) return {summary:null,readResults:[]}
   const summary: string[]=[], readResults: {name:string;source:string;class:string;lineCount:number}[]=[], user=(SESSION?.user.username??'').toLowerCase()
-  const cmds=parseAllCommands(aiResponse)
+  // Toolbox search/lookup actions are handled separately by
+  // processToolboxActions() (called earlier in _sendInner, before this
+  // function even runs) since they're tools that don't need the plugin.
+  // Filter them out here so they don't get sent to the plugin a second
+  // time as an unrecognized command if the AI emitted them alongside
+  // genuine Studio actions in the same response.
+  const cmds=parseAllCommands(aiResponse).filter(c=>!isToolboxAction(c))
   if (!cmds.length) return {summary:null,readResults:[]}
   const hasPlayTest=cmds.some(c=>c.action==='play_test'||c.action==='run_test')
   const hasStopTest=cmds.some(c=>c.action==='stop_test')
@@ -1175,42 +1254,6 @@ async function autoInjectToStudio(aiResponse: string, _userPrompt: string): Prom
     if(!step.sid){doneCount++;continue}
     updateStep(step.sid,'running'); await _sleep(120)
     const cmd=step.cmd, a=cmd.action||''
-
-    // ── Toolbox keyword search ─────────────────────────────────────────
-    // Accepts either action name (`search_toolbox` or the legacy
-    // `get_toolbox_asset`) and routes both through the same keyword-search
-    // flow against {API_URL}/toolboxService?category=...&query=....
-    // The AI provides `query` (required) and optionally `category` (Model,
-    // Decal, Mesh, MeshPart, Plugin, Audio, Video, FontFamily, Animation).
-    // Results (id + name for every match) are surfaced back into the chip
-    // detail text so the AI's next turn can read them from the
-    // conversation and pick an id/name to act on (e.g. via insert_asset).
-    if (a==='search_toolbox' || a==='get_toolbox_asset') {
-      const query = String(cmd.query||cmd.keyword||cmd.search||cmd.name||cmd.target||'').trim()
-      const category = (cmd.category||cmd.searchCategoryType) as string|undefined
-      const limit = typeof cmd.limit==='number' ? cmd.limit : (typeof cmd.maxPageSize==='number' ? cmd.maxPageSize : 10)
-      if (!query) {
-        updateStep(step.sid,'error','No search query provided')
-        doneCount++; continue
-      }
-      updateStep(step.sid,'info',undefined,`Searching Toolbox for "${query}"${category?` (${category})`:''}...`)
-      const searchRes = await fetchToolboxSearch(query, category, limit)
-      if (searchRes.ok && searchRes.items.length) {
-        const topNames = searchRes.items.slice(0,3).map(it=>it.name).join(', ')
-        updateStep(step.sid,'done',`Found ${searchRes.items.length} result(s): ${topNames}`,_buildToolboxResultSummary(searchRes))
-        readResults.push({
-          name:`toolbox_search:${query}`,
-          source:_buildToolboxResultSummary(searchRes),
-          class:'ToolboxSearchResult',
-          lineCount: searchRes.items.length,
-        })
-      } else if (searchRes.ok) {
-        updateStep(step.sid,'info',undefined,`No results found for "${query}".`)
-      } else {
-        updateStep(step.sid,'error',(searchRes.error||'Search failed').slice(0,100))
-      }
-      doneCount++; continue
-    }
 
     const res=await _injectCommand(cmd,user,sig)
     if(res.ok){
@@ -1417,30 +1460,61 @@ async function _sendInner(): Promise<void> {
   }
 
   let studioSummary: string[]|null=null, displayText=''
-  if(studioConnected&&!hasError){
-    const _preCmds=parseAllCommands(aiText)
-    if(_preCmds.length>0){
-      if(showThinking){clearSteps();addChip(`Sending ${_preCmds.length} action(s) to Studio...`,'running','One by one, please wait');await _sleep(200);updateChip(_chipId,'done')}
-      const injectResult=await autoInjectToStudio(aiText,lastPrompt)
-      studioSummary=injectResult.summary
-      if(!S.gen||_localCancelSignal?.aborted){_resetGenState();const cancelMsg: ConvMsg={role:'ai',content:'Process cancelled.',time:Date.now()};cv.msgs.push(cancelMsg);appendMsg(cancelMsg);saveS();return}
-      displayText=stripAllCode(aiText)
-      if(injectResult.readResults.length>0){const readBlocks=injectResult.readResults.map(r=>{
-        // Toolbox search results are plain text (an id/name list), not Lua
-        // source — render them as a fenced text block instead of ```lua so
-        // they don't look like (or get re-parsed as) executable code.
-        if (r.class==='ToolboxSearchResult') return `**${r.name}**:\n\`\`\`\n${r.source}\n\`\`\``
-        return `**${r.name}** (${r.class}, ${r.lineCount} line${r.lineCount===1?'':'s'}):\n\`\`\`lua\n${r.source}\n\`\`\``
-      }).join('\n\n');displayText=displayText?displayText+'\n\n'+readBlocks:readBlocks}
-      if(!displayText||displayText.length<20)displayText=studioSummary?.length?'Successfully sent to Studio:\n'+studioSummary.map(s=>'• '+s).join('\n'):'Done. Check Explorer in Studio.'
-    } else {
-      if(showThinking) finalizeChips()
-      displayText=cleanAIResponse(aiText)
-      const aiMsg0: ConvMsg&{_rawContent:string}={role:'ai',content:displayText,time:Date.now(),_rawContent:aiText}
-      removeThinkingBubble(); cv.msgs.push(aiMsg0); appendMsg(aiMsg0); _resetGenState(); saveS(); return
+  const _preCmds=parseAllCommands(aiText)
+  const _toolboxCmds=_preCmds.filter(isToolboxAction)
+  const _studioCmds=_preCmds.filter(c=>!isToolboxAction(c))
+  // `_toolboxCmds` are TOOLS (e.g. search_toolbox/get_toolbox_asset) — they
+  // call the backend directly from the browser and never touch the Studio
+  // plugin, so they run regardless of `studioConnected`. `_studioCmds` are
+  // genuine plugin ACTIONS (create_instance, edit_script, insert_asset,
+  // read_instance, insert_rbxm, play_test, etc.) and still require Studio
+  // to be connected, same as before.
+  if(!hasError&&(_toolboxCmds.length||(studioConnected&&_studioCmds.length))){
+    if(showThinking){
+      const totalCount=_toolboxCmds.length+(studioConnected?_studioCmds.length:0)
+      clearSteps();addChip(`Running ${totalCount} action(s)...`,'running','One by one, please wait');await _sleep(200);updateChip(_chipId,'done')
     }
+    const combinedReadResults: {name:string;source:string;class:string;lineCount:number}[]=[]
+    let combinedSummary: string[]|null=null
+
+    // Toolbox searches first — instant, no plugin dependency, safe to run
+    // even if Studio never connects this session.
+    if(_toolboxCmds.length){
+      const toolboxResult=await processToolboxActions(_toolboxCmds)
+      if(toolboxResult.readResults.length) combinedReadResults.push(...toolboxResult.readResults)
+      if(toolboxResult.summary?.length) combinedSummary=(combinedSummary||([] as string[])).concat(toolboxResult.summary)
+    }
+    if(!S.gen||_localCancelSignal?.aborted){_resetGenState();const cancelMsg: ConvMsg={role:'ai',content:'Process cancelled.',time:Date.now()};cv.msgs.push(cancelMsg);appendMsg(cancelMsg);saveS();return}
+
+    // Then plugin actions, only when Studio is actually connected.
+    if(studioConnected&&_studioCmds.length){
+      const injectResult=await autoInjectToStudio(aiText,lastPrompt)
+      if(injectResult.summary?.length) combinedSummary=(combinedSummary||([] as string[])).concat(injectResult.summary)
+      if(injectResult.readResults.length) combinedReadResults.push(...injectResult.readResults)
+      if(!S.gen||_localCancelSignal?.aborted){_resetGenState();const cancelMsg: ConvMsg={role:'ai',content:'Process cancelled.',time:Date.now()};cv.msgs.push(cancelMsg);appendMsg(cancelMsg);saveS();return}
+    }
+
+    studioSummary=combinedSummary
+    displayText=stripAllCode(aiText)
+    if(combinedReadResults.length>0){const readBlocks=combinedReadResults.map(r=>{
+      // Toolbox search results are plain text (an id/name list), not Lua
+      // source — render them as a fenced text block instead of ```lua so
+      // they don't look like (or get re-parsed as) executable code.
+      if (r.class==='ToolboxSearchResult') return `**${r.name}**:\n\`\`\`\n${r.source}\n\`\`\``
+      return `**${r.name}** (${r.class}, ${r.lineCount} line${r.lineCount===1?'':'s'}):\n\`\`\`lua\n${r.source}\n\`\`\``
+    }).join('\n\n');displayText=displayText?displayText+'\n\n'+readBlocks:readBlocks}
+    if(!displayText||displayText.length<20)displayText=studioSummary?.length?'Successfully sent to Studio:\n'+studioSummary.map(s=>'• '+s).join('\n'):'Done. Check Explorer in Studio.'
     if(!_playTestActive){if(showThinking)finalizeChips()}
     else document.getElementById('chipCancel')?.remove()
+  } else if(!hasError&&_studioCmds.length&&!studioConnected&&!_toolboxCmds.length){
+    // Studio-only actions were requested but Studio isn't connected, and
+    // there were no toolbox tool calls to fall back on — behave like
+    // before: surface the AI's text response as-is (no plugin commands can
+    // run), letting the person know via the AI's own wording.
+    if(showThinking) finalizeChips()
+    displayText=cleanAIResponse(aiText)
+    const aiMsg0: ConvMsg&{_rawContent:string}={role:'ai',content:displayText,time:Date.now(),_rawContent:aiText}
+    removeThinkingBubble(); cv.msgs.push(aiMsg0); appendMsg(aiMsg0); _resetGenState(); saveS(); return
   } else {
     displayText=cleanAIResponse(aiText)
     if(showThinking) finalizeChips()
@@ -1534,6 +1608,21 @@ function getProjectName(pid: string): string|null {
   if(!pid) return null
   const projs=S.projects||(SESSION?.data?.projects as AppState['projects'])||[]
   return projs.find(x=>x.id===pid)?.name??null
+}
+// ── PROJECT OWNERSHIP GUARD ────────────────────────────────────────────────
+// Mirrors `userOwnsProject()` from the dashboard page: a project id in the
+// URL (/chats/:id or ?id=:id) is untrusted input — it could be a stale
+// bookmark, a typo, an id copy-pasted between accounts, or someone probing
+// other users' project ids. Before letting the chat UI render against that
+// id, confirm it's actually present in the signed-in user's own project
+// list (same source dashboard.tsx checks: `SESSION.data.projects`, kept in
+// sync with `S.projects` once loadS() has run). If it isn't there, this is
+// not a project the current session owns and we should bounce out rather
+// than silently rendering an empty/nameless chat for an id that isn't ours.
+function userOwnsProject(pid: string): boolean {
+  if (!pid) return false
+  const projs=S.projects||(SESSION?.data?.projects as AppState['projects'])||[]
+  return projs.some(x=>x.id===pid)
 }
 function updateProjectUI(): void {
   const n=S.currentProjectName
@@ -1856,6 +1945,17 @@ async function initApp(): Promise<void> {
   _injectChipStyles(); updateLoader(8,UI.loaderInit)
   S.currentProjectId=getProjectIdFromUrl(); updateLoader(22,UI.loaderLoadData)
   await loadS(); updateLoader(42,UI.loaderLoadData)
+  // Ownership check — same as dashboard.tsx's `userOwnsProject()` guard for
+  // /chats/[id]. Run this right after loadS() so S.projects/SESSION.data
+  // reflect what the server actually returned for this account, not a
+  // possibly-stale local cache. A project id in the URL that doesn't belong
+  // to this session (bad bookmark, typo, someone else's id, etc.) should
+  // bounce the person out instead of rendering an empty/nameless chat.
+  if(S.currentProjectId&&!userOwnsProject(S.currentProjectId)){
+    toast('Project not found','var(--pink)',3200)
+    location.replace('/dashboard')
+    return
+  }
   if(S.currentProjectId){
     S.currentProjectName=getProjectName(S.currentProjectId)||null
     if(!S.currentProjectName&&SESSION.data?.projects){const proj=(SESSION.data.projects as AppState['projects']).find(x=>x.id===S.currentProjectId!);if(proj)S.currentProjectName=proj.name}

@@ -63,6 +63,7 @@ interface UserData {
   projects?:    Project[];
   lastPayment?: LastPayment;
   draftAttach?: unknown;
+  lastClaim?:   string | null;
   _created?:    number;
   _updated?:    number;
   [key: string]: unknown;
@@ -208,6 +209,19 @@ const MAX_CODE_CREDITS      = 10_000;
 const MAX_CODE_USES         = 10_000;
 const CODE_USED_TTL_SECONDS = 86_400 * 365 * 3; // 3 years
 
+// ─── Daily-claim constants ─────────────────────────────────────────────────
+// Server-side mirror of the client's daily-reward rules. These MUST stay
+// authoritative here — the whole point of the `claim-daily` action is that
+// the client can no longer just add credits locally and hope a generic sync
+// carries it through (it won't: `credits` is deliberately excluded from
+// SAFE_FIELDS below, so any client-side credit bump from a non-action sync
+// is silently discarded and the server's last-known value wins instead —
+// which is what made daily-claim credits appear to "revert").
+const DAILY_MS               = 24 * 60 * 60 * 1000;
+const FREE_DAILY_REWARD      = 2;
+const PRO_DAILY_REWARD       = 25;
+const MAX_DAILY_CATCHUP_DAYS = 7; // cap how many missed days can be claimed at once
+
 // ═══════════════════════════════════════════════════════════════════════════
 // UTILITIES
 // ═══════════════════════════════════════════════════════════════════════════
@@ -251,6 +265,26 @@ function safeDeductCost(value: unknown): number | null {
   if (!Number.isFinite(n) || Number.isNaN(n)) return null;
   if (n <= MIN_DEDUCT_COST || n > MAX_DEDUCT_COST) return null;
   return parseFloat(n.toFixed(4));
+}
+
+// ─── Daily-claim utilities ──────────────────────────────────────────────────
+
+// Resolve the per-day reward for a user record, mirroring the client's
+// `_perDayReward()`. Plan is the only input that affects the amount.
+function dailyRewardForPlan(plan: unknown): number {
+  return String(plan ?? '').toLowerCase() === 'pro' ? PRO_DAILY_REWARD : FREE_DAILY_REWARD;
+}
+
+// How many whole daily periods have elapsed since `lastClaim`, clamped to
+// [0, MAX_DAILY_CATCHUP_DAYS]. No `lastClaim` at all (first-ever claim)
+// counts as exactly 1 day owed, same as the client's `_daysSinceLastClaim`.
+function daysOwedSinceClaim(lastClaim: unknown): number {
+  if (!lastClaim) return 1;
+  const ts = new Date(String(lastClaim)).getTime();
+  if (!Number.isFinite(ts)) return 1;
+  const elapsedMs = Date.now() - ts;
+  if (elapsedMs < 0) return 0; // clock skew / future timestamp — owe nothing
+  return Math.min(Math.floor(elapsedMs / DAILY_MS), MAX_DAILY_CATCHUP_DAYS);
 }
 
 // ─── Redeem code utilities ─────────────────────────────────────────────────
@@ -345,7 +379,7 @@ async function _doInitSB(): Promise<SupabaseClient | null> {
     const { createClient } = await import('@supabase/supabase-js');
     const client = createClient(url, key, {
       auth:   { persistSession: false, autoRefreshToken: false },
-      global: { headers: { 'X-Client-Info': 'nexus-sync/20' } },
+      global: { headers: { 'X-Client-Info': 'nexus-sync/21' } },
     });
 
     _sb.client    = client;
@@ -1108,6 +1142,43 @@ const handler: HandlerFn = async (req: AdaptedRequest, res: AdaptedResponse) => 
       }
     }
 
+    // GET ?daily_status=1&user=<name> — read-only daily-claim status check.
+    // Lets the client show an accurate countdown/availability without
+    // having to guess locally from a possibly-stale cached `lastClaim`.
+    if (req.query['daily_status'] === '1') {
+      if (!userKey) {
+        return res.status(400).json({ error: 'Parameter "user" must not be empty' });
+      }
+      try {
+        const existing = await getUser(userKey);
+        const data     = existing ? applyRoleOverrides({ ...existing }) : null;
+        const roles    = data?.roles ?? [];
+        const plan     = (data?.plan ?? 'free').toLowerCase();
+        const unlimitedPlan = plan === 'owner' || roles.includes('owner') || roles.includes('admin');
+
+        if (unlimitedPlan) {
+          return res.status(200).json({
+            claimable: false,
+            unlimited: true,
+            reward:    0,
+            daysOwed:  0,
+            lastClaim: data?.lastClaim ?? null,
+          });
+        }
+
+        const daysOwed = daysOwedSinceClaim(data?.lastClaim ?? null);
+        return res.status(200).json({
+          claimable: daysOwed > 0,
+          unlimited: false,
+          reward:    daysOwed > 0 ? daysOwed * dailyRewardForPlan(plan) : 0,
+          daysOwed,
+          lastClaim: data?.lastClaim ?? null,
+        });
+      } catch (e: unknown) {
+        return errResponse(res, e);
+      }
+    }
+
     if (!userKey) return res.status(200).json(null);
 
     try {
@@ -1164,6 +1235,122 @@ const handler: HandlerFn = async (req: AdaptedRequest, res: AdaptedResponse) => 
       const ab = body as AdminUpdateBody & Record<string, unknown>;
 
       switch (action) {
+
+        // ────────────────────────────────────────────────────────────────
+        // DAILY CREDITS CLAIM (server-authoritative)
+        // ────────────────────────────────────────────────────────────────
+
+        // claim-daily: credits the caller's own account for any daily
+        // reward(s) owed, exactly like `deduct-credits` is the only sanctioned
+        // way to subtract credits. This exists because the generic user-sync
+        // path below deliberately excludes `credits` from SAFE_FIELDS — a
+        // client that just bumps `S.credits` locally and relies on a normal
+        // sync to persist it will always have that bump silently discarded,
+        // and the next sync response will hand back the server's old value,
+        // which is exactly what made daily-claim rewards appear to "revert"
+        // a few seconds after being claimed. This action performs the whole
+        // read-modify-write itself, so the number that's added is the same
+        // number that's actually persisted and returned.
+        //
+        // Body: { action: 'claim-daily', user }
+        // (robloxId may also be supplied for first-time account creation —
+        //  same convention as the normal sync path below.)
+        case 'claim-daily': {
+          const rawUser = ab.user ?? user;
+          if (!rawUser) {
+            return res.status(400).json({ error: 'Field "user" is required' });
+          }
+
+          const cleanUser = normalizeKey(String(rawUser));
+          if (!cleanUser || cleanUser.length > 50) {
+            return res.status(400).json({ error: 'Username is invalid or too long' });
+          }
+
+          // Cheap per-account throttle: a person mashing the claim button
+          // shouldn't be able to fire more requests than could possibly
+          // matter (claims are gated to once per DAILY_MS server-side
+          // anyway, this just stops needless storage round-trips).
+          if (!checkRateLimit(`claim_daily:${cleanUser}`, 10)) {
+            return res.status(429).json({ error: 'Too many requests. Please slow down.' });
+          }
+
+          try {
+            const existing = await getUser(cleanUser);
+
+            if (existing?.banned) {
+              return res.status(403).json({
+                error:  'Account banned',
+                reason: existing.banReason ?? 'Violation of ToS',
+              });
+            }
+
+            const current = existing ?? {};
+            const roles   = current.roles ?? [];
+            const plan    = (current.plan ?? 'free').toLowerCase();
+
+            // Owners/admins run on unlimited credits already — there is
+            // nothing meaningful to "claim", and we don't want a stray
+            // claim to perturb their (already MAX_CREDITS) balance or
+            // overwrite lastClaim in a way that's visible to the client.
+            if (plan === 'owner' || roles.includes('owner') || roles.includes('admin')) {
+              return res.status(200).json({
+                success:   true,
+                claimed:   false,
+                reason:    'owner_or_admin',
+                credits:   MAX_CREDITS,
+                reward:    0,
+                lastClaim: current.lastClaim ?? null,
+              });
+            }
+
+            const daysOwed = daysOwedSinceClaim(current.lastClaim ?? null);
+            if (daysOwed <= 0) {
+              // Nothing to claim yet — report current state so the client
+              // can correct any optimistic UI without granting credits.
+              return res.status(200).json({
+                success:   true,
+                claimed:   false,
+                reason:    'not_yet_available',
+                credits:   safeCredits(current.credits, DEFAULT_NEW_USER_CREDITS),
+                reward:    0,
+                lastClaim: current.lastClaim ?? null,
+              });
+            }
+
+            const reward         = daysOwed * dailyRewardForPlan(plan);
+            const balanceBefore  = safeCredits(current.credits, DEFAULT_NEW_USER_CREDITS);
+            const balanceAfter   = safeCredits(balanceBefore + reward, balanceBefore);
+            const nowIso         = new Date().toISOString();
+
+            const nextData: UserData = {
+              ...current,
+              credits:   balanceAfter,
+              lastClaim: nowIso,
+              _updated:  Date.now(),
+              ...(!existing ? {
+                plan:      current.plan      ?? 'free',
+                roles:     current.roles     ?? [],
+                banned:    false,
+                banReason: null,
+                robloxId:  sanitizeStr(String(bodyRobloxId ?? current.robloxId ?? ''), 50),
+                _created:  Date.now(),
+              } : {}),
+            };
+
+            await setUser(cleanUser, nextData);
+
+            return res.status(200).json({
+              success:   true,
+              claimed:   true,
+              daysOwed,
+              reward,
+              credits:   balanceAfter,
+              lastClaim: nowIso,
+            });
+          } catch (e: unknown) {
+            return errResponse(res, e);
+          }
+        }
 
         // ────────────────────────────────────────────────────────────────
         // REDEEM CODE MANAGEMENT ACTIONS
@@ -1927,7 +2114,13 @@ const handler: HandlerFn = async (req: AdaptedRequest, res: AdaptedResponse) => 
       // Fields the client is allowed to overwrite directly.
       // "credits" is intentionally NOT in this list — credits are only
       // ever changed through controlled arithmetic (deduct-credits,
-      // redeem-code, and the other admin actions above).
+      // redeem-code, claim-daily, and the other admin actions above).
+      // "lastClaim" IS in this list (read-only-ish in practice): the client
+      // may report its last known claim timestamp for display/UX purposes,
+      // but it carries no credit value on its own — `claim-daily` is the
+      // only action that can turn a claim into an actual credits change,
+      // and it sets `lastClaim` itself based on server time, not on
+      // whatever the client sends here.
       const SAFE_FIELDS: (keyof UserData)[] = [
         'convs', 'allConvs', 'curConv', 'model', 'guiModel',
         'lastClaim', 'draftText', 'avatar', 'displayName',
