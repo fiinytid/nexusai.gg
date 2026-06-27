@@ -840,7 +840,7 @@ async function checkStudio(): Promise<void> {
 async function retryStudio(): Promise<void> { _pollFailCount=0; toast(UI.reconnectToast); await checkStudio() }
 
 // ── ACTION PARSING ────────────────────────────────────────────────────────────
-const NEXUS_ACTIONS_SET = new Set(['create_instance','create_script','edit_script','read_script','set_properties','rename','delete','parent','list','insert_asset','play_test','terrain','undo','redo','resolve_mention','RunCode','run_code','get_output','ping','get_info','set_project','get_all_actions','run_test','stop_test','get_toolbox_asset','search_toolbox','none'])
+const NEXUS_ACTIONS_SET = new Set(['create_instance','create_script','edit_script','read_script','set_properties','rename','delete','parent','list','insert_asset','insert_rbxm','read_instance','play_test','terrain','undo','redo','resolve_mention','RunCode','run_code','get_output','ping','get_info','set_project','get_all_actions','run_test','stop_test','get_toolbox_asset','search_toolbox','none'])
 function isKnownAction(name: string): boolean { return NEXUS_ACTIONS_SET.has(name) }
 function _stripLuaExpressions(str: string): string {
   if (typeof str!=='string') return str
@@ -948,6 +948,8 @@ function makeStepLabel(cmd: ActionCmd): string|null {
     case 'parent':          return `Reparent: ${nm} → ${String(cmd.parent||'?')}`
     case 'list':            return 'List instances/scripts'
     case 'insert_asset':    return `Insert asset: ${String(cmd.asset_id||cmd.id||'?')}`
+    case 'insert_rbxm':     return `Import .rbxm: ${String(cmd.name||cmd.file||'?')}`
+    case 'read_instance':   return `Read instance: ${String(cmd.name||cmd.target||cmd.path||'?')}`
     case 'play_test':
     case 'run_test':        return UI.testRunning
     case 'stop_test':       return 'Stop play test'

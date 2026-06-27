@@ -112,9 +112,6 @@ const ACTION_RENAME_MAP: Record<string, string> = {
   execute_text:           "dispatch_from_text",
   multi_target:           "dispatch_multi_target",
   RunCode:                "run_code",
-  // New action aliases
-  instance_data:          "instance_data_report",
-  insert_rbxm_result:     "insert_rbxm_report",
 };
 
 function migrateActionName(raw: string): string {
@@ -158,31 +155,6 @@ interface AiFeedEntry {
   data:     unknown;
   ts:       number;
   read:     boolean;
-}
-
-// ── insert_rbxm result interface ───────────────────────────────────────────────
-interface InsertRbxmReport {
-  success:    boolean;
-  count:      number;
-  names:      string[];
-  class:      string | null;
-  parentPath: string;
-  error:      string | null;
-  ts:         number;
-}
-
-// ── read_instance result interface ─────────────────────────────────────────────
-interface InstanceDataReport {
-  name:        string;
-  class:       string;
-  fullPath:    string;
-  parentName:  string | null;
-  properties:  Record<string, unknown>;
-  attributes:  Record<string, unknown> | null;
-  children:    Array<{ name: string; class: string; path: string }> | null;
-  descendants: Array<{ name: string; class: string; path: string }> | null;
-  childCount:  number;
-  ts:          number;
 }
 
 // ── SANITISERS ─────────────────────────────────────────────────────────────────
@@ -851,44 +823,30 @@ async function handleGet(
     return jsonResp({ ok: true, logs, count: logs.length }, 200, cors);
   }
 
-  // ── get_instance_data ─────────────────────────────────────────────────────
-  if (q["get_instance_data"] != null) {
-    const d = await loadData(ctx, u, "instance_data_report");
-    return jsonResp({
-      ok: true,
-      ...(d ?? { name: "", class: "", fullPath: "", properties: {}, childCount: 0 }),
-    }, 200, cors);
-  }
-
-  // ── get_rbxm_result ───────────────────────────────────────────────────────
-  if (q["get_rbxm_result"] != null) {
-    const d = await loadData(ctx, u, "insert_rbxm_report");
-    return jsonResp({
-      ok: true,
-      ...(d ?? { success: false, count: 0, names: [], parentPath: "" }),
-    }, 200, cors);
-  }
-
   // ── data getter map ───────────────────────────────────────────────────────
   const dataGetterKeys: Record<string, string> = {
-    get_workspace:       "workspace_scan",
-    get_script:          "read_script",
-    get_script_list:     "script_list_report",
-    get_script_lines:    "script_lines_report",
-    get_search:          "toolbox_search_report",
-    get_workspace_scan:  "workspace_scan",
-    get_descendants:     "descendants_report",
-    get_properties:      "properties_report",
-    get_action_list:     "action_list_report",
-    get_asset_lib:       "asset_library_report",
-    get_asset_id:        "asset_id_report",
-    get_asset_folder:    "asset_folder_report",
-    get_module_list:     "module_list_report",
-    get_module_deploy:   "module_deploy_report",
-    get_terrain:         "terrain_materials_report",
-    get_runcode_result:  "runcode_report",
-    get_expr_result:     "expression_report",
-    get_query_result:    "query_report",
+    get_workspace:              "workspace_scan",
+    get_script:                 "read_script",
+    get_script_list:            "script_list_report",
+    get_script_lines:           "script_lines_report",
+    get_search:                 "toolbox_search_report",
+    get_workspace_scan:         "workspace_scan",
+    get_descendants:            "descendants_report",
+    get_properties:             "properties_report",
+    get_action_list:            "action_list_report",
+    get_asset_lib:              "asset_library_report",
+    get_asset_id:               "asset_id_report",
+    get_asset_folder:           "asset_folder_report",
+    get_module_list:            "module_list_report",
+    get_module_deploy:          "module_deploy_report",
+    get_terrain:                "terrain_materials_report",
+    get_runcode_result:         "runcode_report",
+    get_expr_result:            "expression_report",
+    get_query_result:           "query_report",
+    // ── NEW getters ──────────────────────────────────────────────────────────
+    get_insert_asset_result:    "insert_asset_result",
+    get_insert_rbxm_result:     "insert_rbxm_result",
+    get_instance:               "instance_data",
   };
 
   const emptyDefaults: Record<string, Record<string, unknown>> = {
@@ -909,6 +867,10 @@ async function handleGet(
     runcode_report:           { success: false, output: null, log: [], mode: "pipeline" },
     expression_report:        { expression: "", result: null },
     query_report:             { results: [], count: 0 },
+    // ── NEW empty defaults ───────────────────────────────────────────────────
+    insert_asset_result:      { assetId: 0, name: "", class: "", parentPath: "", descendants: 0, scriptsRemoved: 0, contents: [], contentsTruncated: false },
+    insert_rbxm_result:       { name: "", class: "", parentPath: "", descendants: 0, contents: [], contentsTruncated: false },
+    instance_data:            { name: "", class: "", fullPath: "", properties: {}, attributes: {}, childCount: 0, children: [] },
   };
 
   for (const [param, key] of Object.entries(dataGetterKeys)) {
@@ -1138,73 +1100,79 @@ async function handlePost(
     return jsonResp({ ok: true, status: "ok", name, lineCount: reportData.lineCount }, 200, cors);
   }
 
-  // ── instance_data_report (from read_instance action) ──────────────────────
-  // The plugin's read_instance action posts back with action="instance_data"
-  // which is migrated to "instance_data_report" via ACTION_RENAME_MAP.
-  if (rawAction === "instance_data_report") {
-    const report: InstanceDataReport = {
-      name:        sanStr(body["name"]       ?? "", 100),
-      class:       sanStr(body["class"]      ?? "", 60),
-      fullPath:    sanStr(body["fullPath"]   ?? "", 300),
-      parentName:  body["parentName"] ? sanStr(String(body["parentName"]), 100) : null,
-      properties:  sanObj(body["properties"]),
-      attributes:  body["attributes"] ? sanObj(body["attributes"]) : null,
-      children:    body["children"]    ? sanArr(body["children"],    200)  : null,
-      descendants: body["descendants"] ? sanArr(body["descendants"], 1000) : null,
-      childCount:  sanInt(body["childCount"] ?? body["child_count"], 0, 0, 99_999),
-      ts:          Date.now(),
+  // ── insert_asset_result ───────────────────────────────────────────────────
+  // Handler untuk report hasil insert asset dari Toolbox (action insert_asset).
+  if (rawAction === "insert_asset_result") {
+    const reportData = {
+      assetId:          sanInt(body["assetId"] ?? body["asset_id"], 0, 0, 99_999_999_999),
+      name:             sanStr(body["name"] ?? "", 100),
+      class:            sanStr(body["class"] ?? "", 50),
+      parentPath:       sanStr(body["parentPath"] ?? body["parent_path"] ?? "", 200),
+      descendants:      sanInt(body["descendants"], 0, 0, 99_999),
+      scriptsRemoved:   sanInt(body["scriptsRemoved"] ?? body["scripts_removed"], 0, 0, 9_999),
+      contents:         sanArr(body["contents"], 50),
+      contentsTruncated: !!(body["contentsTruncated"] ?? body["contents_truncated"]),
+      updatedAt:        Date.now(),
     };
-    await saveData(ctx, resolvedUser, "instance_data_report", report as unknown as Record<string, unknown>);
+    await saveData(ctx, resolvedUser, "insert_asset_result", reportData);
     await pushAiFeed(
-      ctx, resolvedUser, "instance_data_report",
-      `Instance "${report.name}" [${report.class}] data received (${report.childCount} children).`,
-      report
+      ctx, resolvedUser, "insert_asset_result",
+      `Inserted asset ${reportData.assetId}: "${reportData.name}" (${reportData.class}, ${reportData.descendants} descendants).`,
+      reportData
     );
     await ctx.runMutation(internal.store.pushLog, {
-      action: "instance_data_report", user: resolvedUser,
-      details: `${report.name} [${report.class}] @ ${report.fullPath}`,
+      action: "insert_asset_result", user: resolvedUser, details: reportData.name,
     });
-    return jsonResp({
-      ok: true, status: "ok",
-      name:       report.name,
-      class:      report.class,
-      childCount: report.childCount,
-    }, 200, cors);
+    return jsonResp({ ok: true, status: "ok", name: reportData.name }, 200, cors);
   }
 
-  // ── insert_rbxm_report (from insert_rbxm action) ──────────────────────────
-  // The plugin's insert_rbxm action posts back with action="insert_rbxm_result"
-  // which is migrated to "insert_rbxm_report" via ACTION_RENAME_MAP.
-  if (rawAction === "insert_rbxm_report") {
-    const report: InsertRbxmReport = {
-      success:    !!body["success"],
-      count:      sanInt(body["count"] ?? body["descendants"], 0, 0, 999_999),
-      names:      sanArr<string>(body["names"] ?? (body["name"] ? [String(body["name"])] : []), 100),
-      class:      body["class"] ? sanStr(String(body["class"]), 60) : null,
-      parentPath: sanStr(body["parentPath"] ?? body["parent_path"] ?? "", 300),
-      error:      body["error"] ? sanStr(String(body["error"]), 300) : null,
-      ts:         Date.now(),
+  // ── insert_rbxm_result ────────────────────────────────────────────────────
+  // Handler untuk report hasil import file .rbxm/.rbxmx (action insert_rbxm).
+  if (rawAction === "insert_rbxm_result") {
+    const reportData = {
+      name:             sanStr(body["name"] ?? "", 100),
+      class:            sanStr(body["class"] ?? "", 50),
+      parentPath:       sanStr(body["parentPath"] ?? body["parent_path"] ?? "", 200),
+      descendants:      sanInt(body["descendants"], 0, 0, 99_999),
+      contents:         sanArr(body["contents"], 50),
+      contentsTruncated: !!(body["contentsTruncated"] ?? body["contents_truncated"]),
+      updatedAt:        Date.now(),
     };
-    await saveData(ctx, resolvedUser, "insert_rbxm_report", report as unknown as Record<string, unknown>);
-
-    const summary = report.success
-      ? `Inserted rbxm "${report.names[0] ?? "model"}" [${report.class ?? "unknown"}] into "${report.parentPath}" (${report.count} total instances).`
-      : `Failed to insert rbxm: ${report.error ?? "unknown error"}`;
-
-    await pushAiFeed(ctx, resolvedUser, "insert_rbxm_report", summary, report);
+    await saveData(ctx, resolvedUser, "insert_rbxm_result", reportData);
+    await pushAiFeed(
+      ctx, resolvedUser, "insert_rbxm_result",
+      `Imported .rbxm: "${reportData.name}" (${reportData.class}, ${reportData.descendants} descendants).`,
+      reportData
+    );
     await ctx.runMutation(internal.store.pushLog, {
-      action: "insert_rbxm_report", user: resolvedUser,
-      details: JSON.stringify({
-        success: report.success, name: report.names[0] ?? "", count: report.count,
-      }),
+      action: "insert_rbxm_result", user: resolvedUser, details: reportData.name,
     });
-    return jsonResp({
-      ok: true, status: "ok",
-      success:    report.success,
-      count:      report.count,
-      names:      report.names,
-      parentPath: report.parentPath,
-    }, 200, cors);
+    return jsonResp({ ok: true, status: "ok", name: reportData.name }, 200, cors);
+  }
+
+  // ── instance_data (dari action read_instance) ─────────────────────────────
+  // Handler untuk report data instance yang dibaca plugin read_instance.
+  if (rawAction === "instance_data") {
+    const reportData = {
+      name:       sanStr(body["name"] ?? "", 100),
+      class:      sanStr(body["class"] ?? "", 50),
+      fullPath:   sanStr(body["fullPath"] ?? body["full_path"] ?? "", 200),
+      properties: sanObj(body["properties"]),
+      attributes: sanObj(body["attributes"]),
+      childCount: sanInt(body["childCount"] ?? body["child_count"], 0, 0, 99_999),
+      children:   sanArr(body["children"], 100),
+      updatedAt:  Date.now(),
+    };
+    await saveData(ctx, resolvedUser, "instance_data", reportData);
+    await pushAiFeed(
+      ctx, resolvedUser, "instance_data",
+      `Read instance "${reportData.name}" (${reportData.class}, ${reportData.childCount} children).`,
+      reportData
+    );
+    await ctx.runMutation(internal.store.pushLog, {
+      action: "instance_data", user: resolvedUser, details: reportData.name,
+    });
+    return jsonResp({ ok: true, status: "ok", name: reportData.name }, 200, cors);
   }
 
   // ── workspace_scan ────────────────────────────────────────────────────────
@@ -1503,7 +1471,7 @@ async function handlePost(
       "module_list_report", "terrain_materials_report", "runcode_report",
       "expression_report", "query_report", "mention_report",
       "plugin_error_report", "script_list_report", "script_lines_report",
-      "instance_data_report", "insert_rbxm_report",
+      "insert_asset_result", "insert_rbxm_result", "instance_data",
       // Session management
       "plugin_connect", "plugin_disconnect",
       // Dispatch actions (backend → plugin via queue)
@@ -1513,7 +1481,7 @@ async function handlePost(
       "create_instance", "create_script", "edit_script", "set_properties",
       "rename", "delete", "parent", "list", "insert_asset", "insert_rbxm",
       "play_test", "run_test", "stop_test", "terrain", "undo", "redo",
-      "resolve_mention", "run_code", "delay", "none", "read_instance",
+      "resolve_mention", "read_instance", "run_code", "delay", "none",
       // Utility
       "ping", "get_info", "get_all_actions", "status", "reset",
       "set_project", "set_webhook",
