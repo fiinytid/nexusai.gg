@@ -1,4 +1,21 @@
+================================================================
+Publish
+================================================================
 ## Publish
 git add .
 git commit -m "fix: Update All Components And Fix Error"
 git push origin main --force
+
+## Dev
+npm run Dev
+
+## Build
+npm run build
+================================================================
+Convex
+================================================================
+## deploy
+npx convex deploy
+
+## Dev
+npx convex dev

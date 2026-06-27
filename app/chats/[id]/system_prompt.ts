@@ -170,8 +170,8 @@ Defaults: UI→Vol 0.5 / Looped false / parent SoundService
 ## TOOLBOX MODELS — insert via insert_asset, never write IDs in prose
 ${chunk(MODEL_ASSETS, 3).map(row => row.join(" | ")).join("\n")}
 Usage: {"action":"insert_asset","asset_id":"<ID>","name":"...","parent":"Workspace","anchored":true}
-Need a different asset than the ones above? Ask the user for an asset ID/link —
-there is no keyword search; get_toolbox_asset only looks up an ID you already have.`;
+Need something else? Use search_toolbox with a keyword query instead of asking
+the user for an ID — pick the best match from results, then insert_asset.`;
 
   // ── 7. Actions Reference ────────────────────────────────────────────────────
   const actionsRef = `\
@@ -197,7 +197,7 @@ WORKFLOW:
   Inspect game : list(parent?) → check structure → read_script(name) → edit_script(name, source)
   Fix / debug  : get_output() → read_script(name) → edit_script(name, source)
   Insert model : insert_asset(asset_id) — use an ID from the TOOLBOX MODELS table above
-  Verify asset : get_toolbox_asset(assetId) → confirm name/type before insert_asset, if user gave an ID
+  Verify asset : search_toolbox(query) → pick id from results before insert_asset
   ALWAYS read_script before edit_script. ALWAYS list before read_script if script name unknown.
 
 ACTIONS:
@@ -220,15 +220,15 @@ ACTIONS:
   delete(name?, names?, class?, parent?, children_only?)
   parent(name?, names?, parent)
   insert_asset(asset_id, name?, parent?, position?, anchored?)
-    → Use IDs from TOOLBOX MODELS table above, or an ID confirmed via get_toolbox_asset.
-  get_toolbox_asset(assetId)
-    → Look up details for ONE Roblox Toolbox/Creator Store asset by numeric ID
-      (name, type, creator, votes, thumbnail). No Studio connection required.
-    → No keyword search exists. If the user wants to find an asset by description
-      ("a coin", "a house"), ask them for an asset ID or Creator Store link instead.
-    → Result: {id, name, description, category, creator, creatorVerified,
-               upVotes, downVotes, upVotePercent, thumbnailUrl, assetUrl}
-    → Optionally follow up with insert_asset using the same id, if the user wants it added.
+    → Use IDs from TOOLBOX MODELS table above, or an id returned by search_toolbox.
+  search_toolbox(query, category?, limit?)
+    → Keyword search across the Roblox Toolbox/Creator Store. No Studio connection required.
+    → category (optional): Model | Decal | Mesh | MeshPart | Plugin | Audio | Video | FontFamily | Animation
+    → Use this whenever the user wants an asset by description ("a coin", "a house",
+      "footstep sfx") instead of asking them for an asset ID.
+    → Result: list of {id, name} matches (plus type/creator/price when available).
+    → Pick the best match, then follow up with insert_asset using that id.
+    → (get_toolbox_asset is accepted as an alias of this same action.)
   ${ptEnabled
     ? `play_test(action?, duration?, server_script?, local_script?)
     action: start (default) | stop | max 60s (default ${ptDur}s)
