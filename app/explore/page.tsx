@@ -187,6 +187,9 @@ body::before{
   border-color:rgba(0,212,255,.32);transform:translateY(-3px);
   box-shadow:0 16px 40px rgba(0,0,0,.45);
 }
+.prompt-card:focus-visible{
+  outline:2px solid var(--cyan);outline-offset:2px;
+}
 
 .prompt-media{
   width:100%;aspect-ratio:16/9;background:var(--bg3);position:relative;overflow:hidden;
@@ -320,12 +323,16 @@ body::before{
   .prompts-wrapper{padding:14px 16px 70px}
   .prompts-grid{grid-template-columns:1fr;gap:12px}
   .btn{height:36px;padding:0 14px;font-size:11px}
+  .nx-toast{left:16px;right:16px;max-width:none;bottom:16px}
 }
 @media(min-width:481px) and (max-width:768px){
   .explore-header{padding:16px 20px}
   .search-bar-wrapper{padding:18px 20px 0}
   .prompts-wrapper{padding:18px 20px 70px}
-  .prompts-grid{grid-template-columns:1fr;gap:14px}
+  .prompts-grid{grid-template-columns:repeat(auto-fill,minmax(260px,1fr));gap:14px}
+}
+@media(min-width:769px) and (max-width:1024px){
+  .prompts-grid{grid-template-columns:repeat(auto-fill,minmax(280px,1fr))}
 }
 @media(min-width:769px){
   .modal-overlay{align-items:center;padding:24px}
@@ -390,7 +397,12 @@ export default function ExplorePage() {
   const [selectedPrompt, setSelectedPrompt] = useState<Prompt | null>(null)
   const [copiedId,       setCopiedId]       = useState<string | null>(null)
 
-  const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null)
+  const debounceRef  = useRef<ReturnType<typeof setTimeout> | null>(null)
+  const abortRef      = useRef<AbortController | null>(null)
+  // FIX: race-condition guard — kalau user ketik cepat, fetch lama yang selesai
+  // belakangan bisa menimpa hasil fetch baru. reqIdRef memastikan hanya respons
+  // dari request TERAKHIR yang dipakai untuk update state.
+  const reqIdRef      = useRef(0)
 
   // ── Auth check ───────────────────────────────────────────────────────────
   useEffect(() => {
@@ -411,27 +423,46 @@ export default function ExplorePage() {
 
   // ── Fetch prompts ────────────────────────────────────────────────────────
   const fetchPrompts = useCallback(async (q: string) => {
+    const myReqId = ++reqIdRef.current
+
+    // Batalkan request sebelumnya yang masih pending, kalau ada
+    if (abortRef.current) abortRef.current.abort()
+    const controller = new AbortController()
+    abortRef.current = controller
+
     setLoadingPrompts(true)
     try {
       const params = new URLSearchParams()
       if (q.trim()) params.set('q', q.trim())
       params.set('limit', String(MAX_LIST_LIMIT))
-      const res = await fetch(`/api/explore?${params.toString()}`)
+      const res = await fetch(`/api/explore?${params.toString()}`, { signal: controller.signal })
       if (!res.ok) throw new Error('fetch failed')
       const data = await res.json()
-      setPrompts(data.prompts || [])
+
+      // Hanya terapkan hasil kalau ini masih request terbaru
+      if (myReqId === reqIdRef.current) {
+        setPrompts(Array.isArray(data.prompts) ? data.prompts : [])
+      }
     } catch (e) {
+      if (e instanceof DOMException && e.name === 'AbortError') return
       console.error('fetchPrompts error:', e)
-      setPrompts([])
+      if (myReqId === reqIdRef.current) setPrompts([])
     } finally {
-      setLoadingPrompts(false)
-      setSearching(false)
+      if (myReqId === reqIdRef.current) {
+        setLoadingPrompts(false)
+        setSearching(false)
+      }
     }
   }, [])
 
   useEffect(() => {
     if (!loading) fetchPrompts(searchTerm)
   }, [loading, searchTerm, fetchPrompts])
+
+  // Cleanup: batalkan fetch yang masih berjalan saat komponen unmount
+  useEffect(() => () => {
+    if (abortRef.current) abortRef.current.abort()
+  }, [])
 
   // ── Debounced search ─────────────────────────────────────────────────────
   function handleSearchChange(value: string) {
@@ -474,6 +505,30 @@ export default function ExplorePage() {
       body: JSON.stringify({ id: prompt.id }),
     }).catch(() => {})
   }
+
+  function closeDetail() {
+    setShowDetail(false)
+  }
+
+  // FIX: Escape key untuk menutup modal — penting untuk UX keyboard/aksesibilitas
+  useEffect(() => {
+    if (!showDetail) return
+    function onKeyDown(e: KeyboardEvent) {
+      if (e.key === 'Escape') closeDetail()
+    }
+    window.addEventListener('keydown', onKeyDown)
+    return () => window.removeEventListener('keydown', onKeyDown)
+  }, [showDetail])
+
+  // FIX: kunci scroll body saat modal terbuka — mencegah "scroll ganda"
+  // (body + modal) yang mengganggu terutama di HP/tablet
+  useEffect(() => {
+    if (showDetail) {
+      const prevOverflow = document.body.style.overflow
+      document.body.style.overflow = 'hidden'
+      return () => { document.body.style.overflow = prevOverflow }
+    }
+  }, [showDetail])
 
   async function copyPrompt(prompt: Prompt) {
     try {
@@ -580,6 +635,14 @@ export default function ExplorePage() {
                   key={prompt.id}
                   className="prompt-card"
                   onClick={() => openDetail(prompt)}
+                  role="button"
+                  tabIndex={0}
+                  onKeyDown={e => {
+                    if (e.key === 'Enter' || e.key === ' ') {
+                      e.preventDefault()
+                      openDetail(prompt)
+                    }
+                  }}
                   style={{ animationDelay: `${Math.min(i * 40, 300)}ms` }}
                 >
                   {session && prompt.author === session.user.username.toLowerCase() && prompt.gifUrl && (
@@ -589,7 +652,7 @@ export default function ExplorePage() {
                   <div className="prompt-media">
                     {prompt.gifUrl ? (
                       <>
-                        <img src={prompt.gifUrl} alt="" loading="lazy" />
+                        <img src={prompt.gifUrl} alt={prompt.title || 'Prompt preview'} loading="lazy" />
                         <span className="media-badge"><I.film />GIF</span>
                       </>
                     ) : (
@@ -621,21 +684,24 @@ export default function ExplorePage() {
         {/* ── DETAIL MODAL ── */}
         <div
           className={`modal-overlay${showDetail ? ' show' : ''}`}
-          onClick={() => setShowDetail(false)}
+          onClick={closeDetail}
+          role="dialog"
+          aria-modal="true"
+          aria-hidden={!showDetail}
         >
           <div className="modal-content" onClick={e => e.stopPropagation()}>
             {selectedPrompt && (
               <>
                 <div className="modal-header">
                   <div className="modal-title">Prompt Details</div>
-                  <button className="modal-close" onClick={() => setShowDetail(false)} aria-label="Close">
+                  <button className="modal-close" onClick={closeDetail} aria-label="Close">
                     <I.cross />
                   </button>
                 </div>
                 <div className="modal-body">
                   {selectedPrompt.gifUrl && (
                     <div className="detail-media">
-                      <img src={selectedPrompt.gifUrl} alt="" />
+                      <img src={selectedPrompt.gifUrl} alt={selectedPrompt.title || 'Prompt preview'} />
                     </div>
                   )}
                   <div className="detail-title">{selectedPrompt.title}</div>
@@ -654,7 +720,7 @@ export default function ExplorePage() {
                       ? <><I.check />Copied</>
                       : <><I.copy />Copy Prompt</>}
                   </button>
-                  <button className="btn" onClick={() => setShowDetail(false)}>Close</button>
+                  <button className="btn" onClick={closeDetail}>Close</button>
                 </div>
               </>
             )}

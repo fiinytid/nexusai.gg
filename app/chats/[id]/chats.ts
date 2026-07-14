@@ -1404,18 +1404,18 @@ async function _sendInner(): Promise<void> {
     if(_toolboxCmds.length){
       const toolboxResult=await processToolboxActions(_toolboxCmds)
       if(toolboxResult.readResults.length) combinedReadResults.push(...toolboxResult.readResults)
-      if(toolboxResult.summary?.length) combinedSummary=(combinedSummary||[]).concat(toolboxResult.summary)
+      if(toolboxResult.summary?.length) combinedSummary=(combinedSummary||([] as string[])).concat(toolboxResult.summary)
     }
     if(!S.gen||_localCancelSignal?.aborted){_resetGenState();const cv3=S.convs.find(x=>x.id===S.curConv);if(cv3){const cancelMsg: ConvMsg={role:'ai',content:'Process cancelled.',time:Date.now()};cv3.msgs.push(cancelMsg);appendMsg(cancelMsg)};saveS();return}
 
     if(studioConnected&&_studioCmds.length){
       const injectResult=await autoInjectToStudio(aiText,lastPrompt)
-      if(injectResult.summary?.length) combinedSummary=(combinedSummary||[]).concat(injectResult.summary)
+      if(injectResult.summary?.length) combinedSummary=(combinedSummary||([] as string[])).concat(injectResult.summary)
       if(injectResult.readResults.length) combinedReadResults.push(...injectResult.readResults)
       if(!S.gen||_localCancelSignal?.aborted){_resetGenState();const cv4=S.convs.find(x=>x.id===S.curConv);if(cv4){const cancelMsg: ConvMsg={role:'ai',content:'Process cancelled.',time:Date.now()};cv4.msgs.push(cancelMsg);appendMsg(cancelMsg)};saveS();return}
     }
 
-    studioSummary = combinedSummary?.length ? (studioSummary||[]).concat(combinedSummary) : studioSummary
+    studioSummary = combinedSummary?.length ? (studioSummary||([] as string[])).concat(combinedSummary) : studioSummary
     displayText=stripAllCode(aiText)
     if(combinedReadResults.length>0){
       const readBlocks=combinedReadResults.map(r=>{

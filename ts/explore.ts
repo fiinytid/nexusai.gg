@@ -55,22 +55,22 @@ interface SbRowWrite {
 // CONSTANTS
 // ═══════════════════════════════════════════════════════════════════════════
 
-const TABLE             = 'nexus_prompts' as const;
-const TIMEOUT_OP         = 8_000;
-const MAX_RETRY          = 3;
-const SB_RETRY_COOLDOWN  = 30_000;
+const TABLE              = 'nexus_prompts' as const;
+const TIMEOUT_OP          = 8_000;
+const MAX_RETRY           = 3;
+const SB_RETRY_COOLDOWN   = 30_000;
 
-const MAX_TITLE_LEN      = 80;
-const MIN_TITLE_LEN      = 3;
-const MAX_CONTENT_LEN    = 12_000;
-const MIN_CONTENT_LEN    = 10;
-const MAX_LIST_LIMIT     = 60;
-const DEFAULT_LIMIT      = 30;
+const MAX_TITLE_LEN       = 80;
+const MIN_TITLE_LEN       = 3;
+const MAX_CONTENT_LEN     = 12_000;
+const MIN_CONTENT_LEN     = 10;
+const MAX_LIST_LIMIT      = 60;
+const DEFAULT_LIMIT       = 30;
 
 // Rate limit: per user, max publish per menit
 // Auto-publish diberi sedikit lebih longgar karena dipicu sistem, bukan manual
-const RL_PUBLISH_MANUAL  = 10;  // per menit per user (manual)
-const RL_PUBLISH_AUTO    = 30;  // per menit per user (auto dari chats.ts)
+const RL_PUBLISH_MANUAL   = 10;  // per menit per user (manual)
+const RL_PUBLISH_AUTO     = 30;  // per menit per user (auto dari chats.ts)
 
 // ═══════════════════════════════════════════════════════════════════════════
 // UTILITIES
@@ -189,14 +189,23 @@ async function getSB(): Promise<SupabaseClient | null> {
 // SUPABASE OPERATIONS
 // ═══════════════════════════════════════════════════════════════════════════
 
+// FIX: sebelumnya query builder di-cast ganda (as unknown as {eq:...} as typeof q)
+// yang rapuh — hasil .eq() pada supabase-js punya tipe berbeda dari query awal
+// (PostgrestFilterBuilder vs PostgrestQueryBuilder), sehingga assignment paksa
+// bisa membuat method chain berikutnya (select/order) tidak ter-resolve dengan benar
+// di beberapa versi lib, dan menyembunyikan error tipe yang sesungguhnya berguna.
+// Solusi: bangun chain secara langsung tanpa cast berlapis.
 async function sbListPrompts(authorFilter?: string): Promise<Record<string, unknown>[]> {
   const sb = await getSB();
   if (!sb) return [];
   try {
-    let q = sb.from(TABLE).select('*').order('created_at', { ascending: false });
-    if (authorFilter) q = (q as unknown as { eq: (col: string, val: string) => typeof q }).eq('author', authorFilter) as typeof q;
+    const base = sb.from(TABLE).select('*');
+    const queryPromise = authorFilter
+      ? base.eq('author', authorFilter).order('created_at', { ascending: false })
+      : base.order('created_at', { ascending: false });
+
     const raw = await withTimeout(
-      (q as unknown) as Promise<unknown>,
+      queryPromise as unknown as Promise<unknown>,
       TIMEOUT_OP * 2,
       'sbListPrompts',
     );
@@ -259,18 +268,40 @@ async function sbDeletePrompt(id: string, authorId: string): Promise<boolean> {
   return true;
 }
 
+// FIX: RPC increment_prompt_uses mungkin belum ada di semua environment/DB.
+// Sebelumnya kalau RPC gagal, uses count diam-diam tidak pernah bertambah
+// (silent no-op selamanya). Sekarang ada fallback manual: baca uses saat ini,
+// lalu update +1. Tetap non-fatal — kalau fallback juga gagal, hanya di-log.
 async function sbIncrementUses(id: string): Promise<void> {
   const sb = await getSB();
   if (!sb) return;
   try {
-    await withTimeout(
+    const raw = await withTimeout(
       (sb.rpc('increment_prompt_uses', { prompt_id: id }) as unknown) as Promise<unknown>,
       TIMEOUT_OP,
       'sbIncrementUses',
     );
+    const { error } = raw as SbRowWrite;
+    if (error) throw new Error(formatSBError(error));
   } catch (e: unknown) {
-    // Non-critical
-    console.warn('[explore] sbIncrementUses failed (non-fatal):', e instanceof Error ? e.message : e);
+    console.warn('[explore] sbIncrementUses RPC failed, trying manual fallback:', e instanceof Error ? e.message : e);
+    try {
+      const cur = await withTimeout(
+        (sb.from(TABLE).select('uses').eq('id', id).single() as unknown) as Promise<unknown>,
+        TIMEOUT_OP,
+        'sbIncrementUses:read',
+      );
+      const { data, error: readErr } = cur as { data: { uses?: number } | null; error: unknown };
+      if (readErr || !data) return;
+      const nextUses = Number(data.uses ?? 0) + 1;
+      await withTimeout(
+        (sb.from(TABLE).update({ uses: nextUses }).eq('id', id) as unknown) as Promise<unknown>,
+        TIMEOUT_OP,
+        'sbIncrementUses:write',
+      );
+    } catch (e2: unknown) {
+      console.warn('[explore] sbIncrementUses fallback failed (non-fatal):', e2 instanceof Error ? e2.message : e2);
+    }
   }
 }
 
@@ -302,9 +333,9 @@ function validatePublishBody(body: PublishBody): { error: string } | {
   const content = sanitizeStr(String(body.content ?? ''), MAX_CONTENT_LEN).trim();
   const gifUrl  = body.gifUrl ? sanitizeGifUrl(body.gifUrl) : null;
 
-  if (title.length < MIN_TITLE_LEN)   return { error: `Title must be at least ${MIN_TITLE_LEN} characters.` };
+  if (title.length < MIN_TITLE_LEN)     return { error: `Title must be at least ${MIN_TITLE_LEN} characters.` };
   if (content.length < MIN_CONTENT_LEN) return { error: `Prompt must be at least ${MIN_CONTENT_LEN} characters.` };
-  if (body.gifUrl && !gifUrl)          return { error: 'gifUrl must be a valid https URL.' };
+  if (body.gifUrl && !gifUrl)           return { error: 'gifUrl must be a valid https URL.' };
 
   return { title, content, gifUrl };
 }
@@ -338,7 +369,10 @@ function errResponse(res: AdaptedResponse, e: unknown): AdaptedResponse {
 
 const handler: HandlerFn = async (req: AdaptedRequest, res: AdaptedResponse) => {
   setCors(res);
-  if (req.method === 'OPTIONS') { res.status(200).end(); return; }
+  // FIX: res.end() kadang tidak tersedia/konsisten di semua adapter AdaptedResponse
+  // (tergantung implementasi route.ts). Menggunakan .json({}) lebih portable dan
+  // tetap mengirim status 200 dengan body valid untuk preflight OPTIONS.
+  if (req.method === 'OPTIONS') { return res.status(200).json({}); }
 
   const ip: string = (req.headers['x-forwarded-for'] ?? '').split(',')[0].trim() || 'unknown';
   if (!checkRateLimit(`explore:${ip}`, 120)) {
@@ -358,9 +392,10 @@ const handler: HandlerFn = async (req: AdaptedRequest, res: AdaptedResponse) => 
       let prompts  = all.map(rowToPrompt);
 
       const q     = normalizeKey(req.query['q'] ?? '');
+      const rawLimit = parseInt(String(req.query['limit'] ?? DEFAULT_LIMIT), 10);
       const limit = Math.min(
         MAX_LIST_LIMIT,
-        Math.max(1, parseInt(String(req.query['limit'] ?? DEFAULT_LIMIT), 10) || DEFAULT_LIMIT),
+        Math.max(1, Number.isFinite(rawLimit) ? rawLimit : DEFAULT_LIMIT),
       );
 
       if (q) {
