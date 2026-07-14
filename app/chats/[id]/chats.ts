@@ -20,17 +20,16 @@ interface AppState {
   playTestEnabled: boolean; playTestDuration: number
 }
 interface AiFeedEntry  { id: string; username: string; kind: string; summary: string; data: unknown; ts: number; read: boolean }
+interface ReadResult   { name: string; source: string; class: string; lineCount: number }
+interface ApiMsg       { role: string; content: string | unknown[] }
 
 // ── SECURITY ──────────────────────────────────────────────────────────────────
-const _csrfNonce = (function () {
-  try { return Array.from(crypto.getRandomValues(new Uint8Array(20))).map(b => b.toString(16).padStart(2,'0')).join('') }
-  catch { return Math.random().toString(36).slice(2) + Date.now().toString(36) }
-})()
-
-function generateFreshNonce(): string {
-  try { return Array.from(crypto.getRandomValues(new Uint8Array(20))).map(b => b.toString(16).padStart(2,'0')).join('') }
+function _randomHex(bytes: number): string {
+  try { return Array.from(crypto.getRandomValues(new Uint8Array(bytes))).map(b => b.toString(16).padStart(2, '0')).join('') }
   catch { return Math.random().toString(36).slice(2) + Date.now().toString(36) }
 }
+const _csrfNonce = _randomHex(20)
+function generateFreshNonce(): string { return _randomHex(20) }
 
 let _adminToken = ''
 function generateAdminToken(): string {
@@ -77,21 +76,19 @@ const IMAGE_COST_MULTIPLIER = 0.15
 const DAILY_MS = 24 * 3600_000
 const MAX_DAILY_CATCHUP_DAYS = 7
 const _NEW_CHAT_DEBOUNCE = 800
-const _defaultModel = { id: 'gemini-3.5-flash', prov: 'gemini', cost: 3, label: 'Gemini 3.5 Flash' }
+const _defaultModel: ModelEntry = { id: 'gemini-3.5-flash', prov: 'gemini', cost: 3, label: 'Gemini 3.5 Flash' }
 
-// Known Toolbox categories accepted by the updated /toolboxService endpoint.
-// Kept loose/exported so callers (and step-label code) can validate or
-// normalize a user-facing category name without guessing blindly.
-const TOOLBOX_CATEGORIES = [
-  'Model', 'Decal', 'Mesh', 'MeshPart', 'Plugin', 'Audio', 'Video',
-  'FontFamily', 'Animation',
-] as const
+// Max automatic follow-up rounds after a read_script/read_instance/toolbox
+// search. Prevents an infinite loop if the AI keeps just reading forever.
+const MAX_FOLLOWUP_ROUNDS = 3
+
+// Toolbox categories accepted by /toolboxService
+const TOOLBOX_CATEGORIES = ['Model', 'Decal', 'Mesh', 'MeshPart', 'Plugin', 'Audio', 'Video', 'FontFamily', 'Animation'] as const
 type ToolboxCategory = typeof TOOLBOX_CATEGORIES[number]
 function _normalizeToolboxCategory(input: unknown): ToolboxCategory | undefined {
   if (!input || typeof input !== 'string') return undefined
   const lower = input.trim().toLowerCase()
-  const found = TOOLBOX_CATEGORIES.find(c => c.toLowerCase() === lower)
-  return found
+  return TOOLBOX_CATEGORIES.find(c => c.toLowerCase() === lower)
 }
 
 // ── GLOBAL STATE ──────────────────────────────────────────────────────────────
@@ -113,7 +110,7 @@ const _docsCache: Record<string, unknown> = {}
 interface ChipData { id: number; label: string; detail: string; state: 'running'|'done'|'error'|'info'|'pending'; expanded: boolean }
 let _chipWrapEl: HTMLElement | null = null
 let _chipListEl: HTMLElement | null = null
-let _chipMap = new Map<number, ChipData>()
+const _chipMap = new Map<number, ChipData>()
 let _chipId = 0
 const _stepMeta = new Map<number, StepMeta>()
 
@@ -200,10 +197,7 @@ function _isAbortError(e: unknown): boolean {
   const err = e as { name?: string; message?: string }
   return err.name==='AbortError'||String(err.message||'').includes('AbortError')
 }
-function _genRequestId(): string {
-  try { return Array.from(crypto.getRandomValues(new Uint8Array(12))).map(b => b.toString(16).padStart(2,'0')).join('') }
-  catch { return Date.now().toString(36)+Math.random().toString(36).slice(2) }
-}
+function _genRequestId(): string { return _randomHex(12) }
 function safeMarked(md: string): string {
   try {
     const w = window as unknown as { marked?: { parse: (s: string) => string } }
@@ -213,22 +207,10 @@ function safeMarked(md: string): string {
 }
 
 // ── SCROLL HELPER ─────────────────────────────────────────────────────────────
-// Centralized "scroll the chat to the bottom" helper. On long conversations
-// the #msgs container's scrollHeight can be momentarily stale right after a
-// DOM mutation (the browser hasn't finished layout yet), so a single
-// synchronous `scrollTop = scrollHeight` right after appending a node can
-// silently land short of the real bottom — which is what made the thinking
-// chips look "stuck"/unreachable once there was enough chat history above
-// them. We fix this by:
-//   1) doing an immediate scroll (covers the common case, no visible delay)
-//   2) re-asserting it on the next animation frame (covers the case where
-//      layout/reflow hadn't settled yet)
-//   3) re-asserting it once more after a short timeout (covers async image
-//      loads / font swaps / highlight.js reflow that can grow the bubble
-//      height after the frame above already ran)
-// `force` ignores any "user has scrolled up to read history" check — we
-// don't currently track that, so this always pins to bottom, matching the
-// rest of the app's existing scroll behavior.
+// #msgs' scrollHeight can be momentarily stale right after a DOM mutation
+// (layout hasn't settled yet), so a single scrollTop assignment can land
+// short of the real bottom. Re-assert across a frame + two timeouts to
+// cover late reflow (images, fonts, syntax highlighting).
 function scrollMsgsToBottom(): void {
   const c = document.getElementById('msgs')
   if (!c) return
@@ -293,6 +275,7 @@ const UI = {
   testRunning:     'Running play_test',
   projectLabel:    'Project',
   toolboxSearching:'Searching Roblox Toolbox',
+  continuing:      'Continuing...',
   installSteps: [
     'Download from <a href="https://create.roblox.com/store/asset/91870814099475/NEXUS-AI" target="_blank" style="color:var(--cyan)">Creator Store</a>',
     'Save to: <code>C:\\Users\\[Name]\\AppData\\Local\\Roblox\\Plugins\\</code>',
@@ -313,12 +296,10 @@ function _injectChipStyles(): void {
   if (document.getElementById('nx-chip-styles')) return
   const s = document.createElement('style'); s.id = 'nx-chip-styles'
   s.textContent = `
-/* ── Thinking wrapper ── */
 .think-wrap { display:flex; gap:9px; animation:mi .22s ease; margin-bottom:2px; }
 .think-body { display:flex; flex-direction:column; gap:4px; min-width:0; max-width:min(480px,88vw); }
 .think-sender { font-size:9px; color:var(--dim); display:flex; align-items:center; gap:5px; padding:0 2px; margin-bottom:2px; }
 
-/* ── Each chip row ── */
 .chip-row {
   display:flex; align-items:center; gap:7px;
   padding:6px 10px 6px 8px;
@@ -333,7 +314,6 @@ function _injectChipStyles(): void {
 .chip-row.error   { background:rgba(255,45,107,.03); border-color:rgba(255,45,107,.15); }
 .chip-row.info    { background:rgba(255,214,0,.03); border-color:rgba(255,214,0,.12); }
 
-/* ── Chip icon ── */
 .chip-ic { flex-shrink:0; display:flex; align-items:center; justify-content:center; width:16px; height:16px; }
 .chip-spin { width:12px; height:12px; border:1.5px solid rgba(0,229,255,.2); border-top-color:var(--cyan); border-radius:50%; animation:spin .7s linear infinite; }
 .chip-check { color:var(--green); }
@@ -341,18 +321,15 @@ function _injectChipStyles(): void {
 .chip-info  { color:var(--yellow); }
 .chip-pend  { width:8px; height:8px; border-radius:50%; border:1.5px solid var(--dim); }
 
-/* ── Chip label ── */
 .chip-label { flex:1; min-width:0; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; font-size:11px; line-height:1.3; }
 .chip-row.running .chip-label { color:var(--cyan); }
 .chip-row.done    .chip-label { color:var(--dim); }
 .chip-row.error   .chip-label { color:var(--pink); }
 .chip-row.info    .chip-label { color:var(--yellow); }
 
-/* ── Expand chevron ── */
 .chip-chevron { flex-shrink:0; color:var(--dim); transition:transform .18s; width:10px; height:10px; }
 .chip-row.expanded .chip-chevron { transform:rotate(90deg); }
 
-/* ── Expanded detail ── */
 .chip-detail {
   display:none; padding:6px 10px 7px 34px;
   font-size:10px; color:var(--dim); line-height:1.6;
@@ -362,7 +339,6 @@ function _injectChipStyles(): void {
 .chip-detail.show { display:block; }
 @keyframes chipExpand { from{opacity:0;transform:translateY(-3px)} to{opacity:1;transform:none} }
 
-/* ── Cancel button ── */
 .chip-cancel-row { padding-top:2px; }
 .chip-cancel-btn {
   display:inline-flex; align-items:center; gap:5px;
@@ -374,7 +350,6 @@ function _injectChipStyles(): void {
 }
 .chip-cancel-btn:hover { background:rgba(255,45,107,.18); }
 
-/* ── Suggestion chips ── */
 .suggestion-chips { display:flex; flex-direction:column; gap:5px; margin-top:10px; margin-bottom:2px; }
 .suggestion-chip {
   display:flex; align-items:center; gap:8px; padding:8px 12px 8px 10px;
@@ -394,7 +369,6 @@ function _injectChipStyles(): void {
 .suggestion-chip:active { transform:scale(.97); }
 .suggestion-chip.sending { opacity:.5; pointer-events:none; }
 
-/* ── Clarify ── */
 .clarify-block { margin-top:10px; padding:10px 12px; border-radius:10px; background:rgba(0,229,255,.05); border:1px solid rgba(0,229,255,.18); }
 .clarify-question { font-size:12px; color:var(--text); font-weight:600; margin-bottom:8px; line-height:1.5; }
 .clarify-options { display:flex; flex-wrap:wrap; gap:7px; }
@@ -412,7 +386,6 @@ function _injectChipStyles(): void {
 .clarify-other-btn:hover:not(:disabled) { background:rgba(0,229,255,.2); }
 .clarify-other-btn:disabled { opacity:.35; cursor:default; }
 
-/* ── Toolbox asset result card ── */
 .toolbox-result-list { display:flex; flex-direction:column; gap:5px; margin-top:2px; }
 .toolbox-result-item { display:flex; align-items:center; gap:8px; padding:6px 8px; border-radius:7px; background:rgba(0,229,255,.04); border:1px solid rgba(0,229,255,.10); }
 .toolbox-result-thumb { width:30px; height:30px; border-radius:6px; object-fit:cover; flex-shrink:0; background:rgba(0,229,255,.08); }
@@ -420,7 +393,6 @@ function _injectChipStyles(): void {
 .toolbox-result-name { font-size:10.5px; color:var(--text); white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
 .toolbox-result-meta { font-size:9px; color:var(--dim); margin-top:1px; }
 
-/* ── UI fix ── */
 .inp-l { align-items:center!important; }
 .inp-l > .ib, .inp-l > label.ib, .inp-l > button.ib { display:inline-flex!important; align-items:center!important; justify-content:center!important; vertical-align:middle!important; line-height:0!important; box-sizing:border-box!important; margin:0!important; }
 .inp-l > label.ib { padding:0!important; }
@@ -429,7 +401,6 @@ function _injectChipStyles(): void {
 .ib-disabled svg { opacity:.55; }
 .ib-disabled::after { content:''; position:absolute; left:5px; right:5px; top:50%; height:1.5px; background:var(--pink); transform:rotate(-38deg); border-radius:2px; opacity:.85; pointer-events:none; }
 
-/* ── Model dropdown ── */
 .model-dd { padding:8px!important; border-radius:14px!important; border:1px solid rgba(0,229,255,.22)!important; box-shadow:0 24px 70px rgba(0,0,0,.92)!important; background:linear-gradient(180deg,rgba(10,11,34,.99),rgba(6,7,26,.99))!important; }
 .model-dd .mg { padding:9px 8px 6px!important; font-size:8px!important; letter-spacing:2.2px!important; font-weight:800!important; color:rgba(184,207,255,.4)!important; }
 .model-dd .mo { padding:9px 10px!important; border-radius:10px!important; gap:11px!important; min-height:52px!important; border:1px solid transparent!important; transition:background .12s,border-color .12s!important; }
@@ -447,7 +418,6 @@ function _injectChipStyles(): void {
 .studio-summary-item { color:var(--text); padding:1px 0; display:flex; align-items:center; gap:5px; }
 .studio-summary-dot { display:inline-block; width:6px; height:6px; border-radius:50%; background:var(--green); flex-shrink:0; }
 
-/* ── Responsive ── */
 @media (max-width:768px) {
   .think-body { max-width:calc(100vw - 60px); }
   .chip-row { min-height:40px!important; padding:7px 10px 7px 9px!important; }
@@ -468,17 +438,18 @@ function _injectChipStyles(): void {
 }
 
 // ── CHIP THINKING SYSTEM ──────────────────────────────────────────────────────
+function _chipIconHtml(state: ChipData['state']): string {
+  if (state==='running') return '<div class="chip-spin"></div>'
+  if (state==='done') return '<svg class="chip-check" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="20 6 9 17 4 12"/></svg>'
+  if (state==='error') return '<svg class="chip-err" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>'
+  if (state==='info') return '<svg class="chip-info" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>'
+  return '<div class="chip-pend"></div>'
+}
 function _renderChip(chip: ChipData): string {
   const cls = `chip-row ${chip.state}${chip.expanded?' expanded':''}`
-  let icHtml = ''
-  if (chip.state==='running') icHtml = '<div class="chip-spin"></div>'
-  else if (chip.state==='done') icHtml = '<svg class="chip-check" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="20 6 9 17 4 12"/></svg>'
-  else if (chip.state==='error') icHtml = '<svg class="chip-err" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>'
-  else if (chip.state==='info') icHtml = '<svg class="chip-info" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>'
-  else icHtml = '<div class="chip-pend"></div>'
   const chevron = chip.detail ? `<svg class="chip-chevron" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><polyline points="9 18 15 12 9 6"/></svg>` : ''
-  const detailHtml = chip.detail && chip.expanded ? `<div class="chip-detail show" id="cd_${chip.id}">${esc(chip.detail)}</div>` : chip.detail ? `<div class="chip-detail" id="cd_${chip.id}">${esc(chip.detail)}</div>` : ''
-  return `<div class="${cls}" id="chip_${chip.id}" onclick="window._toggleChip(${chip.id})"><div class="chip-ic">${icHtml}</div><div class="chip-label">${esc(chip.label)}</div>${chevron}</div>${detailHtml}`
+  const detailHtml = chip.detail ? `<div class="chip-detail${chip.expanded?' show':''}" id="cd_${chip.id}">${esc(chip.detail)}</div>` : ''
+  return `<div class="${cls}" id="chip_${chip.id}" onclick="window._toggleChip(${chip.id})"><div class="chip-ic">${_chipIconHtml(chip.state)}</div><div class="chip-label">${esc(chip.label)}</div>${chevron}</div>${detailHtml}`
 }
 
 function createThinkingBubble(): void {
@@ -498,10 +469,6 @@ function createThinkingBubble(): void {
   cb.onclick = cancelGen; cancelRow.appendChild(cb); body.appendChild(cancelRow)
   wrap.appendChild(body); c.appendChild(wrap)
   _chipWrapEl = wrap; _chipListEl = list; _chipMap.clear(); _chipId = 0
-  // Long chat history can mean #msgs hasn't finished laying out this new
-  // node yet on the same tick — scrollMsgsToBottom() re-asserts the scroll
-  // across a couple of frames/timeouts so the thinking bubble is always
-  // reachable instead of getting visually "stuck" above the fold.
   scrollMsgsToBottom()
 }
 
@@ -510,7 +477,7 @@ function removeThinkingBubble(): void {
   _chipWrapEl = null; _chipListEl = null; _chipMap.clear(); _stepMeta.clear()
 }
 
-function addChip(label: string, state: 'running'|'done'|'error'|'info'|'pending' = 'running', detail = ''): number {
+function addChip(label: string, state: ChipData['state'] = 'running', detail = ''): number {
   const id = ++_chipId
   const chip: ChipData = { id, label, detail, state, expanded: false }
   _chipMap.set(id, chip)
@@ -519,30 +486,26 @@ function addChip(label: string, state: 'running'|'done'|'error'|'info'|'pending'
   return id
 }
 
-function updateChip(id: number, state: 'running'|'done'|'error'|'info'|'pending', label?: string, detail?: string): void {
+function updateChip(id: number, state: ChipData['state'], label?: string, detail?: string): void {
   const chip = _chipMap.get(id); if (!chip) return
   if (label) chip.label = label
   if (detail !== undefined) chip.detail = detail
   chip.state = state
   const chipEl = document.getElementById(`chip_${id}`); if (!chipEl) return
   chipEl.className = `chip-row ${state}${chip.expanded?' expanded':''}`
-  const ic = chipEl.querySelector('.chip-ic')
-  if (ic) {
-    if (state==='running') ic.innerHTML = '<div class="chip-spin"></div>'
-    else if (state==='done') ic.innerHTML = '<svg class="chip-check" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="20 6 9 17 4 12"/></svg>'
-    else if (state==='error') ic.innerHTML = '<svg class="chip-err" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>'
-    else if (state==='info') ic.innerHTML = '<svg class="chip-info" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>'
-  }
+  const ic = chipEl.querySelector('.chip-ic'); if (ic) ic.innerHTML = _chipIconHtml(state)
   const lbl = chipEl.querySelector('.chip-label'); if (lbl && label) lbl.textContent = label
-  if (detail !== undefined) { let dd = document.getElementById(`cd_${id}`); if (!dd && detail && chipEl.parentNode) { dd = document.createElement('div'); dd.className = 'chip-detail'; dd.id = `cd_${id}`; chipEl.parentNode.insertBefore(dd, chipEl.nextSibling) }; if (dd) dd.textContent = detail }
+  if (detail !== undefined) {
+    let dd = document.getElementById(`cd_${id}`)
+    if (!dd && detail && chipEl.parentNode) { dd = document.createElement('div'); dd.className = 'chip-detail'; dd.id = `cd_${id}`; chipEl.parentNode.insertBefore(dd, chipEl.nextSibling) }
+    if (dd) dd.textContent = detail
+  }
   scrollMsgsToBottom()
 }
 
 function finalizeChips(): void {
   document.getElementById('chipCancel')?.remove()
-  _chipMap.forEach((chip, id) => {
-    if (chip.state==='running') { updateChip(id, 'done') }
-  })
+  _chipMap.forEach((chip, id) => { if (chip.state==='running') updateChip(id, 'done') })
   scrollMsgsToBottom()
 }
 
@@ -551,26 +514,17 @@ function finalizeChips(): void {
   chip.expanded = !chip.expanded
   const chipEl = document.getElementById(`chip_${id}`); if (!chipEl) return
   chipEl.classList.toggle('expanded', chip.expanded)
-  const dd = document.getElementById(`cd_${id}`); if (dd) dd.classList.toggle('show', chip.expanded)
+  document.getElementById(`cd_${id}`)?.classList.toggle('show', chip.expanded)
 }
 
-// ── LEGACY SHIM (step functions used by autoInjectToStudio) ──────────────────
-// Map old step API -> chip API so inject code stays the same
-function addStep(text: string, state: string, sub?: string, _meta?: StepMeta): number | null {
-  const chipState = (state as 'running'|'done'|'error'|'info'|'pending')
-  return addChip(text, chipState, sub||'')
-}
-function updateStep(id: number|null, state: string, text?: string, sub?: string): void {
-  if (!id) return; updateChip(id, state as 'running'|'done'|'error'|'info'|'pending', text, sub)
-}
-function createStepsCard(): void { createThinkingBubble() }
-function removeStepsCard(): void { removeThinkingBubble() }
+// Step API shim used by autoInjectToStudio (kept so that function's body
+// doesn't need touching — it just maps 1:1 to the chip functions above).
+function addStep(text: string, state: string, sub?: string): number | null { return addChip(text, state as ChipData['state'], sub||'') }
+function updateStep(id: number|null, state: string, text?: string, sub?: string): void { if (id) updateChip(id, state as ChipData['state'], text, sub) }
 function clearSteps(): void { if (_chipListEl) { _chipListEl.innerHTML = ''; _chipMap.clear(); _chipId = 0 } }
-function finalizeSteps(): void { finalizeChips() }
-function setStepTitle(_txt: string): void { /* no-op with chip style */ }
 
 // ── DOCS SEARCH ───────────────────────────────────────────────────────────────
-const _DOCS_KEYWORDS = ['tweenservice','tween','datastore','remoteevent','remotefunction','bindable','humanoid','leaderstats','collectionservice','pathfinding','runservice','userinputservice','httprequest','http','lighting','terrain','particles','sound','animation','constraint','weld','billboardgui','surfacegui','proximityprompt','clickdetector','badge','marketplace','textchatservice','proximity','attachment','motor6d','hingeconstraint','springconstraint','part','model','script','localscript','modulescript','error','bug','issue','crash','api','method','function','service','instance','property','event','enum','spawn','respawn','teleport','npc','enemy','mob','ai','pathfind','jump','walk','health','damage','kill','inventory','backpack','tool','equipment','shop','purchase','buy','sell','coin','gem','currency','economy','rank','level','xp','exp','gui','frame','button','label','image','scroll','viewport','color','material','mesh','texture','decal','light','fire','smoke','timer','countdown','round','game mode','lobby','match','session','admin','ban','kick','mute','chat','message','broadcast','terrain','fillblock','fillball','fillregion']
+const _DOCS_KEYWORDS = ['tweenservice','tween','datastore','remoteevent','remotefunction','bindable','humanoid','leaderstats','collectionservice','pathfinding','runservice','userinputservice','httprequest','http','lighting','terrain','particles','sound','animation','constraint','weld','billboardgui','surfacegui','proximityprompt','clickdetector','badge','marketplace','textchatservice','proximity','attachment','motor6d','hingeconstraint','springconstraint','part','model','script','localscript','modulescript','error','bug','issue','crash','api','method','function','service','instance','property','event','enum','spawn','respawn','teleport','npc','enemy','mob','ai','pathfind','jump','walk','health','damage','kill','inventory','backpack','tool','equipment','shop','purchase','buy','sell','coin','gem','currency','economy','rank','level','xp','exp','gui','frame','button','label','image','scroll','viewport','color','material','mesh','texture','decal','light','fire','smoke','timer','countdown','round','game mode','lobby','match','session','admin','ban','kick','mute','chat','message','broadcast','fillblock','fillball','fillregion']
 function _shouldSearchDocs(txt: string): boolean {
   if (!txt||txt.length<5) return false
   const lower = txt.toLowerCase()
@@ -651,26 +605,21 @@ async function syncToServer(): Promise<void> {
   const ctrl=new AbortController(); const timeoutId=setTimeout(()=>ctrl.abort(),12000)
   try {
     const convsTrimmed=getStoreConvs().slice(-15).map(c=>({...c,msgs:(c.msgs||[]).slice(-20)}))
-    // IMPORTANT: `credits` must be included here. This payload is sent by
-    // the debounced sync (_debouncedSync, fired ~4s after any saveS() call,
-    // e.g. from claimDaily/autoClaimDaily/redeemCode/selModel) — if it
-    // omits credits, the server has no way to know about a client-side
-    // credit change and will reply with whatever it already had on file.
-    // The response handler below then does `S.credits=d.credits`,
-    // overwriting the just-claimed/just-redeemed balance with that stale
-    // server value — which is exactly the "credits revert after claiming
-    // daily reward" bug: the toast shows +N CR immediately, then a few
-    // seconds later this sync round-trip silently rolls it back because
-    // the server never actually received the new total to persist.
+    // `credits` MUST be included in this payload — the server persists
+    // exactly what it's sent, and this is the only place client-side
+    // credit changes (daily claim, redeem code, deductions) reach it.
+    // Skipping it here is what causes the "credits revert" bug: the toast
+    // shows +N CR instantly, then this debounced sync round-trips a few
+    // seconds later and the server echoes back its (stale) stored value,
+    // silently overwriting the just-claimed balance.
     const payload={user:(SESSION.user.username||'').toLowerCase(),robloxId:SESSION.user.robloxId,data:{credits:S.credits,plan:S.plan,model:S.model,lastClaim:S.lastClaim,convs:convsTrimmed,projects:S.projects||[],lastSync:Date.now()}}
     const resp=await fetch('/api/sync',{method:'POST',headers:{'Content-Type':'application/json','X-Nexus-Nonce':_csrfNonce},signal:ctrl.signal,body:JSON.stringify(payload)})
     clearTimeout(timeoutId)
     if (resp.ok) {
       const d=await resp.json() as {credits?:number;plan?:string}
-      // The server is still the source of truth for the final number (it
-      // may clamp, apply server-side bonuses, or reject an over-claim) —
-      // but now that we actually sent our updated credits above, what
-      // comes back here reflects that change instead of a pre-claim value.
+      // Server is still authoritative (it can clamp / reject over-claims),
+      // but since we now send our current credits, what echoes back
+      // reflects that instead of a pre-claim number.
       if (d&&typeof d.credits==='number') { S.credits=d.credits; updateCreds(); if (SESSION){SESSION.data.credits=S.credits;try{localStorage.setItem('nexus_session',JSON.stringify(SESSION))}catch{}}}
       _syncFailCount=0
     } else if (resp.status===401||resp.status===403) _syncFailCount=5
@@ -749,6 +698,12 @@ async function loadInboxCount(): Promise<void> {
 }
 
 // ── DAILY REWARD ──────────────────────────────────────────────────────────────
+// Runs client-side: whenever the app is opened (initApp) or becomes visible
+// again (visibilitychange), or via the 10-min watcher below. `_daysSinceLastClaim`
+// caps catch-up at MAX_DAILY_CATCHUP_DAYS so leaving the app closed for
+// months doesn't grant months of credits. Reward-per-day scales with plan
+// (`_perDayReward`), so pro users get more automatically — no server cron
+// needed since `syncToServer()` persists the new total right after.
 function _daysSinceLastClaim(): number {
   if (!S.lastClaim) return 1
   const elapsedMs=Date.now()-new Date(S.lastClaim).getTime()
@@ -881,9 +836,8 @@ function _jsonRepair(raw: string): string {
 }
 function _tryParseJson(raw: string): unknown {
   if (!raw||typeof raw!=='string') return null
-  raw=raw.trim(); if(!raw||raw.length>80000||(!raw.startsWith('{')||!raw.startsWith('['))) {
-    if (!raw.startsWith('{')&&!raw.startsWith('[')) return null
-  }
+  raw=raw.trim(); if(!raw) return null
+  if (!raw.startsWith('{')&&!raw.startsWith('[')) return null
   try{return JSON.parse(raw)}catch{}
   const stripped=_stripLuaExpressions(raw)
   try{return JSON.parse(stripped)}catch{}
@@ -898,7 +852,7 @@ function _normalizeCmd(obj: unknown): ActionCmd|null {
   if (!obj||typeof obj!=='object'||Array.isArray(obj)) return null
   const o=obj as Record<string,unknown>
   const actionName=String(o.action||'').trim()
-  if (!actionName||actionName.length===0||actionName.length>80) return null
+  if (!actionName||actionName.length>80) return null
   if (!isKnownAction(actionName)) return null
   const result: ActionCmd={action:actionName}
   Object.keys(o).forEach(k=>{if(k!=='action')result[k]=o[k]})
@@ -979,12 +933,9 @@ function makeStepLabel(cmd: ActionCmd): string|null {
     case 'get_info':        return 'Get plugin info'
     case 'set_project':     return 'Set project info'
     case 'get_all_actions': return 'List available actions'
-    // ── Toolbox search ──────────────────────────────────────────────────
-    // The Toolbox service is now keyword-search-first: callers pass a free
-    // text `query` plus an optional `category` (Model, Decal, Mesh, Audio,
-    // Plugin, etc). `get_toolbox_asset` is kept as an alias of
-    // `search_toolbox` since the AI model may emit either action name —
-    // both are routed to the same search-by-keyword flow below.
+    // search_toolbox and get_toolbox_asset are aliases: both route through
+    // the same keyword-search flow (get_toolbox_asset kept only because
+    // the model sometimes still emits the old name).
     case 'search_toolbox':
     case 'get_toolbox_asset': {
       const q = String(cmd.query||cmd.keyword||cmd.search||nm||'').trim()
@@ -998,7 +949,6 @@ function makeStepLabel(cmd: ActionCmd): string|null {
 }
 
 // ── FETCH / INJECT ────────────────────────────────────────────────────────────
-function _isNexusBackendUrl(url: string): boolean { return NEXUS_API_URLS.some(base=>base&&url.startsWith(base)) }
 async function safeFetch(bodyData: Record<string,unknown>, signal?: AbortSignal): Promise<Response|null> {
   try {
     let bd=bodyData
@@ -1027,15 +977,8 @@ async function _injectCommand(cmdToSend: ActionCmd, user: string, signal?: Abort
 }
 
 // ── TOOLBOX SEARCH ────────────────────────────────────────────────────────────
-// The /toolboxService endpoint is keyword-search-first now:
-//   GET {API_URL}/toolboxService?category=Model&query=house%20modern
-// `category` is one of TOOLBOX_CATEGORIES (Model, Decal, Mesh, MeshPart,
-// Plugin, Audio, Video, FontFamily, Animation) and is optional — omitting it
-// searches across all categories. `query` is the free-text keyword search
-// (e.g. "house modern", "footstep sfx", "coin"). Each result item carries an
-// `id` (numeric asset id, may be null if Roblox didn't return one for that
-// item) and a `name` — these are what the AI/action layer needs to then
-// reference or insert the asset via `insert_asset`.
+// GET {API_URL}/toolboxService?category=Model&query=house%20modern
+// `category` is optional (one of TOOLBOX_CATEGORIES); `query` is free-text.
 export interface ToolboxSearchItem {
   id: number | string | null
   name: string
@@ -1097,10 +1040,6 @@ async function fetchToolboxSearch(query: string, category?: string, limit = 10):
   }
 }
 
-// Builds a short, AI-readable text block describing search results — this is
-// what gets fed back to the model as the "result" of its toolbox search
-// action so it can decide which asset id/name to use next (e.g. to follow up
-// with an `insert_asset` action).
 function _buildToolboxResultSummary(res: ToolboxSearchResponse): string {
   if (!res.ok) return `Toolbox search failed: ${res.error||'unknown error'}`
   if (!res.items.length) return `No Toolbox results found for "${res.query||''}"${res.category?` in category ${res.category}`:''}.`
@@ -1115,29 +1054,7 @@ function _buildToolboxResultSummary(res: ToolboxSearchResponse): string {
   return [`Toolbox search results for "${res.query||''}"${res.category?` [${res.category}]`:''} (${res.items.length} shown):`, ...lines].join('\n')
 }
 
-// Renders a small visual list (thumbnail + name + id) under the thinking
-// chip's expanded detail area isn't practical since chip detail is plain
-// text — instead this renders a compact result card directly into the chat
-// bubble flow. Currently we keep results as the chip's detail text (see
-// autoInjectToStudio) since that's consistent with how read_script/list
-// results are surfaced; this helper is here so a richer card can be wired in
-// later without touching the action-handling logic.
-function renderToolboxResultCard(container: HTMLElement, items: ToolboxSearchItem[]): void {
-  if (!items.length) return
-  const wrap = document.createElement('div'); wrap.className = 'toolbox-result-list'
-  items.slice(0,8).forEach(it => {
-    const row = document.createElement('div'); row.className = 'toolbox-result-item'
-    if (it.thumbnailUrl) { const img=document.createElement('img'); img.className='toolbox-result-thumb'; img.src=it.thumbnailUrl; img.alt=it.name; img.onerror=()=>{img.style.visibility='hidden'}; row.appendChild(img) }
-    const info = document.createElement('div'); info.className = 'toolbox-result-info'
-    const nameEl = document.createElement('div'); nameEl.className='toolbox-result-name'; nameEl.textContent = it.name
-    const metaEl = document.createElement('div'); metaEl.className='toolbox-result-meta'; metaEl.textContent = `id: ${it.id ?? 'unknown'}${it.assetType?' · '+it.assetType:''}`
-    info.appendChild(nameEl); info.appendChild(metaEl); row.appendChild(info)
-    wrap.appendChild(row)
-  })
-  container.appendChild(wrap)
-}
-
-async function fetchReadScriptResult(scriptName: string, maxWaitMs=6000): Promise<{name:string;source:string;class:string;lineCount:number}|null> {
+async function fetchReadScriptResult(scriptName: string, maxWaitMs=6000): Promise<ReadResult|null> {
   if (!SESSION) return null
   const user=(SESSION.user.username||'').toLowerCase(); const deadline=Date.now()+maxWaitMs
   while(Date.now()<deadline){
@@ -1172,23 +1089,17 @@ async function _tryAutoPublish(lastPrompt: string): Promise<void> {
 }
 
 // ── TOOLBOX ACTIONS (independent of Studio connection) ────────────────────────
-// `search_toolbox` / `get_toolbox_asset` are TOOLS, not Studio plugin
-// actions: they hit {API_URL}/toolboxService directly from the browser and
-// never touch `_injectCommand`/the plugin. That means they must work
-// whether or not Studio is connected — unlike the rest of autoInjectToStudio
-// (which is itself gated entirely behind `studioConnected`, since every
-// other action there requires the plugin to actually execute something in
-// the place). This function is called separately, before that gate, so a
-// toolbox search always runs and reports results back into the chat even
-// when there's no plugin connected at all.
-interface InjectResult { summary:string[]|null; readResults:{name:string;source:string;class:string;lineCount:number}[] }
+// search_toolbox/get_toolbox_asset hit {API_URL}/toolboxService directly
+// from the browser and never touch the plugin, so they work even without
+// Studio connected — unlike autoInjectToStudio which is gated on it.
+interface InjectResult { summary:string[]|null; readResults:ReadResult[] }
 const TOOLBOX_ACTION_NAMES = new Set(['search_toolbox','get_toolbox_asset'])
 function isToolboxAction(cmd: ActionCmd): boolean { return TOOLBOX_ACTION_NAMES.has(cmd.action||'') }
 
 async function processToolboxActions(cmds: ActionCmd[]): Promise<InjectResult> {
   const toolboxCmds = cmds.filter(isToolboxAction)
   if (!toolboxCmds.length) return {summary:null,readResults:[]}
-  const summary: string[]=[], readResults: {name:string;source:string;class:string;lineCount:number}[]=[]
+  const summary: string[]=[], readResults: ReadResult[]=[]
   for (const cmd of toolboxCmds) {
     if (!S.gen) break
     const sig=S.cancelCtrl?.signal; if (sig?.aborted) break
@@ -1197,14 +1108,6 @@ async function processToolboxActions(cmds: ActionCmd[]): Promise<InjectResult> {
     if (!sid) continue
     updateStep(sid,'running'); await _sleep(120)
 
-    // Accepts either action name (`search_toolbox` or the legacy
-    // `get_toolbox_asset`) and routes both through the same keyword-search
-    // flow against {API_URL}/toolboxService?category=...&query=....
-    // The AI provides `query` (required) and optionally `category` (Model,
-    // Decal, Mesh, MeshPart, Plugin, Audio, Video, FontFamily, Animation).
-    // Results (id + name for every match) are surfaced back into the chip
-    // detail text so the AI's next turn can read them from the
-    // conversation and pick an id/name to act on (e.g. via insert_asset).
     const query = String(cmd.query||cmd.keyword||cmd.search||cmd.name||cmd.target||'').trim()
     const category = (cmd.category||cmd.searchCategoryType) as string|undefined
     const limit = typeof cmd.limit==='number' ? cmd.limit : (typeof cmd.maxPageSize==='number' ? cmd.maxPageSize : 10)
@@ -1215,12 +1118,7 @@ async function processToolboxActions(cmds: ActionCmd[]): Promise<InjectResult> {
     if (searchRes.ok && searchRes.items.length) {
       const topNames = searchRes.items.slice(0,3).map(it=>it.name).join(', ')
       updateStep(sid,'done',`Found ${searchRes.items.length} result(s): ${topNames}`,_buildToolboxResultSummary(searchRes))
-      readResults.push({
-        name:`toolbox_search:${query}`,
-        source:_buildToolboxResultSummary(searchRes),
-        class:'ToolboxSearchResult',
-        lineCount: searchRes.items.length,
-      })
+      readResults.push({ name:`toolbox_search:${query}`, source:_buildToolboxResultSummary(searchRes), class:'ToolboxSearchResult', lineCount: searchRes.items.length })
     } else if (searchRes.ok) {
       updateStep(sid,'info',undefined,`No results found for "${query}".`)
     } else {
@@ -1233,13 +1131,9 @@ async function processToolboxActions(cmds: ActionCmd[]): Promise<InjectResult> {
 // ── AUTO INJECT ───────────────────────────────────────────────────────────────
 async function autoInjectToStudio(aiResponse: string, _userPrompt: string): Promise<InjectResult> {
   if (!studioConnected) return {summary:null,readResults:[]}
-  const summary: string[]=[], readResults: {name:string;source:string;class:string;lineCount:number}[]=[], user=(SESSION?.user.username??'').toLowerCase()
-  // Toolbox search/lookup actions are handled separately by
-  // processToolboxActions() (called earlier in _sendInner, before this
-  // function even runs) since they're tools that don't need the plugin.
-  // Filter them out here so they don't get sent to the plugin a second
-  // time as an unrecognized command if the AI emitted them alongside
-  // genuine Studio actions in the same response.
+  const summary: string[]=[], readResults: ReadResult[]=[], user=(SESSION?.user.username??'').toLowerCase()
+  // Toolbox actions are handled separately by processToolboxActions()
+  // (called earlier), so filter them out here to avoid double-sending.
   const cmds=parseAllCommands(aiResponse).filter(c=>!isToolboxAction(c))
   if (!cmds.length) return {summary:null,readResults:[]}
   const hasPlayTest=cmds.some(c=>c.action==='play_test'||c.action==='run_test')
@@ -1266,6 +1160,16 @@ async function autoInjectToStudio(aiResponse: string, _userPrompt: string): Prom
         if(readResult){updateStep(step.sid,'done',`Read script: ${readResult.name}`);readResults.push(readResult)}
         else updateStep(step.sid,'info',undefined,'Source not available yet — check Explorer in Studio.')
       }
+      else if(a==='read_instance'){
+        // read_instance's report lands in "instance_data" on the backend.
+        // Mirror the read_script wait so its content also feeds the
+        // follow-up loop below (fixes: AI says "I'll read X" then stalls).
+        updateStep(step.sid,'info',undefined,'Waiting for Studio to report the instance...')
+        const instName=String(cmd.name||cmd.target||cmd.path||'')
+        const readResult=await fetchReadScriptResult(instName)
+        if(readResult){updateStep(step.sid,'done',`Read instance: ${readResult.name||instName}`);readResults.push({...readResult,class:readResult.class||'Instance'})}
+        else updateStep(step.sid,'info',undefined,'Instance data not available yet — check Explorer in Studio.')
+      }
       else if(a==='list'||a==='get_output'||a==='resolve_mention'){updateStep(step.sid,'info');await _sleep(800)}
       else{
         updateStep(step.sid,'done');const lbl2=makeStepLabel(cmd);if(lbl2)summary.push(lbl2)
@@ -1286,7 +1190,7 @@ async function autoInjectToStudio(aiResponse: string, _userPrompt: string): Prom
 
 // ── AI API ────────────────────────────────────────────────────────────────────
 function _fallbackBuildSysPrompt(): string { return '' }
-function buildApiMsgs(): {role:string;content:string|unknown[]}[] {
+function buildApiMsgs(): ApiMsg[] {
   const cv=S.convs.find(x=>x.id===S.curConv); if(!cv) return []
   return (cv.msgs||[]).slice(-28).map(m=>{
     const content=(m as ConvMsg&{_rawContent?:string})._rawContent||m.content||''
@@ -1334,28 +1238,28 @@ async function callAiApi(body: Record<string,unknown>, abortSignal?: AbortSignal
   }
   return{ok:false,error:'Max retries exceeded'}
 }
-function _truncateMsgsForApi(msgs: {role:string;content:string|unknown[]}[], maxChars=60000): typeof msgs {
-  let totalChars=0; const result: typeof msgs=[]
+function _truncateMsgsForApi(msgs: ApiMsg[], maxChars=60000): ApiMsg[] {
+  let totalChars=0; const result: ApiMsg[]=[]
   for(let i=msgs.length-1;i>=0;i--){const m=msgs[i];const content=typeof m.content==='string'?m.content:JSON.stringify(m.content||'');totalChars+=content.length;if(totalChars>maxChars&&result.length>2)break;result.unshift(m)}
   if(result.length===1&&typeof result[0].content==='string'&&result[0].content.length>maxChars)result[0]={...result[0],content:result[0].content.slice(0,maxChars)+'\n[... truncated]'}
   return result
 }
 
-// ── RAW LUA DETECTION ─────────────────────────────────────────────────────────
-const LUA_PATTERN_RE=/\b(local\s+\w+\s*=|function\s+\w*\s*\(|game:GetService\(|:Connect\(|:WaitForChild\(|workspace\.|script\.Parent|end\s*$)/m
-const LUA_KEYWORD_RE=/\b(local|function|elseif|then|end|repeat|until|nil)\b/g
-function looksLikeRawLua(txt: string): boolean {
-  if(!txt||txt.length<20) return false; if(/```/.test(txt)) return false
-  const keywordHits=(txt.match(LUA_KEYWORD_RE)||[]).length; const hasStructuralPattern=LUA_PATTERN_RE.test(txt)
-  return hasStructuralPattern&&keywordHits>=3
-}
-function processRawLuaInput(txt: string, existingAttachmentCount: number): {text:string;extraAttachment:AttachItem|null} {
-  if(!looksLikeRawLua(txt)) return {text:txt,extraAttachment:null}
-  if(txt.length<=150) return {text:'```lua\n'+txt+'\n```',extraAttachment:null}
-  const lines=txt.split('\n').length; const fileName=`pasted_script_${Date.now().toString(36)}.lua`
-  const extraAttachment: AttachItem={type:'file',name:fileName,text:txt}
-  const marker=existingAttachmentCount>0?`[Pasted Lua script attached: ${fileName}, ${lines} lines]`:`[Pasted Lua script attached: ${fileName}, ${lines} lines] Please review/use this script.`
-  return {text:marker,extraAttachment}
+// ── FOLLOW-UP AFTER READ ──────────────────────────────────────────────────────
+// The bug this fixes: the AI would sometimes respond with only a
+// `read_script`/`read_instance`/toolbox-search action plus a promise like
+// "Oke, saya akan edit script tersebut" — but since the whole flow was
+// single-shot, that promise never got followed up on. Once we have the
+// read result(s) back, feed them to the model as a fresh user turn (in the
+// same request/response cycle, no manual re-send needed) so it can act on
+// what it just read. Capped at MAX_FOLLOWUP_ROUNDS so a model that keeps
+// re-reading forever can't loop indefinitely.
+function _buildFollowupContext(results: ReadResult[]): string {
+  const blocks = results.map(r => {
+    if (r.class === 'ToolboxSearchResult') return `Result of "${r.name}":\n\`\`\`\n${r.source}\n\`\`\``
+    return `Source of "${r.name}" (${r.class}, ${r.lineCount} line${r.lineCount===1?'':'s'}):\n\`\`\`lua\n${r.source}\n\`\`\``
+  })
+  return `[STUDIO REPORTED DATA — use this to continue what you said you'd do]\n\n${blocks.join('\n\n')}\n\nContinue now: if you said you would edit/create/change something based on this, emit the action JSON for it in this reply.`
 }
 
 // ── SEND ──────────────────────────────────────────────────────────────────────
@@ -1402,7 +1306,6 @@ async function _sendInner(): Promise<void> {
   if(cv.msgs.length===1) setConvTitle(S.curConv!,txt); hideMentionDD()
   const showThinking=!isPureGreeting(txt)
 
-  // ── THINKING CHIPS ────────────────────────────────────────────────────
   if(showThinking){
     createThinkingBubble()
     const rtype=detectType(txt)
@@ -1415,7 +1318,6 @@ async function _sendInner(): Promise<void> {
   }
   if(!S.gen||S.cancelCtrl?.signal.aborted){_resetGenState();return}
 
-  // ── AI FEED ───────────────────────────────────────────────────────────
   let aiFeedCtx=''
   if(_shouldCheckAiFeed(txt)){
     const feedChip=showThinking?addChip('Checking Studio feed','running'):null
@@ -1424,104 +1326,126 @@ async function _sendInner(): Promise<void> {
   }
   if(!S.gen||S.cancelCtrl?.signal.aborted){_resetGenState();return}
 
-  let msgs=buildApiMsgs()
+  const msgs=buildApiMsgs()
   let sysPrompt=buildSysPrompt({session:SESSION?{user:{username:SESSION.user.username,displayName:SESSION.user.username}}:null,settings:{credits:S.credits,plan:S.plan,currentProjectName:S.currentProjectName,playTestEnabled:S.playTestEnabled,playTestDuration:S.playTestDuration},studioConnected,isOwnerFn:isOwner,isAdminFn:isAdmin})
   if(aiFeedCtx) sysPrompt=sysPrompt+'\n\n'+aiFeedCtx
   if(_shouldSearchDocs(txt)&&sysPrompt){try{const _dr=await searchRobloxDocs(txt,5);if(_dr){const _dc=_buildDocsContext(_dr);if(_dc)sysPrompt=sysPrompt+'\n\n'+_dc}}catch{}}
   const SYS_CAP=7500; let apiMsgs=msgs.slice(0,-1); let sysMain=sysPrompt,sysOverflow=''
   if(sysPrompt&&sysPrompt.length>SYS_CAP){sysMain=sysPrompt.slice(0,SYS_CAP);sysOverflow=sysPrompt.slice(SYS_CAP);const breakAt=sysMain.lastIndexOf('\n');if(breakAt>SYS_CAP*0.8){sysOverflow=sysMain.slice(breakAt)+sysOverflow;sysMain=sysMain.slice(0,breakAt)}}
   if(sysOverflow?.trim().length>10) apiMsgs=[{role:'user',content:'[SYSTEM CONTEXT CONTINUED]\n'+sysOverflow},{role:'assistant',content:'Understood.'},...apiMsgs]
-  interface ApiMsg{role:string;content:string|unknown[]}
   const lastM: ApiMsg={role:'user',content:txt}
   if(attachments.length){const ca: unknown[]=[{type:'text',text:txt}];attachments.forEach(a=>{if(a.type==='image')ca.push({type:'image',source:{type:'base64',media_type:a.mime,data:a.data}});else if(a.type==='file'&&a.text)ca.push({type:'text',text:`--- Attached file: ${a.name} ---\n${a.text}`})});lastM.content=ca}
   apiMsgs.push(lastM);apiMsgs=_truncateMsgsForApi(apiMsgs,55000)
-  let aiText=''; const _localCancelSignal=S.cancelCtrl?.signal
-  const aiResult=await callAiApi({provider:S.model.prov||'gemini',model:S.model.id,messages:apiMsgs,system:sysMain,max_tokens:65536},_localCancelSignal)
-  if(!S.gen||_localCancelSignal?.aborted){_resetGenState();return}
-  if(!aiResult.ok){
-    if(aiResult.error&&_isAbortError({name:'AbortError',message:aiResult.error})){_resetGenState();return}
-    let errMsg=aiResult.error||'Unknown error'
-    if(aiResult.timeout) errMsg='Request timeout. Try a shorter message.'
-    else if(/overloaded|busy|503|429/i.test(String(errMsg))) errMsg='Model is very busy. Wait a few minutes or switch model.'
-    aiText='**'+UI.errorPrefix+'**\n\n'+errMsg+'\n\nSuggestion: try another model.'
-  } else aiText=aiResult.data!.content||''
-  const hasError=aiText&&(aiText.startsWith('**Failed')||aiText.startsWith('**Error'))
 
-  // ── CREDIT DEDUCTION ─────────────────────────────────────────────────
-  if(!isOwner()&&!isAdmin()&&aiText&&!hasError){
-    const _baseCost=S.model.cost||0; const _imageCost=imageCount*costPerImageForModel(S.model)
-    if(_baseCost>0||_imageCost>0){
-      const _numActions=parseAllCommands(aiText).length
-      const _actionCost=isPureGreeting(lastPrompt)?0:Math.max(0,_numActions-1)*0.5
-      const _textCost=isPureGreeting(lastPrompt)?(_baseCost>0?1:0):_baseCost+_actionCost
-      const _totalCost=parseFloat((_textCost+_imageCost).toFixed(2))
-      if(_totalCost>0) await deductCredits(_totalCost)
+  // ── MAIN + AUTO-FOLLOW-UP LOOP ─────────────────────────────────────────
+  // Round 0 is the normal reply to the user's message. If that reply only
+  // reads data (read_script/read_instance/toolbox search) with no other
+  // action, we feed the read result back to the model as a follow-up turn
+  // so it can finish what it said it would do, instead of the process
+  // silently ending on a broken promise.
+  let aiText=''
+  let hasError=false
+  let studioSummary: string[]|null=null
+  let displayText=''
+  const _localCancelSignal=S.cancelCtrl?.signal
+  let round=0
+
+  while(true){
+    const aiResult=await callAiApi({provider:S.model.prov||'gemini',model:S.model.id,messages:apiMsgs,system:sysMain,max_tokens:65536},_localCancelSignal)
+    if(!S.gen||_localCancelSignal?.aborted){_resetGenState();return}
+    if(!aiResult.ok){
+      if(aiResult.error&&_isAbortError({name:'AbortError',message:aiResult.error})){_resetGenState();return}
+      let errMsg=aiResult.error||'Unknown error'
+      if(aiResult.timeout) errMsg='Request timeout. Try a shorter message.'
+      else if(/overloaded|busy|503|429/i.test(String(errMsg))) errMsg='Model is very busy. Wait a few minutes or switch model.'
+      aiText='**'+UI.errorPrefix+'**\n\n'+errMsg+'\n\nSuggestion: try another model.'
+      hasError=true
+      break
     }
-  }
+    aiText=aiResult.data!.content||''
+    hasError=!!(aiText&&(aiText.startsWith('**Failed')||aiText.startsWith('**Error')))
 
-  let studioSummary: string[]|null=null, displayText=''
-  const _preCmds=parseAllCommands(aiText)
-  const _toolboxCmds=_preCmds.filter(isToolboxAction)
-  const _studioCmds=_preCmds.filter(c=>!isToolboxAction(c))
-  // `_toolboxCmds` are TOOLS (e.g. search_toolbox/get_toolbox_asset) — they
-  // call the backend directly from the browser and never touch the Studio
-  // plugin, so they run regardless of `studioConnected`. `_studioCmds` are
-  // genuine plugin ACTIONS (create_instance, edit_script, insert_asset,
-  // read_instance, insert_rbxm, play_test, etc.) and still require Studio
-  // to be connected, same as before.
-  if(!hasError&&(_toolboxCmds.length||(studioConnected&&_studioCmds.length))){
+    if(round===0&&!isOwner()&&!isAdmin()&&aiText&&!hasError){
+      const _baseCost=S.model.cost||0; const _imageCost=imageCount*costPerImageForModel(S.model)
+      if(_baseCost>0||_imageCost>0){
+        const _numActions=parseAllCommands(aiText).length
+        const _actionCost=isPureGreeting(lastPrompt)?0:Math.max(0,_numActions-1)*0.5
+        const _textCost=isPureGreeting(lastPrompt)?(_baseCost>0?1:0):_baseCost+_actionCost
+        const _totalCost=parseFloat((_textCost+_imageCost).toFixed(2))
+        if(_totalCost>0) await deductCredits(_totalCost)
+      }
+    }
+
+    const _preCmds=parseAllCommands(aiText)
+    const _toolboxCmds=_preCmds.filter(isToolboxAction)
+    const _studioCmds=_preCmds.filter(c=>!isToolboxAction(c))
+
+    if(hasError||(!_toolboxCmds.length&&!(studioConnected&&_studioCmds.length))){
+      // No actions this round (or an error) — nothing to run/inject.
+      if(!hasError&&_studioCmds.length&&!studioConnected&&!_toolboxCmds.length){
+        // Studio-only actions requested but Studio not connected.
+        if(showThinking) finalizeChips()
+        displayText=cleanAIResponse(aiText)
+        const aiMsg0: ConvMsg&{_rawContent:string}={role:'ai',content:displayText,time:Date.now(),_rawContent:aiText}
+        removeThinkingBubble(); const cv2=S.convs.find(x=>x.id===S.curConv); if(cv2){cv2.msgs.push(aiMsg0);appendMsg(aiMsg0)}; _resetGenState(); saveS(); return
+      }
+      displayText=cleanAIResponse(aiText)
+      if(showThinking) finalizeChips()
+      break
+    }
+
     if(showThinking){
       const totalCount=_toolboxCmds.length+(studioConnected?_studioCmds.length:0)
       clearSteps();addChip(`Running ${totalCount} action(s)...`,'running','One by one, please wait');await _sleep(200);updateChip(_chipId,'done')
     }
-    const combinedReadResults: {name:string;source:string;class:string;lineCount:number}[]=[]
+    const combinedReadResults: ReadResult[]=[]
     let combinedSummary: string[]|null=null
 
-    // Toolbox searches first — instant, no plugin dependency, safe to run
-    // even if Studio never connects this session.
     if(_toolboxCmds.length){
       const toolboxResult=await processToolboxActions(_toolboxCmds)
       if(toolboxResult.readResults.length) combinedReadResults.push(...toolboxResult.readResults)
-      if(toolboxResult.summary?.length) combinedSummary=(combinedSummary||([] as string[])).concat(toolboxResult.summary)
+      if(toolboxResult.summary?.length) combinedSummary=(combinedSummary||[]).concat(toolboxResult.summary)
     }
-    if(!S.gen||_localCancelSignal?.aborted){_resetGenState();const cancelMsg: ConvMsg={role:'ai',content:'Process cancelled.',time:Date.now()};cv.msgs.push(cancelMsg);appendMsg(cancelMsg);saveS();return}
+    if(!S.gen||_localCancelSignal?.aborted){_resetGenState();const cv3=S.convs.find(x=>x.id===S.curConv);if(cv3){const cancelMsg: ConvMsg={role:'ai',content:'Process cancelled.',time:Date.now()};cv3.msgs.push(cancelMsg);appendMsg(cancelMsg)};saveS();return}
 
-    // Then plugin actions, only when Studio is actually connected.
     if(studioConnected&&_studioCmds.length){
       const injectResult=await autoInjectToStudio(aiText,lastPrompt)
-      if(injectResult.summary?.length) combinedSummary=(combinedSummary||([] as string[])).concat(injectResult.summary)
+      if(injectResult.summary?.length) combinedSummary=(combinedSummary||[]).concat(injectResult.summary)
       if(injectResult.readResults.length) combinedReadResults.push(...injectResult.readResults)
-      if(!S.gen||_localCancelSignal?.aborted){_resetGenState();const cancelMsg: ConvMsg={role:'ai',content:'Process cancelled.',time:Date.now()};cv.msgs.push(cancelMsg);appendMsg(cancelMsg);saveS();return}
+      if(!S.gen||_localCancelSignal?.aborted){_resetGenState();const cv4=S.convs.find(x=>x.id===S.curConv);if(cv4){const cancelMsg: ConvMsg={role:'ai',content:'Process cancelled.',time:Date.now()};cv4.msgs.push(cancelMsg);appendMsg(cancelMsg)};saveS();return}
     }
 
-    studioSummary=combinedSummary
+    studioSummary = combinedSummary?.length ? (studioSummary||[]).concat(combinedSummary) : studioSummary
     displayText=stripAllCode(aiText)
-    if(combinedReadResults.length>0){const readBlocks=combinedReadResults.map(r=>{
-      // Toolbox search results are plain text (an id/name list), not Lua
-      // source — render them as a fenced text block instead of ```lua so
-      // they don't look like (or get re-parsed as) executable code.
-      if (r.class==='ToolboxSearchResult') return `**${r.name}**:\n\`\`\`\n${r.source}\n\`\`\``
-      return `**${r.name}** (${r.class}, ${r.lineCount} line${r.lineCount===1?'':'s'}):\n\`\`\`lua\n${r.source}\n\`\`\``
-    }).join('\n\n');displayText=displayText?displayText+'\n\n'+readBlocks:readBlocks}
+    if(combinedReadResults.length>0){
+      const readBlocks=combinedReadResults.map(r=>{
+        if (r.class==='ToolboxSearchResult') return `**${r.name}**:\n\`\`\`\n${r.source}\n\`\`\``
+        return `**${r.name}** (${r.class}, ${r.lineCount} line${r.lineCount===1?'':'s'}):\n\`\`\`lua\n${r.source}\n\`\`\``
+      }).join('\n\n')
+      displayText=displayText?displayText+'\n\n'+readBlocks:readBlocks
+    }
     if(!displayText||displayText.length<20)displayText=studioSummary?.length?'Successfully sent to Studio:\n'+studioSummary.map(s=>'• '+s).join('\n'):'Done. Check Explorer in Studio.'
+
+    // Decide whether to auto-continue: only reads happened (no non-read
+    // action actually landed in `summary`) and we haven't hit the round cap.
+    const onlyReadHappened = combinedReadResults.length>0 && !(combinedSummary?.length)
+    if(onlyReadHappened && round<MAX_FOLLOWUP_ROUNDS){
+      if(showThinking){ const cChip=addChip(UI.continuing,'running'); updateChip(cChip,'done') }
+      apiMsgs.push({role:'assistant',content:aiText})
+      apiMsgs.push({role:'user',content:_buildFollowupContext(combinedReadResults)})
+      apiMsgs=_truncateMsgsForApi(apiMsgs,55000)
+      round++
+      continue
+    }
+
     if(!_playTestActive){if(showThinking)finalizeChips()}
     else document.getElementById('chipCancel')?.remove()
-  } else if(!hasError&&_studioCmds.length&&!studioConnected&&!_toolboxCmds.length){
-    // Studio-only actions were requested but Studio isn't connected, and
-    // there were no toolbox tool calls to fall back on — behave like
-    // before: surface the AI's text response as-is (no plugin commands can
-    // run), letting the person know via the AI's own wording.
-    if(showThinking) finalizeChips()
-    displayText=cleanAIResponse(aiText)
-    const aiMsg0: ConvMsg&{_rawContent:string}={role:'ai',content:displayText,time:Date.now(),_rawContent:aiText}
-    removeThinkingBubble(); cv.msgs.push(aiMsg0); appendMsg(aiMsg0); _resetGenState(); saveS(); return
-  } else {
-    displayText=cleanAIResponse(aiText)
-    if(showThinking) finalizeChips()
+    break
   }
+
   cv=S.convs.find(x=>x.id===S.curConv); if(!cv){removeThinkingBubble();_resetGenState();saveS();return}
   const aiMsg: ConvMsg&{_rawContent:string;studioSummary?:string[]}={role:'ai',content:displayText,time:Date.now(),_rawContent:aiText}
-  if(studioSummary) aiMsg.studioSummary=studioSummary
+  if(studioSummary?.length) aiMsg.studioSummary=studioSummary
   removeThinkingBubble(); cv.msgs.push(aiMsg); appendMsg(aiMsg); _resetGenState(); saveS()
 }
 
@@ -1533,6 +1457,23 @@ async function send(): Promise<void> {
     if(cv){const errMsg: ConvMsg={role:'ai',content:'**'+UI.errorPrefix+'**\n\nSomething went wrong. Please try again.\n\n_'+String((e as Error)?.message||e||'Unknown error').slice(0,200)+'_',time:Date.now()};cv.msgs.push(errMsg);appendMsg(errMsg);saveS()}
     else toast('Something went wrong. Please try again.','var(--pink)',4000)
   }
+}
+
+// ── RAW LUA DETECTION ─────────────────────────────────────────────────────────
+const LUA_PATTERN_RE=/\b(local\s+\w+\s*=|function\s+\w*\s*\(|game:GetService\(|:Connect\(|:WaitForChild\(|workspace\.|script\.Parent|end\s*$)/m
+const LUA_KEYWORD_RE=/\b(local|function|elseif|then|end|repeat|until|nil)\b/g
+function looksLikeRawLua(txt: string): boolean {
+  if(!txt||txt.length<20) return false; if(/```/.test(txt)) return false
+  const keywordHits=(txt.match(LUA_KEYWORD_RE)||[]).length; const hasStructuralPattern=LUA_PATTERN_RE.test(txt)
+  return hasStructuralPattern&&keywordHits>=3
+}
+function processRawLuaInput(txt: string, existingAttachmentCount: number): {text:string;extraAttachment:AttachItem|null} {
+  if(!looksLikeRawLua(txt)) return {text:txt,extraAttachment:null}
+  if(txt.length<=150) return {text:'```lua\n'+txt+'\n```',extraAttachment:null}
+  const lines=txt.split('\n').length; const fileName=`pasted_script_${Date.now().toString(36)}.lua`
+  const extraAttachment: AttachItem={type:'file',name:fileName,text:txt}
+  const marker=existingAttachmentCount>0?`[Pasted Lua script attached: ${fileName}, ${lines} lines]`:`[Pasted Lua script attached: ${fileName}, ${lines} lines] Please review/use this script.`
+  return {text:marker,extraAttachment}
 }
 
 // ── SUGGESTIONS ───────────────────────────────────────────────────────────────
@@ -1609,16 +1550,9 @@ function getProjectName(pid: string): string|null {
   const projs=S.projects||(SESSION?.data?.projects as AppState['projects'])||[]
   return projs.find(x=>x.id===pid)?.name??null
 }
-// ── PROJECT OWNERSHIP GUARD ────────────────────────────────────────────────
-// Mirrors `userOwnsProject()` from the dashboard page: a project id in the
-// URL (/chats/:id or ?id=:id) is untrusted input — it could be a stale
-// bookmark, a typo, an id copy-pasted between accounts, or someone probing
-// other users' project ids. Before letting the chat UI render against that
-// id, confirm it's actually present in the signed-in user's own project
-// list (same source dashboard.tsx checks: `SESSION.data.projects`, kept in
-// sync with `S.projects` once loadS() has run). If it isn't there, this is
-// not a project the current session owns and we should bounce out rather
-// than silently rendering an empty/nameless chat for an id that isn't ours.
+// Mirrors userOwnsProject() from dashboard.tsx: a project id in the URL is
+// untrusted (stale bookmark, typo, someone else's id) — verify it's in the
+// signed-in user's own project list before rendering against it.
 function userOwnsProject(pid: string): boolean {
   if (!pid) return false
   const projs=S.projects||(SESSION?.data?.projects as AppState['projects'])||[]
@@ -1675,10 +1609,6 @@ function renderMsgs(msgs: ConvMsg[]): void {
   if(!msgs?.length){if(w)w.style.display='flex';c.querySelectorAll('.msg,.think-wrap').forEach(el=>el.remove());return}
   if(w)w.style.display='none'; c.querySelectorAll('.msg,.think-wrap').forEach(el=>el.remove())
   msgs.forEach(m=>appendMsg(m,true))
-  // Use the same multi-pass scroll helper as the thinking bubble — a single
-  // synchronous scrollTop assignment right after a big batch DOM insert
-  // (many messages on conversation load) can land short of the true bottom
-  // before layout settles, especially on long histories.
   scrollMsgsToBottom()
 }
 function mkAv(role: string): HTMLElement {
@@ -1756,7 +1686,7 @@ function appendMsg(m: ConvMsg, skipScroll?: boolean): void {
   if(m.attachments?.length){const imgRow=document.createElement('div');imgRow.className='msg-imgs';m.attachments.forEach(a=>{if(a.type==='image'){const img=document.createElement('img');img.className='msg-img';img.src=a.preview||('data:'+(a.mime||'image/png')+';base64,'+a.data);img.alt=a.name||'img';img.onclick=()=>window.open(img.src,'_blank');imgRow.appendChild(img)}});bubble.appendChild(imgRow)}
   let content=String(m.content||'')
   if((m as ConvMsg&{studioSummary?:string[]}).studioSummary)content=stripAllCode(content)
-  const codeRe=/```(\w*)\n?([\s\S]*?)```/g; const codeBlocks: {lang:string;code:string}[]=[]; let processed=content.replace(codeRe,(match,lang,code)=>{const l=(lang||'').toLowerCase();if(l==='json'||l==='clarify'||(m as ConvMsg&{studioSummary?:string[]}).studioSummary)return '';const i=codeBlocks.length;codeBlocks.push({lang:lang||'',code:code.trim()});return '%%CB_'+i+'%%'})
+  const codeRe=/```(\w*)\n?([\s\S]*?)```/g; const codeBlocks: {lang:string;code:string}[]=[]; const processed=content.replace(codeRe,(match,lang,code)=>{const l=(lang||'').toLowerCase();if(l==='json'||l==='clarify'||(m as ConvMsg&{studioSummary?:string[]}).studioSummary)return '';const i=codeBlocks.length;codeBlocks.push({lang:lang||'',code:code.trim()});return '%%CB_'+i+'%%'})
   processed.split(/(%%CB_\d+%%)/).forEach(part=>{
     const cm=part.match(/%%CB_(\d+)%%/)
     if(cm){
@@ -1790,10 +1720,6 @@ function appendMsg(m: ConvMsg, skipScroll?: boolean): void {
     mbWrap.appendChild(acts)
   }
   wrap.appendChild(mbWrap); c.appendChild(wrap)
-  // Same fix as createThinkingBubble/addChip: don't rely on a single
-  // synchronous scroll. On a chat with a lot of history, the freshly
-  // appended node's height isn't always reflected in scrollHeight on the
-  // same tick, so the view can stop short of the actual bottom.
   if(!skipScroll) scrollMsgsToBottom()
 }
 
@@ -1945,12 +1871,6 @@ async function initApp(): Promise<void> {
   _injectChipStyles(); updateLoader(8,UI.loaderInit)
   S.currentProjectId=getProjectIdFromUrl(); updateLoader(22,UI.loaderLoadData)
   await loadS(); updateLoader(42,UI.loaderLoadData)
-  // Ownership check — same as dashboard.tsx's `userOwnsProject()` guard for
-  // /chats/[id]. Run this right after loadS() so S.projects/SESSION.data
-  // reflect what the server actually returned for this account, not a
-  // possibly-stale local cache. A project id in the URL that doesn't belong
-  // to this session (bad bookmark, typo, someone else's id, etc.) should
-  // bounce the person out instead of rendering an empty/nameless chat.
   if(S.currentProjectId&&!userOwnsProject(S.currentProjectId)){
     toast('Project not found','var(--pink)',3200)
     location.replace('/dashboard')
@@ -1974,6 +1894,10 @@ async function initApp(): Promise<void> {
   if(S.curConv&&S.convs.some(x=>x.id===S.curConv)) loadConv(S.curConv)
   else if(S.convs.length>0){const latest=S.convs.reduce((a,b)=>(b.time||0)>(a.time||0)?b:a);S.curConv=latest.id;loadConv(S.curConv)}
   else newChat()
+  // Daily credit reward: checked on every app load (below) and again every
+  // 10 min while the tab is open (startDailyClaimWatcher) and on tab
+  // refocus (visibilitychange listener) — so it "adds itself" per plan
+  // without needing a server-side cron job.
   autoClaimDaily(); updateLoader(100,UI.loaderReady); setTimeout(hideLoader,500)
   const urlp=new URLSearchParams(window.location.search); if(urlp.get('settings')==='true')setTimeout(()=>openSettings(),800)
   setTimeout(()=>{if(!_syncInProgress)syncToServer()},2000)
