@@ -80,7 +80,14 @@ const _defaultModel: ModelEntry = { id: 'gemini-3.5-flash', prov: 'gemini', cost
 
 // Max automatic follow-up rounds after a read_script/read_instance/toolbox
 // search. Prevents an infinite loop if the AI keeps just reading forever.
-const MAX_FOLLOWUP_ROUNDS = 3
+const MAX_FOLLOWUP_ROUNDS = 4
+
+// Actions that are "read-only" — they never modify anything in Studio, they
+// only report data back. If a round contains ONLY these (no create/edit/etc),
+// we automatically continue the conversation so the AI can act on what it
+// just read, instead of leaving a "I'll edit this now" promise unfulfilled.
+const READ_ONLY_ACTIONS = new Set(['read_script','read_instance','list','get_output','resolve_mention','get_info','get_all_actions','ping','search_toolbox','get_toolbox_asset'])
+function isReadOnlyAction(cmd: ActionCmd): boolean { return READ_ONLY_ACTIONS.has(cmd.action||'') }
 
 // Toolbox categories accepted by /toolboxService
 const TOOLBOX_CATEGORIES = ['Model', 'Decal', 'Mesh', 'MeshPart', 'Plugin', 'Audio', 'Video', 'FontFamily', 'Animation'] as const
@@ -207,10 +214,6 @@ function safeMarked(md: string): string {
 }
 
 // ── SCROLL HELPER ─────────────────────────────────────────────────────────────
-// #msgs' scrollHeight can be momentarily stale right after a DOM mutation
-// (layout hasn't settled yet), so a single scrollTop assignment can land
-// short of the real bottom. Re-assert across a frame + two timeouts to
-// cover late reflow (images, fonts, syntax highlighting).
 function scrollMsgsToBottom(): void {
   const c = document.getElementById('msgs')
   if (!c) return
@@ -275,7 +278,7 @@ const UI = {
   testRunning:     'Running play_test',
   projectLabel:    'Project',
   toolboxSearching:'Searching Roblox Toolbox',
-  continuing:      'Continuing...',
+  continuing:      'Continuing based on what was read...',
   installSteps: [
     'Download from <a href="https://create.roblox.com/store/asset/91870814099475/NEXUS-AI" target="_blank" style="color:var(--cyan)">Creator Store</a>',
     'Save to: <code>C:\\Users\\[Name]\\AppData\\Local\\Roblox\\Plugins\\</code>',
@@ -385,13 +388,6 @@ function _injectChipStyles(): void {
 .clarify-other-btn { flex-shrink:0; height:34px; padding:0 13px; border-radius:7px; border:1px solid rgba(0,229,255,.3); background:rgba(0,229,255,.1); color:var(--cyan); font-family:'JetBrains Mono',monospace; font-size:11px; font-weight:700; cursor:pointer; transition:background .14s; -webkit-tap-highlight-color:transparent; }
 .clarify-other-btn:hover:not(:disabled) { background:rgba(0,229,255,.2); }
 .clarify-other-btn:disabled { opacity:.35; cursor:default; }
-
-.toolbox-result-list { display:flex; flex-direction:column; gap:5px; margin-top:2px; }
-.toolbox-result-item { display:flex; align-items:center; gap:8px; padding:6px 8px; border-radius:7px; background:rgba(0,229,255,.04); border:1px solid rgba(0,229,255,.10); }
-.toolbox-result-thumb { width:30px; height:30px; border-radius:6px; object-fit:cover; flex-shrink:0; background:rgba(0,229,255,.08); }
-.toolbox-result-info { flex:1; min-width:0; }
-.toolbox-result-name { font-size:10.5px; color:var(--text); white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
-.toolbox-result-meta { font-size:9px; color:var(--dim); margin-top:1px; }
 
 .inp-l { align-items:center!important; }
 .inp-l > .ib, .inp-l > label.ib, .inp-l > button.ib { display:inline-flex!important; align-items:center!important; justify-content:center!important; vertical-align:middle!important; line-height:0!important; box-sizing:border-box!important; margin:0!important; }
@@ -517,8 +513,8 @@ function finalizeChips(): void {
   document.getElementById(`cd_${id}`)?.classList.toggle('show', chip.expanded)
 }
 
-// Step API shim used by autoInjectToStudio (kept so that function's body
-// doesn't need touching — it just maps 1:1 to the chip functions above).
+// Step API shim used by autoInjectToStudio / processToolboxActions (kept so
+// those functions' bodies map 1:1 to the chip functions above).
 function addStep(text: string, state: string, sub?: string): number | null { return addChip(text, state as ChipData['state'], sub||'') }
 function updateStep(id: number|null, state: string, text?: string, sub?: string): void { if (id) updateChip(id, state as ChipData['state'], text, sub) }
 function clearSteps(): void { if (_chipListEl) { _chipListEl.innerHTML = ''; _chipMap.clear(); _chipId = 0 } }
@@ -605,21 +601,11 @@ async function syncToServer(): Promise<void> {
   const ctrl=new AbortController(); const timeoutId=setTimeout(()=>ctrl.abort(),12000)
   try {
     const convsTrimmed=getStoreConvs().slice(-15).map(c=>({...c,msgs:(c.msgs||[]).slice(-20)}))
-    // `credits` MUST be included in this payload — the server persists
-    // exactly what it's sent, and this is the only place client-side
-    // credit changes (daily claim, redeem code, deductions) reach it.
-    // Skipping it here is what causes the "credits revert" bug: the toast
-    // shows +N CR instantly, then this debounced sync round-trips a few
-    // seconds later and the server echoes back its (stale) stored value,
-    // silently overwriting the just-claimed balance.
     const payload={user:(SESSION.user.username||'').toLowerCase(),robloxId:SESSION.user.robloxId,data:{credits:S.credits,plan:S.plan,model:S.model,lastClaim:S.lastClaim,convs:convsTrimmed,projects:S.projects||[],lastSync:Date.now()}}
     const resp=await fetch('/api/sync',{method:'POST',headers:{'Content-Type':'application/json','X-Nexus-Nonce':_csrfNonce},signal:ctrl.signal,body:JSON.stringify(payload)})
     clearTimeout(timeoutId)
     if (resp.ok) {
       const d=await resp.json() as {credits?:number;plan?:string}
-      // Server is still authoritative (it can clamp / reject over-claims),
-      // but since we now send our current credits, what echoes back
-      // reflects that instead of a pre-claim number.
       if (d&&typeof d.credits==='number') { S.credits=d.credits; updateCreds(); if (SESSION){SESSION.data.credits=S.credits;try{localStorage.setItem('nexus_session',JSON.stringify(SESSION))}catch{}}}
       _syncFailCount=0
     } else if (resp.status===401||resp.status===403) _syncFailCount=5
@@ -698,12 +684,6 @@ async function loadInboxCount(): Promise<void> {
 }
 
 // ── DAILY REWARD ──────────────────────────────────────────────────────────────
-// Runs client-side: whenever the app is opened (initApp) or becomes visible
-// again (visibilitychange), or via the 10-min watcher below. `_daysSinceLastClaim`
-// caps catch-up at MAX_DAILY_CATCHUP_DAYS so leaving the app closed for
-// months doesn't grant months of credits. Reward-per-day scales with plan
-// (`_perDayReward`), so pro users get more automatically — no server cron
-// needed since `syncToServer()` persists the new total right after.
 function _daysSinceLastClaim(): number {
   if (!S.lastClaim) return 1
   const elapsedMs=Date.now()-new Date(S.lastClaim).getTime()
@@ -933,9 +913,6 @@ function makeStepLabel(cmd: ActionCmd): string|null {
     case 'get_info':        return 'Get plugin info'
     case 'set_project':     return 'Set project info'
     case 'get_all_actions': return 'List available actions'
-    // search_toolbox and get_toolbox_asset are aliases: both route through
-    // the same keyword-search flow (get_toolbox_asset kept only because
-    // the model sometimes still emits the old name).
     case 'search_toolbox':
     case 'get_toolbox_asset': {
       const q = String(cmd.query||cmd.keyword||cmd.search||nm||'').trim()
@@ -978,7 +955,6 @@ async function _injectCommand(cmdToSend: ActionCmd, user: string, signal?: Abort
 
 // ── TOOLBOX SEARCH ────────────────────────────────────────────────────────────
 // GET {API_URL}/toolboxService?category=Model&query=house%20modern
-// `category` is optional (one of TOOLBOX_CATEGORIES); `query` is free-text.
 export interface ToolboxSearchItem {
   id: number | string | null
   name: string
@@ -1089,9 +1065,6 @@ async function _tryAutoPublish(lastPrompt: string): Promise<void> {
 }
 
 // ── TOOLBOX ACTIONS (independent of Studio connection) ────────────────────────
-// search_toolbox/get_toolbox_asset hit {API_URL}/toolboxService directly
-// from the browser and never touch the plugin, so they work even without
-// Studio connected — unlike autoInjectToStudio which is gated on it.
 interface InjectResult { summary:string[]|null; readResults:ReadResult[] }
 const TOOLBOX_ACTION_NAMES = new Set(['search_toolbox','get_toolbox_asset'])
 function isToolboxAction(cmd: ActionCmd): boolean { return TOOLBOX_ACTION_NAMES.has(cmd.action||'') }
@@ -1099,7 +1072,7 @@ function isToolboxAction(cmd: ActionCmd): boolean { return TOOLBOX_ACTION_NAMES.
 async function processToolboxActions(cmds: ActionCmd[]): Promise<InjectResult> {
   const toolboxCmds = cmds.filter(isToolboxAction)
   if (!toolboxCmds.length) return {summary:null,readResults:[]}
-  const summary: string[]=[], readResults: ReadResult[]=[]
+  const readResults: ReadResult[]=[]
   for (const cmd of toolboxCmds) {
     if (!S.gen) break
     const sig=S.cancelCtrl?.signal; if (sig?.aborted) break
@@ -1121,19 +1094,25 @@ async function processToolboxActions(cmds: ActionCmd[]): Promise<InjectResult> {
       readResults.push({ name:`toolbox_search:${query}`, source:_buildToolboxResultSummary(searchRes), class:'ToolboxSearchResult', lineCount: searchRes.items.length })
     } else if (searchRes.ok) {
       updateStep(sid,'info',undefined,`No results found for "${query}".`)
+      readResults.push({ name:`toolbox_search:${query}`, source:`No results found for "${query}".`, class:'ToolboxSearchResult', lineCount: 0 })
     } else {
       updateStep(sid,'error',(searchRes.error||'Search failed').slice(0,100))
     }
   }
-  return {summary:summary.length>0?summary:null,readResults}
+  // Toolbox searches are always read-only, so `summary` stays null here on
+  // purpose — that's what signals _sendInner()'s follow-up loop to continue.
+  return {summary:null,readResults}
 }
 
 // ── AUTO INJECT ───────────────────────────────────────────────────────────────
+// Returns readResults for ALL read-only actions (read_script, read_instance,
+// list, get_output) AND `summary` populated ONLY by actions that actually
+// change something (create/edit/set_properties/etc). This split is what lets
+// _sendInner() correctly detect "the AI only looked at something, it didn't
+// change anything yet" and automatically continue the conversation.
 async function autoInjectToStudio(aiResponse: string, _userPrompt: string): Promise<InjectResult> {
   if (!studioConnected) return {summary:null,readResults:[]}
   const summary: string[]=[], readResults: ReadResult[]=[], user=(SESSION?.user.username??'').toLowerCase()
-  // Toolbox actions are handled separately by processToolboxActions()
-  // (called earlier), so filter them out here to avoid double-sending.
   const cmds=parseAllCommands(aiResponse).filter(c=>!isToolboxAction(c))
   if (!cmds.length) return {summary:null,readResults:[]}
   const hasPlayTest=cmds.some(c=>c.action==='play_test'||c.action==='run_test')
@@ -1158,17 +1137,14 @@ async function autoInjectToStudio(aiResponse: string, _userPrompt: string): Prom
         const scriptName=String(cmd.name||cmd.target||'')
         const readResult=await fetchReadScriptResult(scriptName)
         if(readResult){updateStep(step.sid,'done',`Read script: ${readResult.name}`);readResults.push(readResult)}
-        else updateStep(step.sid,'info',undefined,'Source not available yet — check Explorer in Studio.')
+        else{updateStep(step.sid,'info',undefined,'Source not available yet — check Explorer in Studio.');readResults.push({name:scriptName||'unknown',source:'[Script source was not available — Studio did not report it in time. Check the script exists and try again, or ask the user to confirm the exact name.]',class:'Script',lineCount:0})}
       }
       else if(a==='read_instance'){
-        // read_instance's report lands in "instance_data" on the backend.
-        // Mirror the read_script wait so its content also feeds the
-        // follow-up loop below (fixes: AI says "I'll read X" then stalls).
         updateStep(step.sid,'info',undefined,'Waiting for Studio to report the instance...')
         const instName=String(cmd.name||cmd.target||cmd.path||'')
         const readResult=await fetchReadScriptResult(instName)
         if(readResult){updateStep(step.sid,'done',`Read instance: ${readResult.name||instName}`);readResults.push({...readResult,class:readResult.class||'Instance'})}
-        else updateStep(step.sid,'info',undefined,'Instance data not available yet — check Explorer in Studio.')
+        else{updateStep(step.sid,'info',undefined,'Instance data not available yet — check Explorer in Studio.');readResults.push({name:instName||'unknown',source:'[Instance data was not available — Studio did not report it in time.]',class:'Instance',lineCount:0})}
       }
       else if(a==='list'||a==='get_output'||a==='resolve_mention'){updateStep(step.sid,'info');await _sleep(800)}
       else{
@@ -1246,20 +1222,27 @@ function _truncateMsgsForApi(msgs: ApiMsg[], maxChars=60000): ApiMsg[] {
 }
 
 // ── FOLLOW-UP AFTER READ ──────────────────────────────────────────────────────
-// The bug this fixes: the AI would sometimes respond with only a
-// `read_script`/`read_instance`/toolbox-search action plus a promise like
-// "Oke, saya akan edit script tersebut" — but since the whole flow was
-// single-shot, that promise never got followed up on. Once we have the
-// read result(s) back, feed them to the model as a fresh user turn (in the
-// same request/response cycle, no manual re-send needed) so it can act on
-// what it just read. Capped at MAX_FOLLOWUP_ROUNDS so a model that keeps
-// re-reading forever can't loop indefinitely.
+// Bug this fixes: AI responds with only a read_script/read_instance/toolbox
+// search action plus a promise like "Oke, saya akan edit script tersebut" —
+// but the flow was single-shot, so that promise never got followed up on.
+// Once we have the read result(s) back, we feed them to the model as a
+// fresh user turn (same request cycle, no manual re-send) so it can act on
+// what it just read. The instruction is deliberately blunt/imperative
+// ("You MUST now...") because a softer phrasing ("you can continue if you
+// want") was observed to let the model just re-summarize the read result
+// in prose instead of emitting the next action.
 function _buildFollowupContext(results: ReadResult[]): string {
   const blocks = results.map(r => {
-    if (r.class === 'ToolboxSearchResult') return `Result of "${r.name}":\n\`\`\`\n${r.source}\n\`\`\``
+    if (r.class === 'ToolboxSearchResult') return `Toolbox search result for "${r.name.replace(/^toolbox_search:/,'')}":\n\`\`\`\n${r.source}\n\`\`\``
     return `Source of "${r.name}" (${r.class}, ${r.lineCount} line${r.lineCount===1?'':'s'}):\n\`\`\`lua\n${r.source}\n\`\`\``
   })
-  return `[STUDIO REPORTED DATA — use this to continue what you said you'd do]\n\n${blocks.join('\n\n')}\n\nContinue now: if you said you would edit/create/change something based on this, emit the action JSON for it in this reply.`
+  return [
+    '[STUDIO REPORTED DATA — automatic follow-up, not a new user message]',
+    '',
+    blocks.join('\n\n'),
+    '',
+    'You MUST now act on this data in the SAME reply. Do not just summarize or say what you are about to do — actually emit the JSON action block for the next step right now (e.g. edit_script, create_instance, insert_asset, set_properties, etc). If you already have everything you said you needed, do not read/search again — proceed straight to the action. Only ask the user a clarifying question if the data above is genuinely insufficient to proceed.',
+  ].join('\n')
 }
 
 // ── SEND ──────────────────────────────────────────────────────────────────────
@@ -1338,11 +1321,25 @@ async function _sendInner(): Promise<void> {
   apiMsgs.push(lastM);apiMsgs=_truncateMsgsForApi(apiMsgs,55000)
 
   // ── MAIN + AUTO-FOLLOW-UP LOOP ─────────────────────────────────────────
-  // Round 0 is the normal reply to the user's message. If that reply only
-  // reads data (read_script/read_instance/toolbox search) with no other
-  // action, we feed the read result back to the model as a follow-up turn
-  // so it can finish what it said it would do, instead of the process
-  // silently ending on a broken promise.
+  // Round 0 = normal reply to the user's message.
+  //
+  // Each round:
+  //  1. Call the AI.
+  //  2. Parse ALL action commands from its reply.
+  //  3. Run toolbox actions (always independent of Studio) AND studio
+  //     actions (only if Studio is connected).
+  //  4. Both `processToolboxActions` and `autoInjectToStudio` return
+  //     { summary, readResults } where `summary` is populated ONLY by
+  //     actions that changed something, and `readResults` is populated by
+  //     every read-only action (read_script/read_instance/toolbox search/
+  //     even a "not found" result — anything that reports data back).
+  //  5. If we got readResults this round but summary is still empty (i.e.
+  //     literally nothing besides reading happened), and we haven't hit
+  //     MAX_FOLLOWUP_ROUNDS, feed the read data back as a forced follow-up
+  //     turn and loop again — this is what makes "read_script then edit"
+  //     actually finish the edit instead of stopping after the read.
+  //  6. Otherwise (something changed, or no actions at all, or an error,
+  //     or round cap hit) we stop and render the final message.
   let aiText=''
   let hasError=false
   let studioSummary: string[]|null=null
@@ -1365,6 +1362,9 @@ async function _sendInner(): Promise<void> {
     aiText=aiResult.data!.content||''
     hasError=!!(aiText&&(aiText.startsWith('**Failed')||aiText.startsWith('**Error')))
 
+    // Credit deduction only happens once, on the first round's response —
+    // follow-up rounds are the cost of finishing the SAME request, not a
+    // new billable message.
     if(round===0&&!isOwner()&&!isAdmin()&&aiText&&!hasError){
       const _baseCost=S.model.cost||0; const _imageCost=imageCount*costPerImageForModel(S.model)
       if(_baseCost>0||_imageCost>0){
@@ -1376,46 +1376,50 @@ async function _sendInner(): Promise<void> {
       }
     }
 
-    const _preCmds=parseAllCommands(aiText)
-    const _toolboxCmds=_preCmds.filter(isToolboxAction)
-    const _studioCmds=_preCmds.filter(c=>!isToolboxAction(c))
+    if(hasError){ displayText=cleanAIResponse(aiText); if(showThinking) finalizeChips(); break }
 
-    if(hasError||(!_toolboxCmds.length&&!(studioConnected&&_studioCmds.length))){
-      // No actions this round (or an error) — nothing to run/inject.
-      if(!hasError&&_studioCmds.length&&!studioConnected&&!_toolboxCmds.length){
-        // Studio-only actions requested but Studio not connected.
-        if(showThinking) finalizeChips()
-        displayText=cleanAIResponse(aiText)
-        const aiMsg0: ConvMsg&{_rawContent:string}={role:'ai',content:displayText,time:Date.now(),_rawContent:aiText}
-        removeThinkingBubble(); const cv2=S.convs.find(x=>x.id===S.curConv); if(cv2){cv2.msgs.push(aiMsg0);appendMsg(aiMsg0)}; _resetGenState(); saveS(); return
-      }
+    const _allCmds=parseAllCommands(aiText)
+    const _toolboxCmds=_allCmds.filter(isToolboxAction)
+    const _studioCmds=_allCmds.filter(c=>!isToolboxAction(c)&&c.action!=='none')
+
+    // Nothing actionable at all this round — plain text reply.
+    if(!_toolboxCmds.length&&!_studioCmds.length){
       displayText=cleanAIResponse(aiText)
       if(showThinking) finalizeChips()
       break
     }
 
+    // Studio actions requested but plugin not connected, and no toolbox
+    // actions to fall back on — nothing we can actually run.
+    if(_studioCmds.length&&!studioConnected&&!_toolboxCmds.length){
+      if(showThinking) finalizeChips()
+      displayText=cleanAIResponse(aiText)
+      break
+    }
+
     if(showThinking){
       const totalCount=_toolboxCmds.length+(studioConnected?_studioCmds.length:0)
-      clearSteps();addChip(`Running ${totalCount} action(s)...`,'running','One by one, please wait');await _sleep(200);updateChip(_chipId,'done')
+      if(totalCount>0){ clearSteps();addChip(`Running ${totalCount} action(s)...`,'running','One by one, please wait');await _sleep(200);updateChip(_chipId,'done') }
     }
+
     const combinedReadResults: ReadResult[]=[]
-    let combinedSummary: string[]|null=null
+    let combinedSummary: string[]=[]
 
     if(_toolboxCmds.length){
       const toolboxResult=await processToolboxActions(_toolboxCmds)
       if(toolboxResult.readResults.length) combinedReadResults.push(...toolboxResult.readResults)
-      if(toolboxResult.summary?.length) combinedSummary=(combinedSummary||([] as string[])).concat(toolboxResult.summary)
+      // toolboxResult.summary is always null by design (search is read-only)
     }
     if(!S.gen||_localCancelSignal?.aborted){_resetGenState();const cv3=S.convs.find(x=>x.id===S.curConv);if(cv3){const cancelMsg: ConvMsg={role:'ai',content:'Process cancelled.',time:Date.now()};cv3.msgs.push(cancelMsg);appendMsg(cancelMsg)};saveS();return}
 
     if(studioConnected&&_studioCmds.length){
       const injectResult=await autoInjectToStudio(aiText,lastPrompt)
-      if(injectResult.summary?.length) combinedSummary=(combinedSummary||([] as string[])).concat(injectResult.summary)
+      if(injectResult.summary?.length) combinedSummary=combinedSummary.concat(injectResult.summary)
       if(injectResult.readResults.length) combinedReadResults.push(...injectResult.readResults)
       if(!S.gen||_localCancelSignal?.aborted){_resetGenState();const cv4=S.convs.find(x=>x.id===S.curConv);if(cv4){const cancelMsg: ConvMsg={role:'ai',content:'Process cancelled.',time:Date.now()};cv4.msgs.push(cancelMsg);appendMsg(cancelMsg)};saveS();return}
     }
 
-    studioSummary = combinedSummary?.length ? (studioSummary||([] as string[])).concat(combinedSummary) : studioSummary
+    if(combinedSummary.length) studioSummary=(studioSummary||[]).concat(combinedSummary)
     displayText=stripAllCode(aiText)
     if(combinedReadResults.length>0){
       const readBlocks=combinedReadResults.map(r=>{
@@ -1426,9 +1430,12 @@ async function _sendInner(): Promise<void> {
     }
     if(!displayText||displayText.length<20)displayText=studioSummary?.length?'Successfully sent to Studio:\n'+studioSummary.map(s=>'• '+s).join('\n'):'Done. Check Explorer in Studio.'
 
-    // Decide whether to auto-continue: only reads happened (no non-read
-    // action actually landed in `summary`) and we haven't hit the round cap.
-    const onlyReadHappened = combinedReadResults.length>0 && !(combinedSummary?.length)
+    // ── THE FIX ──────────────────────────────────────────────────────────
+    // "Only reading happened" = we got read results back this round, AND
+    // no changing action landed (combinedSummary empty). That's exactly
+    // the read_script-then-nothing case from the bug report. Force a
+    // follow-up round instead of stopping here.
+    const onlyReadHappened = combinedReadResults.length>0 && combinedSummary.length===0
     if(onlyReadHappened && round<MAX_FOLLOWUP_ROUNDS){
       if(showThinking){ const cChip=addChip(UI.continuing,'running'); updateChip(cChip,'done') }
       apiMsgs.push({role:'assistant',content:aiText})
@@ -1550,9 +1557,6 @@ function getProjectName(pid: string): string|null {
   const projs=S.projects||(SESSION?.data?.projects as AppState['projects'])||[]
   return projs.find(x=>x.id===pid)?.name??null
 }
-// Mirrors userOwnsProject() from dashboard.tsx: a project id in the URL is
-// untrusted (stale bookmark, typo, someone else's id) — verify it's in the
-// signed-in user's own project list before rendering against it.
 function userOwnsProject(pid: string): boolean {
   if (!pid) return false
   const projs=S.projects||(SESSION?.data?.projects as AppState['projects'])||[]
@@ -1894,10 +1898,6 @@ async function initApp(): Promise<void> {
   if(S.curConv&&S.convs.some(x=>x.id===S.curConv)) loadConv(S.curConv)
   else if(S.convs.length>0){const latest=S.convs.reduce((a,b)=>(b.time||0)>(a.time||0)?b:a);S.curConv=latest.id;loadConv(S.curConv)}
   else newChat()
-  // Daily credit reward: checked on every app load (below) and again every
-  // 10 min while the tab is open (startDailyClaimWatcher) and on tab
-  // refocus (visibilitychange listener) — so it "adds itself" per plan
-  // without needing a server-side cron job.
   autoClaimDaily(); updateLoader(100,UI.loaderReady); setTimeout(hideLoader,500)
   const urlp=new URLSearchParams(window.location.search); if(urlp.get('settings')==='true')setTimeout(()=>openSettings(),800)
   setTimeout(()=>{if(!_syncInProgress)syncToServer()},2000)
