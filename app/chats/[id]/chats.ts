@@ -1419,7 +1419,7 @@ async function _sendInner(): Promise<void> {
       if(!S.gen||_localCancelSignal?.aborted){_resetGenState();const cv4=S.convs.find(x=>x.id===S.curConv);if(cv4){const cancelMsg: ConvMsg={role:'ai',content:'Process cancelled.',time:Date.now()};cv4.msgs.push(cancelMsg);appendMsg(cancelMsg)};saveS();return}
     }
 
-    if(combinedSummary.length) studioSummary=(studioSummary||[]).concat(combinedSummary)
+    if(combinedSummary.length) studioSummary=(studioSummary||([] as string[])).concat(combinedSummary)
     displayText=stripAllCode(aiText)
     if(combinedReadResults.length>0){
       const readBlocks=combinedReadResults.map(r=>{
