@@ -737,7 +737,7 @@ async function handleGet(
 
   // ── check ─────────────────────────────────────────────────────────────────
   if (q["check"] != null) {
-    const u        = san(q["user"] ?? "");
+    const u        = san(q["user"] ?? q["_user"] ?? "");
     const rawStats = await ctx.runQuery(internal.store.getGlobalStats, {});
     const s        = rawStats
       ? (JSON.parse(rawStats) as { totalCommands: number; totalUsers: number })
@@ -769,7 +769,12 @@ async function handleGet(
     );
   }
 
-  const u = san(q["user"] ?? "");
+  // NOTE: plugin POST payloads use "_user" as the field name, but earlier GET
+  // getters only checked "user". If a caller (frontend or plugin) queries with
+  // "_user" instead, this used to silently fall back to the "default" bucket,
+  // making every read (get_instance, get_action_list, etc.) look empty even
+  // though the write succeeded under the real username. Accept both.
+  const u = san(q["user"] ?? q["_user"] ?? "");
 
   // ── ai_feed ───────────────────────────────────────────────────────────────
   if (q["ai_feed"] != null) {
