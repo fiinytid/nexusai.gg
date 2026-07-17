@@ -78,14 +78,15 @@ const MAX_DAILY_CATCHUP_DAYS = 7
 const _NEW_CHAT_DEBOUNCE = 800
 const _defaultModel: ModelEntry = { id: 'gemini-3.5-flash', prov: 'gemini', cost: 3, label: 'Gemini 3.5 Flash' }
 
-// Max automatic follow-up rounds after a read_script/read_instance/toolbox
-// search. Prevents an infinite loop if the AI keeps just reading forever.
-const MAX_FOLLOWUP_ROUNDS = 4
+// Max automatic follow-up rounds after ANY action (read or write). Prevents
+// an infinite loop if the AI keeps acting forever without ever producing a
+// final user-facing reply.
+const MAX_FOLLOWUP_ROUNDS = 6
 
 // Actions that are "read-only" — they never modify anything in Studio, they
-// only report data back. If a round contains ONLY these (no create/edit/etc),
-// we automatically continue the conversation so the AI can act on what it
-// just read, instead of leaving a "I'll edit this now" promise unfulfilled.
+// only report data back. Kept for labeling/telemetry purposes, but no longer
+// used to decide whether to loop: ALL actions now report their result back
+// to the AI and force a follow-up round (see the MAIN LOOP below).
 const READ_ONLY_ACTIONS = new Set(['read_script','read_instance','list','get_output','resolve_mention','get_info','get_all_actions','ping','search_toolbox','get_toolbox_asset'])
 function isReadOnlyAction(cmd: ActionCmd): boolean { return READ_ONLY_ACTIONS.has(cmd.action||'') }
 
@@ -1084,7 +1085,7 @@ async function processToolboxActions(cmds: ActionCmd[]): Promise<InjectResult> {
     const query = String(cmd.query||cmd.keyword||cmd.search||cmd.name||cmd.target||'').trim()
     const category = (cmd.category||cmd.searchCategoryType) as string|undefined
     const limit = typeof cmd.limit==='number' ? cmd.limit : (typeof cmd.maxPageSize==='number' ? cmd.maxPageSize : 10)
-    if (!query) { updateStep(sid,'error','No search query provided'); continue }
+    if (!query) { updateStep(sid,'error','No search query provided'); readResults.push({name:'toolbox_search:(missing query)',source:'[Toolbox search failed: no search query was provided in the action. Ask for or infer a concrete search term before retrying.]',class:'ToolboxSearchResult',lineCount:0}); continue }
 
     updateStep(sid,'info',undefined,`Searching Toolbox for "${query}"${category?` (${category})`:''}...`)
     const searchRes = await fetchToolboxSearch(query, category, limit)
@@ -1097,19 +1098,21 @@ async function processToolboxActions(cmds: ActionCmd[]): Promise<InjectResult> {
       readResults.push({ name:`toolbox_search:${query}`, source:`No results found for "${query}".`, class:'ToolboxSearchResult', lineCount: 0 })
     } else {
       updateStep(sid,'error',(searchRes.error||'Search failed').slice(0,100))
+      readResults.push({ name:`toolbox_search:${query}`, source:`[Toolbox search failed: ${searchRes.error||'unknown error'}. Inform the user and suggest an alternative approach.]`, class:'ToolboxSearchResult', lineCount:0 })
     }
   }
   // Toolbox searches are always read-only, so `summary` stays null here on
-  // purpose — that's what signals _sendInner()'s follow-up loop to continue.
+  // purpose — every result (success, empty, or error) is pushed into
+  // readResults instead, which is what drives the mandatory AI follow-up.
   return {summary:null,readResults}
 }
 
 // ── AUTO INJECT ───────────────────────────────────────────────────────────────
-// Returns readResults for ALL read-only actions (read_script, read_instance,
-// list, get_output) AND `summary` populated ONLY by actions that actually
-// change something (create/edit/set_properties/etc). This split is what lets
-// _sendInner() correctly detect "the AI only looked at something, it didn't
-// change anything yet" and automatically continue the conversation.
+// Returns readResults for EVERY action (read or write) that Studio reports
+// back on, AND `summary` populated ONLY by actions that actually change
+// something (create/edit/set_properties/etc) as a short human-readable list
+// for the "Built in Studio" UI box. The readResults are what get fed back to
+// the AI as the next turn's context — see the MAIN LOOP in _sendInner().
 async function autoInjectToStudio(aiResponse: string, _userPrompt: string): Promise<InjectResult> {
   if (!studioConnected) return {summary:null,readResults:[]}
   const summary: string[]=[], readResults: ReadResult[]=[], user=(SESSION?.user.username??'').toLowerCase()
@@ -1127,26 +1130,48 @@ async function autoInjectToStudio(aiResponse: string, _userPrompt: string): Prom
     if(!step.sid){doneCount++;continue}
     updateStep(step.sid,'running'); await _sleep(120)
     const cmd=step.cmd, a=cmd.action||''
+    const targetName=String(cmd.name||cmd.target||cmd.path||'')
 
     const res=await _injectCommand(cmd,user,sig)
     if(res.ok){
-      if(a==='play_test'||a==='run_test'){updateStep(step.sid,'running',UI.testRunning);_playTestActive=true}
-      else if(a==='stop_test'){updateStep(step.sid,'done');_playTestActive=false}
+      if(a==='play_test'||a==='run_test'){
+        updateStep(step.sid,'running',UI.testRunning);_playTestActive=true
+        readResults.push({name:targetName||'play_test',source:'[Studio confirmed play_test started. This is a status update, not a completed result — do not claim the test finished; only report what Studio has confirmed so far.]',class:'PlayTestStatus',lineCount:0})
+      }
+      else if(a==='stop_test'){
+        updateStep(step.sid,'done');_playTestActive=false
+        readResults.push({name:targetName||'stop_test',source:'[Studio confirmed the play test was stopped successfully.]',class:'ActionResult',lineCount:0})
+      }
       else if(a==='read_script'){
         updateStep(step.sid,'info',undefined,'Waiting for Studio to report the script...')
         const scriptName=String(cmd.name||cmd.target||'')
         const readResult=await fetchReadScriptResult(scriptName)
         if(readResult){updateStep(step.sid,'done',`Read script: ${readResult.name}`);readResults.push(readResult)}
-        else{updateStep(step.sid,'info',undefined,'Source not available yet — check Explorer in Studio.');readResults.push({name:scriptName||'unknown',source:'[Script source was not available — Studio did not report it in time. Check the script exists and try again, or ask the user to confirm the exact name.]',class:'Script',lineCount:0})}
+        else{updateStep(step.sid,'info',undefined,'Source not available yet — check Explorer in Studio.');readResults.push({name:scriptName||'unknown',source:'[Script source was not available — Studio did not report it in time. The script may not exist, the name may be wrong, or Studio took too long to respond. Tell the user what happened and either retry with a corrected name or ask them to confirm the script exists.]',class:'Script',lineCount:0})}
       }
       else if(a==='read_instance'){
         updateStep(step.sid,'info',undefined,'Waiting for Studio to report the instance...')
         const instName=String(cmd.name||cmd.target||cmd.path||'')
         const readResult=await fetchReadScriptResult(instName)
         if(readResult){updateStep(step.sid,'done',`Read instance: ${readResult.name||instName}`);readResults.push({...readResult,class:readResult.class||'Instance'})}
-        else{updateStep(step.sid,'info',undefined,'Instance data not available yet — check Explorer in Studio.');readResults.push({name:instName||'unknown',source:'[Instance data was not available — Studio did not report it in time.]',class:'Instance',lineCount:0})}
+        else{updateStep(step.sid,'info',undefined,'Instance data not available yet — check Explorer in Studio.');readResults.push({name:instName||'unknown',source:'[Instance data was not available — Studio did not report it in time. The instance may not exist at the given path, or Studio took too long to respond. Tell the user what happened and either retry with a corrected path or ask them to confirm it exists.]',class:'Instance',lineCount:0})}
       }
-      else if(a==='list'||a==='get_output'||a==='resolve_mention'){updateStep(step.sid,'info');await _sleep(800)}
+      else if(a==='list'){
+        updateStep(step.sid,'info'); await _sleep(800)
+        readResults.push({name:targetName||'list',source:'[Studio processed the list request and pushed the result to the plugin feed/output. Use the data reported there; if nothing further is visible, say the listing was sent to Studio successfully.]',class:'ActionResult',lineCount:0})
+      }
+      else if(a==='get_output'){
+        updateStep(step.sid,'info'); await _sleep(800)
+        readResults.push({name:targetName||'get_output','source':'[Studio processed the get_output request. Read whatever output/log data was reported back through the feed and use it to answer the user; if there is nothing new, say the output log came back empty.]',class:'ActionResult',lineCount:0})
+      }
+      else if(a==='resolve_mention'){
+        updateStep(step.sid,'info'); await _sleep(800)
+        readResults.push({name:targetName||'resolve_mention',source:'[Studio processed the resolve_mention request. Use the resolved reference for the next step.]',class:'ActionResult',lineCount:0})
+      }
+      else if(a==='get_info'||a==='ping'||a==='get_all_actions'){
+        updateStep(step.sid,'done')
+        readResults.push({name:targetName||a,source:`[Studio confirmed the "${a}" request completed successfully.]`,class:'ActionResult',lineCount:0})
+      }
       else{
         updateStep(step.sid,'done');const lbl2=makeStepLabel(cmd);if(lbl2)summary.push(lbl2)
         let postDelay=400
@@ -1155,8 +1180,12 @@ async function autoInjectToStudio(aiResponse: string, _userPrompt: string): Prom
         else if(a==='set_properties')postDelay=900
         else if(a==='terrain'||a==='insert_asset')postDelay=600
         await _sleep(postDelay)
+        readResults.push({name:targetName||a,source:`[Studio confirmed "${a}"${targetName?` on "${targetName}"`:''} completed successfully. The change has been applied.]`,class:'ActionResult',lineCount:0})
       }
-    } else{updateStep(step.sid,'error',String(res.error||'rejected').slice(0,100));await _sleep(400)}
+    } else{
+      updateStep(step.sid,'error',String(res.error||'rejected').slice(0,100));await _sleep(400)
+      readResults.push({name:targetName||a,source:`[Studio REJECTED the "${a}"${targetName?` on "${targetName}"`:''} action. Error: ${String(res.error||'unknown error').slice(0,200)}. Explain this to the user and, if possible, propose a corrected action.]`,class:'ActionError',lineCount:0})
+    }
     doneCount++
   }
   const _hadPlayTest=cmds.some(c=>c.action==='play_test'||c.action==='run_test')
@@ -1221,27 +1250,31 @@ function _truncateMsgsForApi(msgs: ApiMsg[], maxChars=60000): ApiMsg[] {
   return result
 }
 
-// ── FOLLOW-UP AFTER READ ──────────────────────────────────────────────────────
-// Bug this fixes: AI responds with only a read_script/read_instance/toolbox
-// search action plus a promise like "Oke, saya akan edit script tersebut" —
-// but the flow was single-shot, so that promise never got followed up on.
-// Once we have the read result(s) back, we feed them to the model as a
-// fresh user turn (same request cycle, no manual re-send) so it can act on
-// what it just read. The instruction is deliberately blunt/imperative
-// ("You MUST now...") because a softer phrasing ("you can continue if you
-// want") was observed to let the model just re-summarize the read result
-// in prose instead of emitting the next action.
+// ── FOLLOW-UP AFTER ACTION ─────────────────────────────────────────────────
+// Every action — read OR write — now reports its result back to the AI as a
+// forced follow-up turn (same request cycle, no manual re-send), so the AI
+// always produces the final user-facing message itself instead of the UI
+// ever showing a hardcoded placeholder like "Done. Check Explorer in
+// Studio.". The instruction is deliberately blunt/imperative because a
+// softer phrasing was observed to let the model just stay silent or repeat
+// itself instead of wrapping up with a real answer.
 function _buildFollowupContext(results: ReadResult[]): string {
   const blocks = results.map(r => {
     if (r.class === 'ToolboxSearchResult') return `Toolbox search result for "${r.name.replace(/^toolbox_search:/,'')}":\n\`\`\`\n${r.source}\n\`\`\``
+    if (r.class === 'ActionResult') return `Result of action "${r.name}":\n${r.source}`
+    if (r.class === 'ActionError') return `ERROR from action "${r.name}":\n${r.source}`
+    if (r.class === 'PlayTestStatus') return `Status update for "${r.name}":\n${r.source}`
     return `Source of "${r.name}" (${r.class}, ${r.lineCount} line${r.lineCount===1?'':'s'}):\n\`\`\`lua\n${r.source}\n\`\`\``
   })
+  const hasError = results.some(r => r.class === 'ActionError')
   return [
     '[STUDIO REPORTED DATA — automatic follow-up, not a new user message]',
     '',
     blocks.join('\n\n'),
     '',
-    'You MUST now act on this data in the SAME reply. Do not just summarize or say what you are about to do — actually emit the JSON action block for the next step right now (e.g. edit_script, create_instance, insert_asset, set_properties, etc). If you already have everything you said you needed, do not read/search again — proceed straight to the action. Only ask the user a clarifying question if the data above is genuinely insufficient to proceed.',
+    hasError
+      ? 'One or more actions FAILED. You MUST now address this in the SAME reply: explain what went wrong in plain language, and either emit a corrected JSON action block to fix it, or ask the user a clarifying question if you cannot proceed without more information. Do not silently ignore the error.'
+      : 'You MUST now respond in the SAME reply based on this data. If there is a next step to take (e.g. you just read a script and still need to edit it, or you just created a part and still need to script it), emit the JSON action block for that next step right now — do not just say what you are about to do. If everything requested by the user is now complete, do NOT emit another action — instead write a short, specific, final confirmation message to the user describing exactly what was done (referencing the actual names/values from the data above), as if you personally just finished the work. Never say generic things like "Done" or "Check Explorer in Studio" — be concrete about what changed. Only ask the user a clarifying question if the data above is genuinely insufficient to proceed.',
   ].join('\n')
 }
 
@@ -1329,17 +1362,25 @@ async function _sendInner(): Promise<void> {
   //  3. Run toolbox actions (always independent of Studio) AND studio
   //     actions (only if Studio is connected).
   //  4. Both `processToolboxActions` and `autoInjectToStudio` return
-  //     { summary, readResults } where `summary` is populated ONLY by
-  //     actions that changed something, and `readResults` is populated by
-  //     every read-only action (read_script/read_instance/toolbox search/
-  //     even a "not found" result — anything that reports data back).
-  //  5. If we got readResults this round but summary is still empty (i.e.
-  //     literally nothing besides reading happened), and we haven't hit
-  //     MAX_FOLLOWUP_ROUNDS, feed the read data back as a forced follow-up
-  //     turn and loop again — this is what makes "read_script then edit"
-  //     actually finish the edit instead of stopping after the read.
-  //  6. Otherwise (something changed, or no actions at all, or an error,
-  //     or round cap hit) we stop and render the final message.
+  //     { summary, readResults }. As of this version, EVERY action —
+  //     read-only or state-changing — pushes an entry into `readResults`
+  //     describing exactly what Studio reported (success detail, rejection
+  //     reason, or timeout). `summary` is still populated separately, but
+  //     only for the "Built in Studio" collapsible UI list — it no longer
+  //     drives the loop-continuation decision.
+  //  5. If we got ANY readResults this round (i.e. any action ran at all)
+  //     and we haven't hit MAX_FOLLOWUP_ROUNDS, we ALWAYS feed the result
+  //     data back to the AI as a forced follow-up turn and loop again. The
+  //     AI itself decides — per the instructions in
+  //     _buildFollowupContext — whether to take another action or to stop
+  //     and write the final confirmation message. This guarantees the same
+  //     "did X, saw the result, then explicitly said 'now doing Y' / 'all
+  //     done, here's what changed'" pattern for every action type, not just
+  //     read_script.
+  //  6. We only stop without a follow-up when: no actions were parsed at
+  //     all (plain text reply), Studio actions were requested but the
+  //     plugin isn't connected and there's no toolbox fallback, an API-level
+  //     error occurred, or the round cap was hit.
   let aiText=''
   let hasError=false
   let studioSummary: string[]|null=null
@@ -1382,7 +1423,9 @@ async function _sendInner(): Promise<void> {
     const _toolboxCmds=_allCmds.filter(isToolboxAction)
     const _studioCmds=_allCmds.filter(c=>!isToolboxAction(c)&&c.action!=='none')
 
-    // Nothing actionable at all this round — plain text reply.
+    // Nothing actionable at all this round — plain text reply. This is the
+    // ONLY case where the AI's own words become the final message with no
+    // forced follow-up, because there is nothing to report back.
     if(!_toolboxCmds.length&&!_studioCmds.length){
       displayText=cleanAIResponse(aiText)
       if(showThinking) finalizeChips()
@@ -1390,7 +1433,9 @@ async function _sendInner(): Promise<void> {
     }
 
     // Studio actions requested but plugin not connected, and no toolbox
-    // actions to fall back on — nothing we can actually run.
+    // actions to fall back on — nothing we can actually run, so there is no
+    // result to report back either. Surface the AI's text as-is (it should
+    // already explain the plugin isn't connected).
     if(_studioCmds.length&&!studioConnected&&!_toolboxCmds.length){
       if(showThinking) finalizeChips()
       displayText=cleanAIResponse(aiText)
@@ -1420,23 +1465,14 @@ async function _sendInner(): Promise<void> {
     }
 
     if(combinedSummary.length) studioSummary=(studioSummary||([] as string[])).concat(combinedSummary)
-    displayText=stripAllCode(aiText)
-    if(combinedReadResults.length>0){
-      const readBlocks=combinedReadResults.map(r=>{
-        if (r.class==='ToolboxSearchResult') return `**${r.name}**:\n\`\`\`\n${r.source}\n\`\`\``
-        return `**${r.name}** (${r.class}, ${r.lineCount} line${r.lineCount===1?'':'s'}):\n\`\`\`lua\n${r.source}\n\`\`\``
-      }).join('\n\n')
-      displayText=displayText?displayText+'\n\n'+readBlocks:readBlocks
-    }
-    if(!displayText||displayText.length<20)displayText=studioSummary?.length?'Successfully sent to Studio:\n'+studioSummary.map(s=>'• '+s).join('\n'):'Done. Check Explorer in Studio.'
 
     // ── THE FIX ──────────────────────────────────────────────────────────
-    // "Only reading happened" = we got read results back this round, AND
-    // no changing action landed (combinedSummary empty). That's exactly
-    // the read_script-then-nothing case from the bug report. Force a
-    // follow-up round instead of stopping here.
-    const onlyReadHappened = combinedReadResults.length>0 && combinedSummary.length===0
-    if(onlyReadHappened && round<MAX_FOLLOWUP_ROUNDS){
+    // ANY action that ran and reported a result — success, empty, or error,
+    // read or write — forces a follow-up round so the AI itself narrates
+    // what happened next, exactly like the old read_script-only behavior.
+    // We stop looping only when nothing was reported this round (shouldn't
+    // normally happen given the checks above) or we hit the round cap.
+    if(combinedReadResults.length>0 && round<MAX_FOLLOWUP_ROUNDS){
       if(showThinking){ const cChip=addChip(UI.continuing,'running'); updateChip(cChip,'done') }
       apiMsgs.push({role:'assistant',content:aiText})
       apiMsgs.push({role:'user',content:_buildFollowupContext(combinedReadResults)})
@@ -1444,6 +1480,21 @@ async function _sendInner(): Promise<void> {
       round++
       continue
     }
+
+    // Round cap hit, or (edge case) no read results came back despite
+    // actions being parsed. Fall back to the AI's own text for this round,
+    // stripped of any leftover JSON action blocks, plus the raw reported
+    // data appended so nothing is silently lost.
+    displayText=stripAllCode(aiText)
+    if(combinedReadResults.length>0){
+      const readBlocks=combinedReadResults.map(r=>{
+        if (r.class==='ToolboxSearchResult') return `**${r.name}**:\n\`\`\`\n${r.source}\n\`\`\``
+        if (r.class==='ActionResult'||r.class==='ActionError'||r.class==='PlayTestStatus') return `**${r.name}**: ${r.source}`
+        return `**${r.name}** (${r.class}, ${r.lineCount} line${r.lineCount===1?'':'s'}):\n\`\`\`lua\n${r.source}\n\`\`\``
+      }).join('\n\n')
+      displayText=displayText?displayText+'\n\n'+readBlocks:readBlocks
+    }
+    if(!displayText||displayText.length<5)displayText=aiText?stripAllCode(aiText):''
 
     if(!_playTestActive){if(showThinking)finalizeChips()}
     else document.getElementById('chipCancel')?.remove()
